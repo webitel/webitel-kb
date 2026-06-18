@@ -1,0 +1,30 @@
+# webitel-kb configuration (example).
+
+service:
+  id: "webitel-kb"
+  addr: "127.0.0.1:22106"      # TODO: confirm webitel-kb's assigned port
+  conn:
+    verify_certs: false
+
+log:
+  level: "info"
+  json: true
+  otel: false
+  file: ""
+  console: true
+
+postgres:
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/webitel?application_name=webitel-kb&sslmode=disable&connect_timeout=10"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+consul:
+  addr: "127.0.0.1:8500"
+  grpc_addr: "127.0.0.1:22106"
+
+pubsub:
+  broker_url: "amqp://webitel:webitel@127.0.0.1:5672/"
+  broker_driver: "amqp"
