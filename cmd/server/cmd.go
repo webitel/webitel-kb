@@ -23,7 +23,7 @@ func CMD() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			cfg, err := config.LoadConfig()
+			cfg, err := config.LoadServerConfig()
 			if err != nil {
 				return err
 			}

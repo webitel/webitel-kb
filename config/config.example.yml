@@ -1,7 +1,6 @@
 # webitel-kb configuration (example).
 
 service:
-  id: "webitel-kb"
   addr: "127.0.0.1:22106"      # TODO: confirm webitel-kb's assigned port
   conn:
     verify_certs: false
@@ -23,8 +22,7 @@ redis:
 
 consul:
   addr: "127.0.0.1:8500"
-  grpc_addr: "127.0.0.1:22106"
 
 pubsub:
-  broker_url: "amqp://webitel:webitel@127.0.0.1:5672/"
-  broker_driver: "amqp"
+  url: "amqp://webitel:webitel@127.0.0.1:5672/"
+  driver: "amqp"

@@ -36,7 +36,7 @@ var Module = fx.Module("grpc_server",
 )
 
 func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Config, lc fx.Lifecycle) (*Server, error) {
-	srv, err := New(conf.Service.Address, func(c *Config) error {
+	srv, err := New(conf.Service.Addr, func(c *Config) error {
 		c.TLS = tls.Server.Clone()
 		c.Logger = logger
 

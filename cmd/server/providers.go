@@ -12,10 +12,10 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/fx"
 
-	"github.com/webitel/webitel-kb/config"
-	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
+	"github.com/webitel/webitel-kb/config"
+	"github.com/webitel/webitel-kb/internal/model"
 
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 )
@@ -70,7 +70,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		service := resource.NewSchemaless(
 			semconv.ServiceName(model.ServiceName),
 			semconv.ServiceVersion(model.Version),
-			semconv.ServiceInstanceID(cfg.Service.Id),
+			semconv.ServiceInstanceID(discovery.GenerateInstanceID(model.ServiceName)),
 			semconv.ServiceNamespace(model.ServiceNamespace),
 		)
 		otelHandler := otelslog.NewHandler("slog")
@@ -173,7 +173,7 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	provider, err := discovery.DefaultFactory.CreateProvider(
 		discovery.ProviderConsul,
 		log,
-		cfg.Consul.Address,
+		cfg.Consul.Addr,
 		discovery.WithHeartbeat[discovery.DiscoveryProvider](true),
 		discovery.WithTimeout[discovery.DiscoveryProvider](time.Second*30),
 	)
@@ -183,7 +183,7 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 
 	si := new(discovery.ServiceInstance)
 	{
-		si.Id = cfg.Service.Id
+		si.Id = discovery.GenerateInstanceID(model.ServiceName)
 		si.Name = model.ServiceName
 		si.Version = model.Version
 		si.Metadata = map[string]string{
@@ -192,7 +192,7 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 			"branch":         model.Branch,
 			"buildTimestamp": model.BuildTimestamp,
 		}
-		si.Endpoints = []string{(&url.URL{Scheme: "grpc", Host: cfg.Service.Address}).String()}
+		si.Endpoints = []string{(&url.URL{Scheme: "grpc", Host: cfg.Service.Addr}).String()}
 	}
 
 	lc.Append(fx.Hook{
