@@ -26,6 +26,7 @@ CREATE TABLE kb.space (
     id                        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     domain_id                 bigint NOT NULL REFERENCES directory.wbt_domain (dc),
     name                      text NOT NULL,
+    description               text NULL,
     language                  text NOT NULL,  -- immutable; drives full-text search config
     embedding_model_id        bigint NULL REFERENCES kb.embedding_model (id),
     target_embedding_model_id bigint NULL REFERENCES kb.embedding_model (id),  -- model-migration target
@@ -33,7 +34,7 @@ CREATE TABLE kb.space (
     vector_search_enabled     boolean NOT NULL DEFAULT true,
     rerank_enabled            boolean NOT NULL DEFAULT false,
     chunking_strategy         text NOT NULL DEFAULT 'recursive_markdown',
-    home_page_id              bigint NULL,    -- article used as the space home page
+    home_article_id           bigint NULL,    -- article used as the space home page
     created_at                timestamptz NOT NULL DEFAULT now(),
     created_by                bigint NULL,
     updated_at                timestamptz NOT NULL DEFAULT now(),
@@ -46,13 +47,12 @@ CREATE TABLE kb.article (
     space_id             bigint NOT NULL REFERENCES kb.space (id) ON DELETE RESTRICT,
     parent_id            bigint NULL REFERENCES kb.article (id) ON DELETE CASCADE,  -- null = top level
     depth                smallint NOT NULL CHECK (depth BETWEEN 1 AND 5),
-    type                 text NOT NULL DEFAULT 'article' CHECK (type IN ('article', 'faq')),
-    title                text NOT NULL,  -- current title (mirrors published version)
+    type                 smallint NOT NULL DEFAULT 1,  -- 1=article, 2=faq
+    subject              text NOT NULL,  -- current subject (mirrors published version)
     tags                 text[] NOT NULL DEFAULT '{}',
-    state                text NOT NULL DEFAULT 'draft' CHECK (state IN ('draft', 'active', 'inactive')),
-    index_state          text NOT NULL DEFAULT 'pending'
-                             CHECK (index_state IN ('pending', 'indexing', 'indexed', 'failed')),
-    row_version          int NOT NULL DEFAULT 1,  -- optimistic lock
+    state                smallint NOT NULL DEFAULT 1,  -- 1=draft, 2=active, 3=inactive
+    index_state          smallint NOT NULL DEFAULT 1,  -- 1=pending, 2=indexing, 3=indexed, 4=failed
+    ver                  int NOT NULL DEFAULT 0,  -- optimistic lock
     published_version_id bigint NULL,             -- pointer to the live version
     created_at           timestamptz NOT NULL DEFAULT now(),
     created_by           bigint NULL,
@@ -69,7 +69,7 @@ CREATE TABLE kb.article_version (
     id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     article_id     bigint NOT NULL REFERENCES kb.article (id) ON DELETE CASCADE,
     version_number int NOT NULL,
-    title          text NOT NULL,
+    subject        text NOT NULL,
     body_rich_text jsonb NOT NULL,     -- canonical editor document
     body_markdown  text NOT NULL,      -- chunking input
     body_plain     text NOT NULL,      -- full-text search source
@@ -84,8 +84,8 @@ CREATE INDEX article_version_tsv_gin_idx ON kb.article_version USING gin (tsv);
 CREATE INDEX article_version_trgm_gin_idx ON kb.article_version USING gin (body_plain gin_trgm_ops);
 
 ALTER TABLE kb.space
-    ADD CONSTRAINT space_home_page_fk
-    FOREIGN KEY (home_page_id) REFERENCES kb.article (id) ON DELETE SET NULL;
+    ADD CONSTRAINT space_home_article_fk
+    FOREIGN KEY (home_article_id) REFERENCES kb.article (id) ON DELETE SET NULL;
 ALTER TABLE kb.article
     ADD CONSTRAINT article_published_version_fk
     FOREIGN KEY (published_version_id) REFERENCES kb.article_version (id);
@@ -120,24 +120,12 @@ CREATE INDEX team_space_space_idx ON kb.team_space (space_id);
 
 CREATE TABLE kb.article_case (
     article_id bigint NOT NULL REFERENCES kb.article (id) ON DELETE CASCADE,
-    case_id    bigint NOT NULL,  -- no cross-schema fk; reconciled via case events
-    source     text NOT NULL CHECK (source IN ('manual', 'resolution')),
+    case_id    bigint NOT NULL REFERENCES cases."case" (id) ON DELETE CASCADE,
+    source     smallint NOT NULL,  -- 1=manual, 2=resolution
     created_at timestamptz NOT NULL DEFAULT now(),
     created_by bigint NULL,
     PRIMARY KEY (article_id, case_id)
 );
-
-CREATE TABLE kb.attachment (
-    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    article_id  bigint NOT NULL REFERENCES kb.article (id) ON DELETE CASCADE,
-    storage_uri text NOT NULL,  -- pointer into Webitel Storage
-    filename    text NOT NULL,
-    mime_type   text NULL,
-    size_bytes  bigint NULL,
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    created_by  bigint NULL
-);
-CREATE INDEX attachment_article_idx ON kb.attachment (article_id);
 
 CREATE TABLE kb.outbox_events (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
