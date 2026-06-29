@@ -8,10 +8,12 @@ require (
 	github.com/ThreeDotsLabs/watermill-amqp/v3 v3.1.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/spf13/pflag v1.0.10
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260602143553-df89d5e34680
+	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.1.1
@@ -20,6 +22,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.uber.org/fx v1.24.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9
 	google.golang.org/grpc v1.81.1
 )
 
@@ -59,7 +62,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 
@@ -86,5 +88,5 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.11
 )
