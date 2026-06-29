@@ -287,7 +287,11 @@ type ListModelsRequest struct {
 	// Optional name search.
 	Q string `protobuf:"bytes,3,opt,name=q,proto3" json:"q,omitempty"`
 	// Optional kind filter ("embedding" or "reranker").
-	Kind          string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	Kind string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Sorting criteria (e.g. field:asc).
+	Sort string `protobuf:"bytes,5,opt,name=sort,proto3" json:"sort,omitempty"`
+	// Set of fields to return.
+	Fields        []string `protobuf:"bytes,6,rep,name=fields,proto3" json:"fields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,6 +352,20 @@ func (x *ListModelsRequest) GetKind() string {
 		return x.Kind
 	}
 	return ""
+}
+
+func (x *ListModelsRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
+	}
+	return ""
+}
+
+func (x *ListModelsRequest) GetFields() []string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
 }
 
 // EmbeddingModelList is a page of models.
@@ -678,12 +696,14 @@ const file_model_proto_rawDesc = "" +
 	"dimensions\x18\x06 \x01(\x05R\n" +
 	"dimensions\x12\x1a\n" +
 	"\bendpoint\x18\a \x01(\tR\bendpoint\x12\x17\n" +
-	"\aapi_key\x18\b \x01(\tR\x06apiKey\"]\n" +
+	"\aapi_key\x18\b \x01(\tR\x06apiKey\"\x89\x01\n" +
 	"\x11ListModelsRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x12\n" +
-	"\x04kind\x18\x04 \x01(\tR\x04kind\"Z\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04sort\x18\x05 \x01(\tR\x04sort\x12\x16\n" +
+	"\x06fields\x18\x06 \x03(\tR\x06fields\"Z\n" +
 	"\x12EmbeddingModelList\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.EmbeddingModelR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"$\n" +
@@ -697,17 +717,15 @@ const file_model_proto_rawDesc = "" +
 	"\x12DeleteModelRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"&\n" +
 	"\x14ValidateModelRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id2\xbe\x05\n" +
-	"\x0fEmbeddingModels\x12c\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id2\xd3\x05\n" +
+	"\x0fEmbeddingModels\x12f\n" +
 	"\n" +
-	"ListModels\x12\x1d.webitel.kb.ListModelsRequest\x1a\x1e.webitel.kb.EmbeddingModelList\"\x16\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\f\x12\n" +
-	"/v1/models\x12f\n" +
-	"\vLocateModel\x12\x1e.webitel.kb.LocateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1b\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/models/{id}\x12h\n" +
-	"\vCreateModel\x12\x1e.webitel.kb.CreateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1d\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x13:\x05input\"\n" +
-	"/v1/models\x12\x87\x01\n" +
-	"\vUpdateModel\x12\x1e.webitel.kb.UpdateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"<\x90\xb5\x18\x02\x82\xd3\xe4\x93\x022:\x05inputZ\x18:\x05input2\x0f/v1/models/{id}\x1a\x0f/v1/models/{id}\x12f\n" +
-	"\vDeleteModel\x12\x1e.webitel.kb.DeleteModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1b\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x11*\x0f/v1/models/{id}\x12s\n" +
-	"\rValidateModel\x12 .webitel.kb.ValidateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"$\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x1a\"\x18/v1/models/{id}/validate\x1a\r\x8a\xb5\x18\tkb_modelsB\x8e\x01\n" +
+	"ListModels\x12\x1d.webitel.kb.ListModelsRequest\x1a\x1e.webitel.kb.EmbeddingModelList\"\x19\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/kb/models\x12i\n" +
+	"\vLocateModel\x12\x1e.webitel.kb.LocateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1e\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/kb/models/{id}\x12k\n" +
+	"\vCreateModel\x12\x1e.webitel.kb.CreateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\" \x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x16:\x05input\"\r/v1/kb/models\x12\x8d\x01\n" +
+	"\vUpdateModel\x12\x1e.webitel.kb.UpdateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"B\x90\xb5\x18\x02\x82\xd3\xe4\x93\x028:\x05inputZ\x1b:\x05input2\x12/v1/kb/models/{id}\x1a\x12/v1/kb/models/{id}\x12i\n" +
+	"\vDeleteModel\x12\x1e.webitel.kb.DeleteModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1e\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x14*\x12/v1/kb/models/{id}\x12v\n" +
+	"\rValidateModel\x12 .webitel.kb.ValidateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"'\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x1d\"\x1b/v1/kb/models/{id}/validate\x1a\r\x8a\xb5\x18\tkb_modelsB\x8e\x01\n" +
 	"\x0ecom.webitel.kbB\n" +
 	"ModelProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +

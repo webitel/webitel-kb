@@ -33,8 +33,8 @@ type ArticleVersion struct {
 	ArticleId int64 `protobuf:"varint,2,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
 	// Monotonic version number within the article.
 	VersionNumber int32 `protobuf:"varint,3,opt,name=version_number,json=versionNumber,proto3" json:"version_number,omitempty"`
-	// Versioned title.
-	Title string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	// Versioned subject.
+	Subject string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	// Editor document for this version.
 	BodyRichText *structpb.Struct `protobuf:"bytes,5,opt,name=body_rich_text,json=bodyRichText,proto3" json:"body_rich_text,omitempty"`
 	// Markdown serialization (chunking input).
@@ -104,9 +104,9 @@ func (x *ArticleVersion) GetVersionNumber() int32 {
 	return 0
 }
 
-func (x *ArticleVersion) GetTitle() string {
+func (x *ArticleVersion) GetSubject() string {
 	if x != nil {
-		return x.Title
+		return x.Subject
 	}
 	return ""
 }
@@ -168,7 +168,11 @@ type ListVersionsRequest struct {
 	// Page size.
 	Size int32 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
 	// Page number (1-based).
-	Page          int32 `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	Page int32 `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
+	// Sorting criteria (e.g. field:asc).
+	Sort string `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`
+	// Set of fields to return.
+	Fields        []string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -222,6 +226,20 @@ func (x *ListVersionsRequest) GetPage() int32 {
 		return x.Page
 	}
 	return 0
+}
+
+func (x *ListVersionsRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
+	}
+	return ""
+}
+
+func (x *ListVersionsRequest) GetFields() []string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
 }
 
 // ArticleVersionList is a page of versions.
@@ -403,13 +421,13 @@ var File_version_proto protoreflect.FileDescriptor
 const file_version_proto_rawDesc = "" +
 	"\n" +
 	"\rversion.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\"\x89\x03\n" +
+	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\"\x8d\x03\n" +
 	"\x0eArticleVersion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x02 \x01(\x03R\tarticleId\x12%\n" +
-	"\x0eversion_number\x18\x03 \x01(\x05R\rversionNumber\x12\x14\n" +
-	"\x05title\x18\x04 \x01(\tR\x05title\x12=\n" +
+	"\x0eversion_number\x18\x03 \x01(\x05R\rversionNumber\x12\x18\n" +
+	"\asubject\x18\x04 \x01(\tR\asubject\x12=\n" +
 	"\x0ebody_rich_text\x18\x05 \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12#\n" +
 	"\rbody_markdown\x18\x06 \x01(\tR\fbodyMarkdown\x12\x1d\n" +
 	"\n" +
@@ -419,12 +437,14 @@ const file_version_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12.\n" +
 	"\n" +
-	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\\\n" +
+	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\x88\x01\n" +
 	"\x13ListVersionsRequest\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x05R\x04size\x12\x12\n" +
-	"\x04page\x18\x03 \x01(\x05R\x04page\"Z\n" +
+	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x12\n" +
+	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x16\n" +
+	"\x06fields\x18\x05 \x03(\tR\x06fields\"Z\n" +
 	"\x12ArticleVersionList\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleVersionR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"Y\n" +
@@ -436,12 +456,12 @@ const file_version_proto_rawDesc = "" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12%\n" +
 	"\x0eversion_number\x18\x02 \x01(\x05R\rversionNumber\x12\x14\n" +
-	"\x05notes\x18\x03 \x01(\tR\x05notes2\xc5\x03\n" +
-	"\bVersions\x12\x7f\n" +
-	"\fListVersions\x12\x1f.webitel.kb.ListVersionsRequest\x1a\x1e.webitel.kb.ArticleVersionList\".\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/articles/{article_id}/versions\x12\x88\x01\n" +
+	"\x05notes\x18\x03 \x01(\tR\x05notes2\xcf\x03\n" +
+	"\bVersions\x12\x82\x01\n" +
+	"\fListVersions\x12\x1f.webitel.kb.ListVersionsRequest\x1a\x1e.webitel.kb.ArticleVersionList\"1\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02'\x12%/v1/kb/articles/{article_id}/versions\x12\x8b\x01\n" +
 	"\n" +
-	"GetVersion\x12\x1d.webitel.kb.GetVersionRequest\x1a\x1a.webitel.kb.ArticleVersion\"?\x90\xb5\x18\x01\x82\xd3\xe4\x93\x025\x123/v1/articles/{article_id}/versions/{version_number}\x12\x9b\x01\n" +
-	"\x0eRestoreVersion\x12!.webitel.kb.RestoreVersionRequest\x1a\x1a.webitel.kb.ArticleVersion\"J\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02@:\x01*\";/v1/articles/{article_id}/versions/{version_number}/restore\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x90\x01\n" +
+	"GetVersion\x12\x1d.webitel.kb.GetVersionRequest\x1a\x1a.webitel.kb.ArticleVersion\"B\x90\xb5\x18\x01\x82\xd3\xe4\x93\x028\x126/v1/kb/articles/{article_id}/versions/{version_number}\x12\x9e\x01\n" +
+	"\x0eRestoreVersion\x12!.webitel.kb.RestoreVersionRequest\x1a\x1a.webitel.kb.ArticleVersion\"M\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02C:\x01*\">/v1/kb/articles/{article_id}/versions/{version_number}/restore\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x90\x01\n" +
 	"\x0ecom.webitel.kbB\fVersionProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +
 	"Webitel\\Kb\xe2\x02\x16Webitel\\Kb\\GPBMetadata\xea\x02\vWebitel::Kbb\x06proto3"

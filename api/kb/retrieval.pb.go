@@ -752,13 +752,13 @@ const file_retrieval_proto_rawDesc = "" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items*0\n" +
 	"\bTagMatch\x12\x11\n" +
 	"\rTAG_MATCH_ALL\x10\x00\x12\x11\n" +
-	"\rTAG_MATCH_ANY\x10\x012\xbe\x04\n" +
-	"\tRetrieval\x12`\n" +
-	"\x06Search\x12\x19.webitel.kb.SearchRequest\x1a\x1a.webitel.kb.SearchResponse\"\x1f\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/articles/search\x12g\n" +
-	"\aResolve\x12\x1a.webitel.kb.ResolveRequest\x1a\x1b.webitel.kb.ResolveResponse\"#\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/articles/resolve\x12\x84\x01\n" +
-	"\x0eSemanticSearch\x12!.webitel.kb.SemanticSearchRequest\x1a\".webitel.kb.SemanticSearchResponse\"+\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/v1/articles/semantic_search\x12g\n" +
-	"\aSuggest\x12\x1a.webitel.kb.SuggestRequest\x1a\x1b.webitel.kb.SuggestResponse\"#\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/articles/suggest\x12e\n" +
-	"\x04Menu\x12\x17.webitel.kb.MenuRequest\x1a\x18.webitel.kb.MenuResponse\"*\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/spaces/{space_id}/articles\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x92\x01\n" +
+	"\rTAG_MATCH_ANY\x10\x012\xcd\x04\n" +
+	"\tRetrieval\x12c\n" +
+	"\x06Search\x12\x19.webitel.kb.SearchRequest\x1a\x1a.webitel.kb.SearchResponse\"\"\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/kb/articles/search\x12j\n" +
+	"\aResolve\x12\x1a.webitel.kb.ResolveRequest\x1a\x1b.webitel.kb.ResolveResponse\"&\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/kb/articles/resolve\x12\x87\x01\n" +
+	"\x0eSemanticSearch\x12!.webitel.kb.SemanticSearchRequest\x1a\".webitel.kb.SemanticSearchResponse\".\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/kb/articles/semantic_search\x12j\n" +
+	"\aSuggest\x12\x1a.webitel.kb.SuggestRequest\x1a\x1b.webitel.kb.SuggestResponse\"&\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/kb/articles/suggest\x12h\n" +
+	"\x04Menu\x12\x17.webitel.kb.MenuRequest\x1a\x18.webitel.kb.MenuResponse\"-\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02#\x12!/v1/kb/spaces/{space_id}/articles\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x92\x01\n" +
 	"\x0ecom.webitel.kbB\x0eRetrievalProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +
 	"Webitel\\Kb\xe2\x02\x16Webitel\\Kb\\GPBMetadata\xea\x02\vWebitel::Kbb\x06proto3"

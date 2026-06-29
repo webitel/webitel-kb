@@ -29,26 +29,28 @@ type Article struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique identifier of the article.
 	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Owning domain id.
+	DomainId int64 `protobuf:"varint,2,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
 	// Space the article belongs to.
-	SpaceId int64 `protobuf:"varint,2,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	Space *Lookup `protobuf:"bytes,3,opt,name=space,proto3" json:"space,omitempty"`
 	// Parent article id; 0 for a top-level article.
-	ParentId int64 `protobuf:"varint,3,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	ParentId int64 `protobuf:"varint,4,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// Hierarchy depth (1..5).
-	Depth int32 `protobuf:"varint,4,opt,name=depth,proto3" json:"depth,omitempty"`
-	// Article type: "article" or "faq".
-	Type string `protobuf:"bytes,5,opt,name=type,proto3" json:"type,omitempty"`
-	// Current title (mirrors the published version).
-	Title string `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
+	Depth int32 `protobuf:"varint,5,opt,name=depth,proto3" json:"depth,omitempty"`
+	// Article type.
+	Type ArticleType `protobuf:"varint,6,opt,name=type,proto3,enum=webitel.kb.ArticleType" json:"type,omitempty"`
+	// Current subject (mirrors the published version).
+	Subject string `protobuf:"bytes,7,opt,name=subject,proto3" json:"subject,omitempty"`
 	// Article tags.
-	Tags []string `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty"`
-	// Lifecycle state: "draft", "active" or "inactive".
-	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
-	// Indexing state: "pending", "indexing", "indexed" or "failed".
-	IndexState string `protobuf:"bytes,9,opt,name=index_state,json=indexState,proto3" json:"index_state,omitempty"`
+	Tags []string `protobuf:"bytes,8,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Lifecycle state.
+	State ArticleState `protobuf:"varint,9,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
+	// Indexing state.
+	IndexState IndexState `protobuf:"varint,10,opt,name=index_state,json=indexState,proto3,enum=webitel.kb.IndexState" json:"index_state,omitempty"`
 	// Published version id; 0 if not yet published.
-	PublishedVersionId int64 `protobuf:"varint,10,opt,name=published_version_id,json=publishedVersionId,proto3" json:"published_version_id,omitempty"`
+	PublishedVersionId int64 `protobuf:"varint,11,opt,name=published_version_id,json=publishedVersionId,proto3" json:"published_version_id,omitempty"`
 	// Optimistic-lock counter.
-	RowVersion int32 `protobuf:"varint,11,opt,name=row_version,json=rowVersion,proto3" json:"row_version,omitempty"`
+	Ver int32 `protobuf:"varint,12,opt,name=ver,proto3" json:"ver,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -57,7 +59,7 @@ type Article struct {
 	CreatedBy *Lookup `protobuf:"bytes,22,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	// User who last updated the article.
 	UpdatedBy *Lookup `protobuf:"bytes,23,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	// Concurrency token encoding id and row_version.
+	// Concurrency token encoding id and ver.
 	Etag          string `protobuf:"bytes,30,opt,name=etag,proto3" json:"etag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -100,11 +102,18 @@ func (x *Article) GetId() int64 {
 	return 0
 }
 
-func (x *Article) GetSpaceId() int64 {
+func (x *Article) GetDomainId() int64 {
 	if x != nil {
-		return x.SpaceId
+		return x.DomainId
 	}
 	return 0
+}
+
+func (x *Article) GetSpace() *Lookup {
+	if x != nil {
+		return x.Space
+	}
+	return nil
 }
 
 func (x *Article) GetParentId() int64 {
@@ -121,16 +130,16 @@ func (x *Article) GetDepth() int32 {
 	return 0
 }
 
-func (x *Article) GetType() string {
+func (x *Article) GetType() ArticleType {
 	if x != nil {
 		return x.Type
 	}
-	return ""
+	return ArticleType_ARTICLE_TYPE_UNSPECIFIED
 }
 
-func (x *Article) GetTitle() string {
+func (x *Article) GetSubject() string {
 	if x != nil {
-		return x.Title
+		return x.Subject
 	}
 	return ""
 }
@@ -142,18 +151,18 @@ func (x *Article) GetTags() []string {
 	return nil
 }
 
-func (x *Article) GetState() string {
+func (x *Article) GetState() ArticleState {
 	if x != nil {
 		return x.State
 	}
-	return ""
+	return ArticleState_ARTICLE_STATE_UNSPECIFIED
 }
 
-func (x *Article) GetIndexState() string {
+func (x *Article) GetIndexState() IndexState {
 	if x != nil {
 		return x.IndexState
 	}
-	return ""
+	return IndexState_INDEX_STATE_UNSPECIFIED
 }
 
 func (x *Article) GetPublishedVersionId() int64 {
@@ -163,9 +172,9 @@ func (x *Article) GetPublishedVersionId() int64 {
 	return 0
 }
 
-func (x *Article) GetRowVersion() int32 {
+func (x *Article) GetVer() int32 {
 	if x != nil {
-		return x.RowVersion
+		return x.Ver
 	}
 	return 0
 }
@@ -212,14 +221,14 @@ type InputArticle struct {
 	SpaceId int64 `protobuf:"varint,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
 	// Parent article id; 0 for a top-level article.
 	ParentId int64 `protobuf:"varint,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	// Article type: "article" or "faq".
-	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	// Article title.
-	Title string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	// Article type.
+	Type ArticleType `protobuf:"varint,3,opt,name=type,proto3,enum=webitel.kb.ArticleType" json:"type,omitempty"`
+	// Article subject.
+	Subject string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	// Article tags.
 	Tags []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Lifecycle state.
-	State string `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	State ArticleState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
 	// Editor document; serialized server-side to markdown/plaintext/tsvector.
 	BodyRichText  *structpb.Struct `protobuf:"bytes,7,opt,name=body_rich_text,json=bodyRichText,proto3" json:"body_rich_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -270,16 +279,16 @@ func (x *InputArticle) GetParentId() int64 {
 	return 0
 }
 
-func (x *InputArticle) GetType() string {
+func (x *InputArticle) GetType() ArticleType {
 	if x != nil {
 		return x.Type
 	}
-	return ""
+	return ArticleType_ARTICLE_TYPE_UNSPECIFIED
 }
 
-func (x *InputArticle) GetTitle() string {
+func (x *InputArticle) GetSubject() string {
 	if x != nil {
-		return x.Title
+		return x.Subject
 	}
 	return ""
 }
@@ -291,11 +300,11 @@ func (x *InputArticle) GetTags() []string {
 	return nil
 }
 
-func (x *InputArticle) GetState() string {
+func (x *InputArticle) GetState() ArticleState {
 	if x != nil {
 		return x.State
 	}
-	return ""
+	return ArticleState_ARTICLE_STATE_UNSPECIFIED
 }
 
 func (x *InputArticle) GetBodyRichText() *structpb.Struct {
@@ -312,16 +321,20 @@ type ListArticlesRequest struct {
 	Size int32 `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
 	// Page number (1-based).
 	Page int32 `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
-	// Optional title search.
+	// Optional subject search.
 	Q string `protobuf:"bytes,3,opt,name=q,proto3" json:"q,omitempty"`
 	// Space to list within.
 	SpaceId int64 `protobuf:"varint,4,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
 	// Optional tag filter.
 	Tags []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Optional state filter.
-	State string `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	State ArticleState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
 	// Optional type filter.
-	Type          string `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"`
+	Type ArticleType `protobuf:"varint,7,opt,name=type,proto3,enum=webitel.kb.ArticleType" json:"type,omitempty"`
+	// Sorting criteria (e.g. field:asc).
+	Sort string `protobuf:"bytes,8,opt,name=sort,proto3" json:"sort,omitempty"`
+	// Set of fields to return.
+	Fields        []string `protobuf:"bytes,9,rep,name=fields,proto3" json:"fields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -391,18 +404,32 @@ func (x *ListArticlesRequest) GetTags() []string {
 	return nil
 }
 
-func (x *ListArticlesRequest) GetState() string {
+func (x *ListArticlesRequest) GetState() ArticleState {
 	if x != nil {
 		return x.State
+	}
+	return ArticleState_ARTICLE_STATE_UNSPECIFIED
+}
+
+func (x *ListArticlesRequest) GetType() ArticleType {
+	if x != nil {
+		return x.Type
+	}
+	return ArticleType_ARTICLE_TYPE_UNSPECIFIED
+}
+
+func (x *ListArticlesRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
 	}
 	return ""
 }
 
-func (x *ListArticlesRequest) GetType() string {
+func (x *ListArticlesRequest) GetFields() []string {
 	if x != nil {
-		return x.Type
+		return x.Fields
 	}
-	return ""
+	return nil
 }
 
 // ArticleList is a page of articles.
@@ -897,22 +924,22 @@ var File_article_proto protoreflect.FileDescriptor
 const file_article_proto_rawDesc = "" +
 	"\n" +
 	"\rarticle.proto\x12\n" +
-	"webitel.kb\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\"\xe1\x03\n" +
+	"webitel.kb\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\"\xca\x04\n" +
 	"\aArticle\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
-	"\bspace_id\x18\x02 \x01(\x03R\aspaceId\x12\x1b\n" +
-	"\tparent_id\x18\x03 \x01(\x03R\bparentId\x12\x14\n" +
-	"\x05depth\x18\x04 \x01(\x05R\x05depth\x12\x12\n" +
-	"\x04type\x18\x05 \x01(\tR\x04type\x12\x14\n" +
-	"\x05title\x18\x06 \x01(\tR\x05title\x12\x12\n" +
-	"\x04tags\x18\a \x03(\tR\x04tags\x12\x14\n" +
-	"\x05state\x18\b \x01(\tR\x05state\x12\x1f\n" +
-	"\vindex_state\x18\t \x01(\tR\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
+	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12%\n" +
+	"\x05space\x18\x03 \x01(\v2\x0f.general.LookupR\x05space\x12\x1b\n" +
+	"\tparent_id\x18\x04 \x01(\x03R\bparentId\x12\x14\n" +
+	"\x05depth\x18\x05 \x01(\x05R\x05depth\x12+\n" +
+	"\x04type\x18\x06 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x18\n" +
+	"\asubject\x18\a \x01(\tR\asubject\x12\x12\n" +
+	"\x04tags\x18\b \x03(\tR\x04tags\x12.\n" +
+	"\x05state\x18\t \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x127\n" +
+	"\vindex_state\x18\n" +
+	" \x01(\x0e2\x16.webitel.kb.IndexStateR\n" +
 	"indexState\x120\n" +
-	"\x14published_version_id\x18\n" +
-	" \x01(\x03R\x12publishedVersionId\x12\x1f\n" +
-	"\vrow_version\x18\v \x01(\x05R\n" +
-	"rowVersion\x12\x1d\n" +
+	"\x14published_version_id\x18\v \x01(\x03R\x12publishedVersionId\x12\x10\n" +
+	"\x03ver\x18\f \x01(\x05R\x03ver\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -921,23 +948,25 @@ const file_article_proto_rawDesc = "" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
 	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\x12\x12\n" +
-	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xd9\x01\n" +
+	"\x04etag\x18\x1e \x01(\tR\x04etag\"\x90\x02\n" +
 	"\fInputArticle\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12\x1b\n" +
-	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x14\n" +
-	"\x05title\x18\x04 \x01(\tR\x05title\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x14\n" +
-	"\x05state\x18\x06 \x01(\tR\x05state\x12=\n" +
-	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\"\xa4\x01\n" +
+	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12+\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x18\n" +
+	"\asubject\x18\x04 \x01(\tR\asubject\x12\x12\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12=\n" +
+	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\"\x83\x02\n" +
 	"\x13ListArticlesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x19\n" +
 	"\bspace_id\x18\x04 \x01(\x03R\aspaceId\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x12\x14\n" +
-	"\x05state\x18\x06 \x01(\tR\x05state\x12\x12\n" +
-	"\x04type\x18\a \x01(\tR\x04type\"L\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12+\n" +
+	"\x04type\x18\a \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x12\n" +
+	"\x04sort\x18\b \x01(\tR\x04sort\x12\x16\n" +
+	"\x06fields\x18\t \x03(\tR\x06fields\"L\n" +
 	"\vArticleList\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.webitel.kb.ArticleR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"*\n" +
@@ -960,17 +989,17 @@ const file_article_proto_rawDesc = "" +
 	"\x0eGetTreeRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\"=\n" +
 	"\x0fGetTreeResponse\x12*\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\x89\b\n" +
-	"\bArticles\x12b\n" +
-	"\fListArticles\x12\x1f.webitel.kb.ListArticlesRequest\x1a\x17.webitel.kb.ArticleList\"\x18\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/articles\x12g\n" +
-	"\rLocateArticle\x12 .webitel.kb.LocateArticleRequest\x1a\x13.webitel.kb.Article\"\x1f\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/articles/{etag}\x12g\n" +
-	"\rCreateArticle\x12 .webitel.kb.CreateArticleRequest\x1a\x13.webitel.kb.Article\"\x1f\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x15:\x05input\"\f/v1/articles\x12\x8c\x01\n" +
-	"\rUpdateArticle\x12 .webitel.kb.UpdateArticleRequest\x1a\x13.webitel.kb.Article\"D\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02::\x05inputZ\x1c:\x05input2\x13/v1/articles/{etag}\x1a\x13/v1/articles/{etag}\x12g\n" +
-	"\rDeleteArticle\x12 .webitel.kb.DeleteArticleRequest\x1a\x13.webitel.kb.Article\"\x1f\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x15*\x13/v1/articles/{etag}\x12k\n" +
-	"\vMoveArticle\x12\x1e.webitel.kb.MoveArticleRequest\x1a\x13.webitel.kb.Article\"'\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/articles/{etag}/move\x12p\n" +
-	"\fListChildren\x12\x1f.webitel.kb.ListChildrenRequest\x1a\x17.webitel.kb.ArticleList\"&\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/articles/{id}/children\x12s\n" +
-	"\rListAncestors\x12 .webitel.kb.ListAncestorsRequest\x1a\x17.webitel.kb.ArticleList\"'\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/articles/{id}/ancestors\x12j\n" +
-	"\aGetTree\x12\x1a.webitel.kb.GetTreeRequest\x1a\x1b.webitel.kb.GetTreeResponse\"&\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/spaces/{space_id}/tree\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x90\x01\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\xa7\b\n" +
+	"\bArticles\x12e\n" +
+	"\fListArticles\x12\x1f.webitel.kb.ListArticlesRequest\x1a\x17.webitel.kb.ArticleList\"\x1b\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/kb/articles\x12j\n" +
+	"\rLocateArticle\x12 .webitel.kb.LocateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/kb/articles/{etag}\x12j\n" +
+	"\rCreateArticle\x12 .webitel.kb.CreateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18:\x05input\"\x0f/v1/kb/articles\x12\x92\x01\n" +
+	"\rUpdateArticle\x12 .webitel.kb.UpdateArticleRequest\x1a\x13.webitel.kb.Article\"J\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02@:\x05inputZ\x1f:\x05input2\x16/v1/kb/articles/{etag}\x1a\x16/v1/kb/articles/{etag}\x12j\n" +
+	"\rDeleteArticle\x12 .webitel.kb.DeleteArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18*\x16/v1/kb/articles/{etag}\x12n\n" +
+	"\vMoveArticle\x12\x1e.webitel.kb.MoveArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/kb/articles/{etag}/move\x12s\n" +
+	"\fListChildren\x12\x1f.webitel.kb.ListChildrenRequest\x1a\x17.webitel.kb.ArticleList\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/articles/{id}/children\x12v\n" +
+	"\rListAncestors\x12 .webitel.kb.ListAncestorsRequest\x1a\x17.webitel.kb.ArticleList\"*\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/kb/articles/{id}/ancestors\x12m\n" +
+	"\aGetTree\x12\x1a.webitel.kb.GetTreeRequest\x1a\x1b.webitel.kb.GetTreeResponse\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/spaces/{space_id}/tree\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x90\x01\n" +
 	"\x0ecom.webitel.kbB\fArticleProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +
 	"Webitel\\Kb\xe2\x02\x16Webitel\\Kb\\GPBMetadata\xea\x02\vWebitel::Kbb\x06proto3"
@@ -1003,40 +1032,51 @@ var file_article_proto_goTypes = []any{
 	(*GetTreeRequest)(nil),       // 11: webitel.kb.GetTreeRequest
 	(*GetTreeResponse)(nil),      // 12: webitel.kb.GetTreeResponse
 	(*Lookup)(nil),               // 13: general.Lookup
-	(*structpb.Struct)(nil),      // 14: google.protobuf.Struct
-	(*TreeNode)(nil),             // 15: webitel.kb.TreeNode
+	(ArticleType)(0),             // 14: webitel.kb.ArticleType
+	(ArticleState)(0),            // 15: webitel.kb.ArticleState
+	(IndexState)(0),              // 16: webitel.kb.IndexState
+	(*structpb.Struct)(nil),      // 17: google.protobuf.Struct
+	(*TreeNode)(nil),             // 18: webitel.kb.TreeNode
 }
 var file_article_proto_depIdxs = []int32{
-	13, // 0: webitel.kb.Article.created_by:type_name -> general.Lookup
-	13, // 1: webitel.kb.Article.updated_by:type_name -> general.Lookup
-	14, // 2: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
-	0,  // 3: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
-	1,  // 4: webitel.kb.CreateArticleRequest.input:type_name -> webitel.kb.InputArticle
-	1,  // 5: webitel.kb.UpdateArticleRequest.input:type_name -> webitel.kb.InputArticle
-	15, // 6: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
-	2,  // 7: webitel.kb.Articles.ListArticles:input_type -> webitel.kb.ListArticlesRequest
-	4,  // 8: webitel.kb.Articles.LocateArticle:input_type -> webitel.kb.LocateArticleRequest
-	5,  // 9: webitel.kb.Articles.CreateArticle:input_type -> webitel.kb.CreateArticleRequest
-	6,  // 10: webitel.kb.Articles.UpdateArticle:input_type -> webitel.kb.UpdateArticleRequest
-	7,  // 11: webitel.kb.Articles.DeleteArticle:input_type -> webitel.kb.DeleteArticleRequest
-	8,  // 12: webitel.kb.Articles.MoveArticle:input_type -> webitel.kb.MoveArticleRequest
-	9,  // 13: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
-	10, // 14: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
-	11, // 15: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
-	3,  // 16: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
-	0,  // 17: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
-	0,  // 18: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
-	0,  // 19: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
-	0,  // 20: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
-	0,  // 21: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
-	3,  // 22: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
-	3,  // 23: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
-	12, // 24: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
-	16, // [16:25] is the sub-list for method output_type
-	7,  // [7:16] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	13, // 0: webitel.kb.Article.space:type_name -> general.Lookup
+	14, // 1: webitel.kb.Article.type:type_name -> webitel.kb.ArticleType
+	15, // 2: webitel.kb.Article.state:type_name -> webitel.kb.ArticleState
+	16, // 3: webitel.kb.Article.index_state:type_name -> webitel.kb.IndexState
+	13, // 4: webitel.kb.Article.created_by:type_name -> general.Lookup
+	13, // 5: webitel.kb.Article.updated_by:type_name -> general.Lookup
+	14, // 6: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
+	15, // 7: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
+	17, // 8: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
+	15, // 9: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
+	14, // 10: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
+	0,  // 11: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
+	1,  // 12: webitel.kb.CreateArticleRequest.input:type_name -> webitel.kb.InputArticle
+	1,  // 13: webitel.kb.UpdateArticleRequest.input:type_name -> webitel.kb.InputArticle
+	18, // 14: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
+	2,  // 15: webitel.kb.Articles.ListArticles:input_type -> webitel.kb.ListArticlesRequest
+	4,  // 16: webitel.kb.Articles.LocateArticle:input_type -> webitel.kb.LocateArticleRequest
+	5,  // 17: webitel.kb.Articles.CreateArticle:input_type -> webitel.kb.CreateArticleRequest
+	6,  // 18: webitel.kb.Articles.UpdateArticle:input_type -> webitel.kb.UpdateArticleRequest
+	7,  // 19: webitel.kb.Articles.DeleteArticle:input_type -> webitel.kb.DeleteArticleRequest
+	8,  // 20: webitel.kb.Articles.MoveArticle:input_type -> webitel.kb.MoveArticleRequest
+	9,  // 21: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
+	10, // 22: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
+	11, // 23: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
+	3,  // 24: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
+	0,  // 25: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
+	0,  // 26: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
+	0,  // 27: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
+	0,  // 28: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
+	0,  // 29: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
+	3,  // 30: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
+	3,  // 31: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
+	12, // 32: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_article_proto_init() }

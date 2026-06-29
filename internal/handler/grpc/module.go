@@ -8,13 +8,13 @@ import (
 
 var Module = fx.Module("grpc",
 	fx.Provide(
-		NewSpacesService,
-		NewEmbeddingModelsService,
-		NewArticlesService,
-		NewVersionsService,
-		NewTagsService,
-		NewAttachmentsService,
-		NewRetrievalService,
+		NewSpacesServer,
+		NewEmbeddingModelsServer,
+		NewArticlesServer,
+		NewVersionsServer,
+		NewTagsServer,
+		NewAttachmentsServer,
+		NewRetrievalServer,
 	),
 	fx.Invoke(RegisterService),
 )
@@ -22,13 +22,13 @@ var Module = fx.Module("grpc",
 // RegisterService registers all KB gRPC services on the server.
 func RegisterService(
 	server *grpcsrv.Server,
-	spaces *SpacesService,
-	models *EmbeddingModelsService,
-	articles *ArticlesService,
-	versions *VersionsService,
-	tags *TagsService,
-	attachments *AttachmentsService,
-	retrieval *RetrievalService,
+	spaces *SpacesServer,
+	models *EmbeddingModelsServer,
+	articles *ArticlesServer,
+	versions *VersionsServer,
+	tags *TagsServer,
+	attachments *AttachmentsServer,
+	retrieval *RetrievalServer,
 ) {
 	kb.RegisterSpacesServer(server, spaces)
 	kb.RegisterEmbeddingModelsServer(server, models)

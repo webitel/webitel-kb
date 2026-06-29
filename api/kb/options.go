@@ -38,7 +38,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles",
+						Path:   "/v1/kb/articles",
 						Method: "GET",
 					},
 				},
@@ -49,7 +49,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{etag}",
+						Path:   "/v1/kb/articles/{etag}",
 						Method: "GET",
 					},
 				},
@@ -60,7 +60,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles",
+						Path:   "/v1/kb/articles",
 						Method: "POST",
 					},
 				},
@@ -71,11 +71,11 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{etag}",
+						Path:   "/v1/kb/articles/{etag}",
 						Method: "PUT",
 					},
 					{
-						Path:   "/v1/articles/{etag}",
+						Path:   "/v1/kb/articles/{etag}",
 						Method: "PATCH",
 					},
 				},
@@ -86,7 +86,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{etag}",
+						Path:   "/v1/kb/articles/{etag}",
 						Method: "DELETE",
 					},
 				},
@@ -97,7 +97,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{etag}/move",
+						Path:   "/v1/kb/articles/{etag}/move",
 						Method: "POST",
 					},
 				},
@@ -108,7 +108,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{id}/children",
+						Path:   "/v1/kb/articles/{id}/children",
 						Method: "GET",
 					},
 				},
@@ -119,7 +119,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{id}/ancestors",
+						Path:   "/v1/kb/articles/{id}/ancestors",
 						Method: "GET",
 					},
 				},
@@ -130,7 +130,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "GetTreeResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{space_id}/tree",
+						Path:   "/v1/kb/spaces/{space_id}/tree",
 						Method: "GET",
 					},
 				},
@@ -141,35 +141,24 @@ var WebitelAPI = WebitelServicesInfo{
 		ObjClass:           "kb_articles",
 		AdditionalLicenses: []string{},
 		WebitelMethods: map[string]WebitelMethod{
-			"ListAttachments": WebitelMethod{
+			"ListFiles": WebitelMethod{
 				Access: 1,
-				Input:  "ListAttachmentsRequest",
-				Output: "AttachmentList",
+				Input:  "ListFilesRequest",
+				Output: "FileList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{article_id}/attachments",
+						Path:   "/v1/kb/articles/{article_etag}/files",
 						Method: "GET",
 					},
 				},
 			},
-			"CreateAttachment": WebitelMethod{
+			"DeleteFile": WebitelMethod{
 				Access: 2,
-				Input:  "CreateAttachmentRequest",
-				Output: "Attachment",
+				Input:  "DeleteFileRequest",
+				Output: "File",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{article_id}/attachments",
-						Method: "POST",
-					},
-				},
-			},
-			"DeleteAttachment": WebitelMethod{
-				Access: 2,
-				Input:  "DeleteAttachmentRequest",
-				Output: "Attachment",
-				HttpBindings: []*HttpBinding{
-					{
-						Path:   "/v1/articles/{article_id}/attachments/{id}",
+						Path:   "/v1/kb/articles/{article_etag}/files/{id}",
 						Method: "DELETE",
 					},
 				},
@@ -186,7 +175,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModelList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models",
+						Path:   "/v1/kb/models",
 						Method: "GET",
 					},
 				},
@@ -197,7 +186,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models/{id}",
+						Path:   "/v1/kb/models/{id}",
 						Method: "GET",
 					},
 				},
@@ -208,7 +197,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models",
+						Path:   "/v1/kb/models",
 						Method: "POST",
 					},
 				},
@@ -219,11 +208,11 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models/{id}",
+						Path:   "/v1/kb/models/{id}",
 						Method: "PUT",
 					},
 					{
-						Path:   "/v1/models/{id}",
+						Path:   "/v1/kb/models/{id}",
 						Method: "PATCH",
 					},
 				},
@@ -234,7 +223,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models/{id}",
+						Path:   "/v1/kb/models/{id}",
 						Method: "DELETE",
 					},
 				},
@@ -245,7 +234,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/models/{id}/validate",
+						Path:   "/v1/kb/models/{id}/validate",
 						Method: "POST",
 					},
 				},
@@ -262,7 +251,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "SearchResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/search",
+						Path:   "/v1/kb/articles/search",
 						Method: "GET",
 					},
 				},
@@ -273,7 +262,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ResolveResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/resolve",
+						Path:   "/v1/kb/articles/resolve",
 						Method: "POST",
 					},
 				},
@@ -284,7 +273,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "SemanticSearchResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/semantic_search",
+						Path:   "/v1/kb/articles/semantic_search",
 						Method: "POST",
 					},
 				},
@@ -295,7 +284,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "SuggestResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/suggest",
+						Path:   "/v1/kb/articles/suggest",
 						Method: "POST",
 					},
 				},
@@ -306,7 +295,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "MenuResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{space_id}/articles",
+						Path:   "/v1/kb/spaces/{space_id}/articles",
 						Method: "GET",
 					},
 				},
@@ -323,7 +312,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "SpaceList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces",
+						Path:   "/v1/kb/spaces",
 						Method: "GET",
 					},
 				},
@@ -334,7 +323,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Space",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{id}",
+						Path:   "/v1/kb/spaces/{id}",
 						Method: "GET",
 					},
 				},
@@ -345,7 +334,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Space",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces",
+						Path:   "/v1/kb/spaces",
 						Method: "POST",
 					},
 				},
@@ -356,11 +345,11 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Space",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{id}",
+						Path:   "/v1/kb/spaces/{id}",
 						Method: "PUT",
 					},
 					{
-						Path:   "/v1/spaces/{id}",
+						Path:   "/v1/kb/spaces/{id}",
 						Method: "PATCH",
 					},
 				},
@@ -371,7 +360,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "Space",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{id}",
+						Path:   "/v1/kb/spaces/{id}",
 						Method: "DELETE",
 					},
 				},
@@ -388,7 +377,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "SuggestTagsResponse",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/spaces/{space_id}/tags",
+						Path:   "/v1/kb/spaces/{space_id}/tags",
 						Method: "GET",
 					},
 				},
@@ -405,7 +394,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleVersionList",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{article_id}/versions",
+						Path:   "/v1/kb/articles/{article_id}/versions",
 						Method: "GET",
 					},
 				},
@@ -416,7 +405,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleVersion",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{article_id}/versions/{version_number}",
+						Path:   "/v1/kb/articles/{article_id}/versions/{version_number}",
 						Method: "GET",
 					},
 				},
@@ -427,7 +416,7 @@ var WebitelAPI = WebitelServicesInfo{
 				Output: "ArticleVersion",
 				HttpBindings: []*HttpBinding{
 					{
-						Path:   "/v1/articles/{article_id}/versions/{version_number}/restore",
+						Path:   "/v1/kb/articles/{article_id}/versions/{version_number}/restore",
 						Method: "POST",
 					},
 				},

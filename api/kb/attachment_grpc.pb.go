@@ -19,23 +19,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Attachments_ListAttachments_FullMethodName  = "/webitel.kb.Attachments/ListAttachments"
-	Attachments_CreateAttachment_FullMethodName = "/webitel.kb.Attachments/CreateAttachment"
-	Attachments_DeleteAttachment_FullMethodName = "/webitel.kb.Attachments/DeleteAttachment"
+	Attachments_ListFiles_FullMethodName  = "/webitel.kb.Attachments/ListFiles"
+	Attachments_DeleteFile_FullMethodName = "/webitel.kb.Attachments/DeleteFile"
 )
 
 // AttachmentsClient is the client API for Attachments service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Attachments manages files bound to an article, proxied to Webitel Storage.
+// Attachments lists and removes files bound to an article. Upload and download
+// are served by the Storage service; here the article is the related entity.
 type AttachmentsClient interface {
-	// ListAttachments returns the attachments of an article.
-	ListAttachments(ctx context.Context, in *ListAttachmentsRequest, opts ...grpc.CallOption) (*AttachmentList, error)
-	// CreateAttachment uploads a file and binds it to an article.
-	CreateAttachment(ctx context.Context, in *CreateAttachmentRequest, opts ...grpc.CallOption) (*Attachment, error)
-	// DeleteAttachment removes an attachment.
-	DeleteAttachment(ctx context.Context, in *DeleteAttachmentRequest, opts ...grpc.CallOption) (*Attachment, error)
+	// ListFiles returns the files attached to an article.
+	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*FileList, error)
+	// DeleteFile unbinds and removes a file from an article.
+	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*File, error)
 }
 
 type attachmentsClient struct {
@@ -46,30 +44,20 @@ func NewAttachmentsClient(cc grpc.ClientConnInterface) AttachmentsClient {
 	return &attachmentsClient{cc}
 }
 
-func (c *attachmentsClient) ListAttachments(ctx context.Context, in *ListAttachmentsRequest, opts ...grpc.CallOption) (*AttachmentList, error) {
+func (c *attachmentsClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*FileList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AttachmentList)
-	err := c.cc.Invoke(ctx, Attachments_ListAttachments_FullMethodName, in, out, cOpts...)
+	out := new(FileList)
+	err := c.cc.Invoke(ctx, Attachments_ListFiles_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *attachmentsClient) CreateAttachment(ctx context.Context, in *CreateAttachmentRequest, opts ...grpc.CallOption) (*Attachment, error) {
+func (c *attachmentsClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*File, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Attachment)
-	err := c.cc.Invoke(ctx, Attachments_CreateAttachment_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *attachmentsClient) DeleteAttachment(ctx context.Context, in *DeleteAttachmentRequest, opts ...grpc.CallOption) (*Attachment, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Attachment)
-	err := c.cc.Invoke(ctx, Attachments_DeleteAttachment_FullMethodName, in, out, cOpts...)
+	out := new(File)
+	err := c.cc.Invoke(ctx, Attachments_DeleteFile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,14 +68,13 @@ func (c *attachmentsClient) DeleteAttachment(ctx context.Context, in *DeleteAtta
 // All implementations must embed UnimplementedAttachmentsServer
 // for forward compatibility.
 //
-// Attachments manages files bound to an article, proxied to Webitel Storage.
+// Attachments lists and removes files bound to an article. Upload and download
+// are served by the Storage service; here the article is the related entity.
 type AttachmentsServer interface {
-	// ListAttachments returns the attachments of an article.
-	ListAttachments(context.Context, *ListAttachmentsRequest) (*AttachmentList, error)
-	// CreateAttachment uploads a file and binds it to an article.
-	CreateAttachment(context.Context, *CreateAttachmentRequest) (*Attachment, error)
-	// DeleteAttachment removes an attachment.
-	DeleteAttachment(context.Context, *DeleteAttachmentRequest) (*Attachment, error)
+	// ListFiles returns the files attached to an article.
+	ListFiles(context.Context, *ListFilesRequest) (*FileList, error)
+	// DeleteFile unbinds and removes a file from an article.
+	DeleteFile(context.Context, *DeleteFileRequest) (*File, error)
 	mustEmbedUnimplementedAttachmentsServer()
 }
 
@@ -98,14 +85,11 @@ type AttachmentsServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAttachmentsServer struct{}
 
-func (UnimplementedAttachmentsServer) ListAttachments(context.Context, *ListAttachmentsRequest) (*AttachmentList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListAttachments not implemented")
+func (UnimplementedAttachmentsServer) ListFiles(context.Context, *ListFilesRequest) (*FileList, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFiles not implemented")
 }
-func (UnimplementedAttachmentsServer) CreateAttachment(context.Context, *CreateAttachmentRequest) (*Attachment, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateAttachment not implemented")
-}
-func (UnimplementedAttachmentsServer) DeleteAttachment(context.Context, *DeleteAttachmentRequest) (*Attachment, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteAttachment not implemented")
+func (UnimplementedAttachmentsServer) DeleteFile(context.Context, *DeleteFileRequest) (*File, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteFile not implemented")
 }
 func (UnimplementedAttachmentsServer) mustEmbedUnimplementedAttachmentsServer() {}
 func (UnimplementedAttachmentsServer) testEmbeddedByValue()                     {}
@@ -128,56 +112,38 @@ func RegisterAttachmentsServer(s grpc.ServiceRegistrar, srv AttachmentsServer) {
 	s.RegisterService(&Attachments_ServiceDesc, srv)
 }
 
-func _Attachments_ListAttachments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListAttachmentsRequest)
+func _Attachments_ListFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFilesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AttachmentsServer).ListAttachments(ctx, in)
+		return srv.(AttachmentsServer).ListFiles(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Attachments_ListAttachments_FullMethodName,
+		FullMethod: Attachments_ListFiles_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AttachmentsServer).ListAttachments(ctx, req.(*ListAttachmentsRequest))
+		return srv.(AttachmentsServer).ListFiles(ctx, req.(*ListFilesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Attachments_CreateAttachment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateAttachmentRequest)
+func _Attachments_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AttachmentsServer).CreateAttachment(ctx, in)
+		return srv.(AttachmentsServer).DeleteFile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Attachments_CreateAttachment_FullMethodName,
+		FullMethod: Attachments_DeleteFile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AttachmentsServer).CreateAttachment(ctx, req.(*CreateAttachmentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Attachments_DeleteAttachment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteAttachmentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AttachmentsServer).DeleteAttachment(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Attachments_DeleteAttachment_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AttachmentsServer).DeleteAttachment(ctx, req.(*DeleteAttachmentRequest))
+		return srv.(AttachmentsServer).DeleteFile(ctx, req.(*DeleteFileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -190,16 +156,12 @@ var Attachments_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AttachmentsServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ListAttachments",
-			Handler:    _Attachments_ListAttachments_Handler,
+			MethodName: "ListFiles",
+			Handler:    _Attachments_ListFiles_Handler,
 		},
 		{
-			MethodName: "CreateAttachment",
-			Handler:    _Attachments_CreateAttachment_Handler,
-		},
-		{
-			MethodName: "DeleteAttachment",
-			Handler:    _Attachments_DeleteAttachment_Handler,
+			MethodName: "DeleteFile",
+			Handler:    _Attachments_DeleteFile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

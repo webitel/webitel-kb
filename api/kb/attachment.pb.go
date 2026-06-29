@@ -23,43 +23,43 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Attachment is a file bound to an article.
-type Attachment struct {
+// File is metadata of a stored file bound to an article.
+type File struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique identifier of the attachment.
+	// Storage file id.
 	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Owning article id.
-	ArticleId int64 `protobuf:"varint,2,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
-	// Pointer into Webitel Storage.
-	StorageUri string `protobuf:"bytes,3,opt,name=storage_uri,json=storageUri,proto3" json:"storage_uri,omitempty"`
-	// Original file name.
-	Filename string `protobuf:"bytes,4,opt,name=filename,proto3" json:"filename,omitempty"`
-	// MIME type.
-	MimeType string `protobuf:"bytes,5,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	// File size in bytes.
-	SizeBytes int64 `protobuf:"varint,6,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// User who uploaded the file.
+	CreatedBy *ExtendedLookup `protobuf:"bytes,2,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	// CreatedAt timestamp (epoch ms).
-	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	// User who uploaded the attachment.
-	CreatedBy     *Lookup `protobuf:"bytes,22,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt int64 `protobuf:"varint,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// File size in bytes.
+	Size int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	// MIME type.
+	Mime string `protobuf:"bytes,5,opt,name=mime,proto3" json:"mime,omitempty"`
+	// File name.
+	Name string `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	// Download url.
+	Url string `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
+	// Storage source.
+	Source        string `protobuf:"bytes,8,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Attachment) Reset() {
-	*x = Attachment{}
+func (x *File) Reset() {
+	*x = File{}
 	mi := &file_attachment_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Attachment) String() string {
+func (x *File) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Attachment) ProtoMessage() {}
+func (*File) ProtoMessage() {}
 
-func (x *Attachment) ProtoReflect() protoreflect.Message {
+func (x *File) ProtoReflect() protoreflect.Message {
 	mi := &file_attachment_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -71,139 +71,93 @@ func (x *Attachment) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
-func (*Attachment) Descriptor() ([]byte, []int) {
+// Deprecated: Use File.ProtoReflect.Descriptor instead.
+func (*File) Descriptor() ([]byte, []int) {
 	return file_attachment_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Attachment) GetId() int64 {
+func (x *File) GetId() int64 {
 	if x != nil {
 		return x.Id
 	}
 	return 0
 }
 
-func (x *Attachment) GetArticleId() int64 {
-	if x != nil {
-		return x.ArticleId
-	}
-	return 0
-}
-
-func (x *Attachment) GetStorageUri() string {
-	if x != nil {
-		return x.StorageUri
-	}
-	return ""
-}
-
-func (x *Attachment) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
-func (x *Attachment) GetMimeType() string {
-	if x != nil {
-		return x.MimeType
-	}
-	return ""
-}
-
-func (x *Attachment) GetSizeBytes() int64 {
-	if x != nil {
-		return x.SizeBytes
-	}
-	return 0
-}
-
-func (x *Attachment) GetCreatedAt() int64 {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return 0
-}
-
-func (x *Attachment) GetCreatedBy() *Lookup {
+func (x *File) GetCreatedBy() *ExtendedLookup {
 	if x != nil {
 		return x.CreatedBy
 	}
 	return nil
 }
 
-// ListAttachmentsRequest selects the article.
-type ListAttachmentsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning article id.
-	ArticleId     int64 `protobuf:"varint,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListAttachmentsRequest) Reset() {
-	*x = ListAttachmentsRequest{}
-	mi := &file_attachment_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListAttachmentsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListAttachmentsRequest) ProtoMessage() {}
-
-func (x *ListAttachmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_attachment_proto_msgTypes[1]
+func (x *File) GetCreatedAt() int64 {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListAttachmentsRequest.ProtoReflect.Descriptor instead.
-func (*ListAttachmentsRequest) Descriptor() ([]byte, []int) {
-	return file_attachment_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ListAttachmentsRequest) GetArticleId() int64 {
-	if x != nil {
-		return x.ArticleId
+		return x.CreatedAt
 	}
 	return 0
 }
 
-// AttachmentList is a list of attachments.
-type AttachmentList struct {
+func (x *File) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *File) GetMime() string {
+	if x != nil {
+		return x.Mime
+	}
+	return ""
+}
+
+func (x *File) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *File) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *File) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// FileList is a page of files.
+type FileList struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Attachments of the article.
-	Items []*Attachment `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// Files on this page.
+	Items []*File `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// Whether a next page exists.
 	Next          bool `protobuf:"varint,2,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AttachmentList) Reset() {
-	*x = AttachmentList{}
-	mi := &file_attachment_proto_msgTypes[2]
+func (x *FileList) Reset() {
+	*x = FileList{}
+	mi := &file_attachment_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AttachmentList) String() string {
+func (x *FileList) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AttachmentList) ProtoMessage() {}
+func (*FileList) ProtoMessage() {}
 
-func (x *AttachmentList) ProtoReflect() protoreflect.Message {
-	mi := &file_attachment_proto_msgTypes[2]
+func (x *FileList) ProtoReflect() protoreflect.Message {
+	mi := &file_attachment_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -214,55 +168,61 @@ func (x *AttachmentList) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AttachmentList.ProtoReflect.Descriptor instead.
-func (*AttachmentList) Descriptor() ([]byte, []int) {
-	return file_attachment_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use FileList.ProtoReflect.Descriptor instead.
+func (*FileList) Descriptor() ([]byte, []int) {
+	return file_attachment_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *AttachmentList) GetItems() []*Attachment {
+func (x *FileList) GetItems() []*File {
 	if x != nil {
 		return x.Items
 	}
 	return nil
 }
 
-func (x *AttachmentList) GetNext() bool {
+func (x *FileList) GetNext() bool {
 	if x != nil {
 		return x.Next
 	}
 	return false
 }
 
-// CreateAttachmentRequest uploads a file for an article.
-type CreateAttachmentRequest struct {
+// ListFilesRequest selects the article and pages its files.
+type ListFilesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning article id.
-	ArticleId int64 `protobuf:"varint,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
-	// Original file name.
-	Filename string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	// MIME type.
-	MimeType string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	// Raw file content.
-	Content       []byte `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	// Concurrency token / locator of the owning article.
+	ArticleEtag string `protobuf:"bytes,1,opt,name=article_etag,json=articleEtag,proto3" json:"article_etag,omitempty"`
+	// Page number (1-based).
+	Page int32 `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	// Page size.
+	Size int32 `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	// Search term.
+	Q string `protobuf:"bytes,4,opt,name=q,proto3" json:"q,omitempty"`
+	// Set of fields to return.
+	Fields []string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
+	// Optional file ids to fetch.
+	Ids []int64 `protobuf:"varint,6,rep,packed,name=ids,proto3" json:"ids,omitempty"`
+	// Sorting criteria (e.g. field:asc).
+	Sort          string `protobuf:"bytes,7,opt,name=sort,proto3" json:"sort,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateAttachmentRequest) Reset() {
-	*x = CreateAttachmentRequest{}
-	mi := &file_attachment_proto_msgTypes[3]
+func (x *ListFilesRequest) Reset() {
+	*x = ListFilesRequest{}
+	mi := &file_attachment_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateAttachmentRequest) String() string {
+func (x *ListFilesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateAttachmentRequest) ProtoMessage() {}
+func (*ListFilesRequest) ProtoMessage() {}
 
-func (x *CreateAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_attachment_proto_msgTypes[3]
+func (x *ListFilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_attachment_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -273,65 +233,86 @@ func (x *CreateAttachmentRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateAttachmentRequest.ProtoReflect.Descriptor instead.
-func (*CreateAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_attachment_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use ListFilesRequest.ProtoReflect.Descriptor instead.
+func (*ListFilesRequest) Descriptor() ([]byte, []int) {
+	return file_attachment_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CreateAttachmentRequest) GetArticleId() int64 {
+func (x *ListFilesRequest) GetArticleEtag() string {
 	if x != nil {
-		return x.ArticleId
+		return x.ArticleEtag
+	}
+	return ""
+}
+
+func (x *ListFilesRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
 	}
 	return 0
 }
 
-func (x *CreateAttachmentRequest) GetFilename() string {
+func (x *ListFilesRequest) GetSize() int32 {
 	if x != nil {
-		return x.Filename
+		return x.Size
+	}
+	return 0
+}
+
+func (x *ListFilesRequest) GetQ() string {
+	if x != nil {
+		return x.Q
 	}
 	return ""
 }
 
-func (x *CreateAttachmentRequest) GetMimeType() string {
+func (x *ListFilesRequest) GetFields() []string {
 	if x != nil {
-		return x.MimeType
-	}
-	return ""
-}
-
-func (x *CreateAttachmentRequest) GetContent() []byte {
-	if x != nil {
-		return x.Content
+		return x.Fields
 	}
 	return nil
 }
 
-// DeleteAttachmentRequest selects an attachment to delete.
-type DeleteAttachmentRequest struct {
+func (x *ListFilesRequest) GetIds() []int64 {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+func (x *ListFilesRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
+	}
+	return ""
+}
+
+// DeleteFileRequest selects a file to remove from an article.
+type DeleteFileRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Owning article id.
-	ArticleId int64 `protobuf:"varint,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
-	// Attachment id.
-	Id            int64 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	// File id.
+	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Concurrency token / locator of the owning article.
+	ArticleEtag   string `protobuf:"bytes,2,opt,name=article_etag,json=articleEtag,proto3" json:"article_etag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeleteAttachmentRequest) Reset() {
-	*x = DeleteAttachmentRequest{}
-	mi := &file_attachment_proto_msgTypes[4]
+func (x *DeleteFileRequest) Reset() {
+	*x = DeleteFileRequest{}
+	mi := &file_attachment_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeleteAttachmentRequest) String() string {
+func (x *DeleteFileRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeleteAttachmentRequest) ProtoMessage() {}
+func (*DeleteFileRequest) ProtoMessage() {}
 
-func (x *DeleteAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_attachment_proto_msgTypes[4]
+func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_attachment_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -342,23 +323,23 @@ func (x *DeleteAttachmentRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteAttachmentRequest.ProtoReflect.Descriptor instead.
-func (*DeleteAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_attachment_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use DeleteFileRequest.ProtoReflect.Descriptor instead.
+func (*DeleteFileRequest) Descriptor() ([]byte, []int) {
+	return file_attachment_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *DeleteAttachmentRequest) GetArticleId() int64 {
-	if x != nil {
-		return x.ArticleId
-	}
-	return 0
-}
-
-func (x *DeleteAttachmentRequest) GetId() int64 {
+func (x *DeleteFileRequest) GetId() int64 {
 	if x != nil {
 		return x.Id
 	}
 	return 0
+}
+
+func (x *DeleteFileRequest) GetArticleEtag() string {
+	if x != nil {
+		return x.ArticleEtag
+	}
+	return ""
 }
 
 var File_attachment_proto protoreflect.FileDescriptor
@@ -366,42 +347,36 @@ var File_attachment_proto protoreflect.FileDescriptor
 const file_attachment_proto_rawDesc = "" +
 	"\n" +
 	"\x10attachment.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\x83\x02\n" +
+	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xd3\x01\n" +
+	"\x04File\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x126\n" +
 	"\n" +
-	"Attachment\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1d\n" +
+	"created_by\x18\x02 \x01(\v2\x17.general.ExtendedLookupR\tcreatedBy\x12\x1d\n" +
 	"\n" +
-	"article_id\x18\x02 \x01(\x03R\tarticleId\x12\x1f\n" +
-	"\vstorage_uri\x18\x03 \x01(\tR\n" +
-	"storageUri\x12\x1a\n" +
-	"\bfilename\x18\x04 \x01(\tR\bfilename\x12\x1b\n" +
-	"\tmime_type\x18\x05 \x01(\tR\bmimeType\x12\x1d\n" +
+	"created_at\x18\x03 \x01(\x03R\tcreatedAt\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x12\n" +
+	"\x04mime\x18\x05 \x01(\tR\x04mime\x12\x12\n" +
+	"\x04name\x18\x06 \x01(\tR\x04name\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\x12\x16\n" +
+	"\x06source\x18\b \x01(\tR\x06source\"F\n" +
+	"\bFileList\x12&\n" +
+	"\x05items\x18\x01 \x03(\v2\x10.webitel.kb.FileR\x05items\x12\x12\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"\xa9\x01\n" +
+	"\x10ListFilesRequest\x12!\n" +
+	"\farticle_etag\x18\x01 \x01(\tR\varticleEtag\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\x05R\x04size\x12\f\n" +
+	"\x01q\x18\x04 \x01(\tR\x01q\x12\x16\n" +
+	"\x06fields\x18\x05 \x03(\tR\x06fields\x12\x10\n" +
+	"\x03ids\x18\x06 \x03(\x03R\x03ids\x12\x12\n" +
+	"\x04sort\x18\a \x01(\tR\x04sort\"F\n" +
+	"\x11DeleteFileRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12!\n" +
+	"\farticle_etag\x18\x02 \x01(\tR\varticleEtag2\x87\x02\n" +
+	"\vAttachments\x12q\n" +
+	"\tListFiles\x12\x1c.webitel.kb.ListFilesRequest\x1a\x14.webitel.kb.FileList\"0\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02&\x12$/v1/kb/articles/{article_etag}/files\x12t\n" +
 	"\n" +
-	"size_bytes\x18\x06 \x01(\x03R\tsizeBytes\x12\x1d\n" +
-	"\n" +
-	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12.\n" +
-	"\n" +
-	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"7\n" +
-	"\x16ListAttachmentsRequest\x12\x1d\n" +
-	"\n" +
-	"article_id\x18\x01 \x01(\x03R\tarticleId\"R\n" +
-	"\x0eAttachmentList\x12,\n" +
-	"\x05items\x18\x01 \x03(\v2\x16.webitel.kb.AttachmentR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"\x8b\x01\n" +
-	"\x17CreateAttachmentRequest\x12\x1d\n" +
-	"\n" +
-	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1b\n" +
-	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12\x18\n" +
-	"\acontent\x18\x04 \x01(\fR\acontent\"H\n" +
-	"\x17DeleteAttachmentRequest\x12\x1d\n" +
-	"\n" +
-	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x03R\x02id2\xb7\x03\n" +
-	"\vAttachments\x12\x84\x01\n" +
-	"\x0fListAttachments\x12\".webitel.kb.ListAttachmentsRequest\x1a\x1a.webitel.kb.AttachmentList\"1\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02'\x12%/v1/articles/{article_id}/attachments\x12\x85\x01\n" +
-	"\x10CreateAttachment\x12#.webitel.kb.CreateAttachmentRequest\x1a\x16.webitel.kb.Attachment\"4\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02*:\x01*\"%/v1/articles/{article_id}/attachments\x12\x87\x01\n" +
-	"\x10DeleteAttachment\x12#.webitel.kb.DeleteAttachmentRequest\x1a\x16.webitel.kb.Attachment\"6\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02,**/v1/articles/{article_id}/attachments/{id}\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x93\x01\n" +
+	"DeleteFile\x12\x1d.webitel.kb.DeleteFileRequest\x1a\x10.webitel.kb.File\"5\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02+*)/v1/kb/articles/{article_etag}/files/{id}\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x93\x01\n" +
 	"\x0ecom.webitel.kbB\x0fAttachmentProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +
 	"Webitel\\Kb\xe2\x02\x16Webitel\\Kb\\GPBMetadata\xea\x02\vWebitel::Kbb\x06proto3"
@@ -418,26 +393,23 @@ func file_attachment_proto_rawDescGZIP() []byte {
 	return file_attachment_proto_rawDescData
 }
 
-var file_attachment_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_attachment_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_attachment_proto_goTypes = []any{
-	(*Attachment)(nil),              // 0: webitel.kb.Attachment
-	(*ListAttachmentsRequest)(nil),  // 1: webitel.kb.ListAttachmentsRequest
-	(*AttachmentList)(nil),          // 2: webitel.kb.AttachmentList
-	(*CreateAttachmentRequest)(nil), // 3: webitel.kb.CreateAttachmentRequest
-	(*DeleteAttachmentRequest)(nil), // 4: webitel.kb.DeleteAttachmentRequest
-	(*Lookup)(nil),                  // 5: general.Lookup
+	(*File)(nil),              // 0: webitel.kb.File
+	(*FileList)(nil),          // 1: webitel.kb.FileList
+	(*ListFilesRequest)(nil),  // 2: webitel.kb.ListFilesRequest
+	(*DeleteFileRequest)(nil), // 3: webitel.kb.DeleteFileRequest
+	(*ExtendedLookup)(nil),    // 4: general.ExtendedLookup
 }
 var file_attachment_proto_depIdxs = []int32{
-	5, // 0: webitel.kb.Attachment.created_by:type_name -> general.Lookup
-	0, // 1: webitel.kb.AttachmentList.items:type_name -> webitel.kb.Attachment
-	1, // 2: webitel.kb.Attachments.ListAttachments:input_type -> webitel.kb.ListAttachmentsRequest
-	3, // 3: webitel.kb.Attachments.CreateAttachment:input_type -> webitel.kb.CreateAttachmentRequest
-	4, // 4: webitel.kb.Attachments.DeleteAttachment:input_type -> webitel.kb.DeleteAttachmentRequest
-	2, // 5: webitel.kb.Attachments.ListAttachments:output_type -> webitel.kb.AttachmentList
-	0, // 6: webitel.kb.Attachments.CreateAttachment:output_type -> webitel.kb.Attachment
-	0, // 7: webitel.kb.Attachments.DeleteAttachment:output_type -> webitel.kb.Attachment
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
+	4, // 0: webitel.kb.File.created_by:type_name -> general.ExtendedLookup
+	0, // 1: webitel.kb.FileList.items:type_name -> webitel.kb.File
+	2, // 2: webitel.kb.Attachments.ListFiles:input_type -> webitel.kb.ListFilesRequest
+	3, // 3: webitel.kb.Attachments.DeleteFile:input_type -> webitel.kb.DeleteFileRequest
+	1, // 4: webitel.kb.Attachments.ListFiles:output_type -> webitel.kb.FileList
+	0, // 5: webitel.kb.Attachments.DeleteFile:output_type -> webitel.kb.File
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -455,7 +427,7 @@ func file_attachment_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_attachment_proto_rawDesc), len(file_attachment_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

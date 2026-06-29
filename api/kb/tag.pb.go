@@ -144,9 +144,9 @@ const file_tag_proto_rawDesc = "" +
 	"\x01q\x18\x02 \x01(\tR\x01q\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x05R\x04size\")\n" +
 	"\x13SuggestTagsResponse\x12\x12\n" +
-	"\x04tags\x18\x01 \x03(\tR\x04tags2\x8f\x01\n" +
-	"\x04Tags\x12v\n" +
-	"\vSuggestTags\x12\x1e.webitel.kb.SuggestTagsRequest\x1a\x1f.webitel.kb.SuggestTagsResponse\"&\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/spaces/{space_id}/tags\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x8c\x01\n" +
+	"\x04tags\x18\x01 \x03(\tR\x04tags2\x92\x01\n" +
+	"\x04Tags\x12y\n" +
+	"\vSuggestTags\x12\x1e.webitel.kb.SuggestTagsRequest\x1a\x1f.webitel.kb.SuggestTagsResponse\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/spaces/{space_id}/tags\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x8c\x01\n" +
 	"\x0ecom.webitel.kbB\bTagProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +
 	"Webitel\\Kb\xe2\x02\x16Webitel\\Kb\\GPBMetadata\xea\x02\vWebitel::Kbb\x06proto3"
