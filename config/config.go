@@ -71,6 +71,27 @@ func LoadServerConfig() (*Config, error) {
 	return cfg, nil
 }
 
+// LoadMigrateConfig loads the minimal configuration required by the migrate command.
+func LoadMigrateConfig() (*Config, error) {
+	loader := appconfig.NewLoader(appconfig.Sections{
+		Log:      true,
+		Postgres: true,
+	})
+	loader.RegisterFlags(pflag.CommandLine)
+	pflag.Parse()
+
+	cfg := &Config{}
+	if err := loader.Load(pflag.CommandLine, cfg); err != nil {
+		return nil, err
+	}
+
+	if cfg.Postgres.DSN == "" {
+		return nil, errors.New("config: postgres.dsn is required (use --postgres.dsn or POSTGRES_DSN env)")
+	}
+
+	return cfg, nil
+}
+
 func registerServiceFlags() {
 	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
 	appconfig.RegisterGRPCConnFlags(pflag.CommandLine, "service.conn", true)
