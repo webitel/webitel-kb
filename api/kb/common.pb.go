@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Article kind.
+// Article type.
 type ArticleType int32
 
 const (

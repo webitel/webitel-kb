@@ -41,7 +41,7 @@ type SpacesClient interface {
 	CreateSpace(ctx context.Context, in *CreateSpaceRequest, opts ...grpc.CallOption) (*Space, error)
 	// UpdateSpace updates a space (language cannot be changed).
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*Space, error)
-	// DeleteSpace soft-deletes a space.
+	// DeleteSpace deletes a space; a space with active articles cannot be deleted.
 	DeleteSpace(ctx context.Context, in *DeleteSpaceRequest, opts ...grpc.CallOption) (*Space, error)
 }
 
@@ -118,7 +118,7 @@ type SpacesServer interface {
 	CreateSpace(context.Context, *CreateSpaceRequest) (*Space, error)
 	// UpdateSpace updates a space (language cannot be changed).
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*Space, error)
-	// DeleteSpace soft-deletes a space.
+	// DeleteSpace deletes a space; a space with active articles cannot be deleted.
 	DeleteSpace(context.Context, *DeleteSpaceRequest) (*Space, error)
 	mustEmbedUnimplementedSpacesServer()
 }

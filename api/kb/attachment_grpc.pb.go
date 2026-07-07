@@ -27,8 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Attachments lists and removes files bound to an article. Upload and download
-// are served by the Storage service; here the article is the related entity.
+// Attachments lists and removes files bound to an article.
 type AttachmentsClient interface {
 	// ListFiles returns the files attached to an article.
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*FileList, error)
@@ -68,8 +67,7 @@ func (c *attachmentsClient) DeleteFile(ctx context.Context, in *DeleteFileReques
 // All implementations must embed UnimplementedAttachmentsServer
 // for forward compatibility.
 //
-// Attachments lists and removes files bound to an article. Upload and download
-// are served by the Storage service; here the article is the related entity.
+// Attachments lists and removes files bound to an article.
 type AttachmentsServer interface {
 	// ListFiles returns the files attached to an article.
 	ListFiles(context.Context, *ListFilesRequest) (*FileList, error)

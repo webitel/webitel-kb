@@ -36,11 +36,11 @@ type Space struct {
 	Description string `protobuf:"bytes,12,opt,name=description,proto3" json:"description,omitempty"`
 	// Space language; immutable, drives full-text config and retrieval.
 	Language string `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	// Active embedding model id (kind=embedding).
+	// Active embedding model id (type=embedding).
 	EmbeddingModelId int64 `protobuf:"varint,5,opt,name=embedding_model_id,json=embeddingModelId,proto3" json:"embedding_model_id,omitempty"`
 	// Target embedding model id for a pending model migration.
 	TargetEmbeddingModelId int64 `protobuf:"varint,6,opt,name=target_embedding_model_id,json=targetEmbeddingModelId,proto3" json:"target_embedding_model_id,omitempty"`
-	// Reranker model id (kind=reranker).
+	// Reranker model id (type=reranker).
 	RerankerModelId int64 `protobuf:"varint,7,opt,name=reranker_model_id,json=rerankerModelId,proto3" json:"reranker_model_id,omitempty"`
 	// Whether articles in this space are embedded for vector search.
 	VectorSearchEnabled bool `protobuf:"varint,8,opt,name=vector_search_enabled,json=vectorSearchEnabled,proto3" json:"vector_search_enabled,omitempty"`
@@ -50,6 +50,9 @@ type Space struct {
 	ChunkingStrategy string `protobuf:"bytes,10,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
 	// Article used as the space home page; 0 if unset.
 	HomeArticleId int64 `protobuf:"varint,11,opt,name=home_article_id,json=homeArticleId,proto3" json:"home_article_id,omitempty"`
+	// Teams the space is bound to as default operator visibility;
+	// empty when no binding is configured.
+	Teams []*Lookup `protobuf:"bytes,13,rep,name=teams,proto3" json:"teams,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -176,6 +179,13 @@ func (x *Space) GetHomeArticleId() int64 {
 	return 0
 }
 
+func (x *Space) GetTeams() []*Lookup {
+	if x != nil {
+		return x.Teams
+	}
+	return nil
+}
+
 func (x *Space) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -225,6 +235,9 @@ type InputSpace struct {
 	ChunkingStrategy string `protobuf:"bytes,7,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
 	// Article used as the space home page.
 	HomeArticleId int64 `protobuf:"varint,8,opt,name=home_article_id,json=homeArticleId,proto3" json:"home_article_id,omitempty"`
+	// Team ids the space is bound to as default operator visibility;
+	// the set replaces the current binding, empty removes it.
+	TeamIds       []int64 `protobuf:"varint,10,rep,packed,name=team_ids,json=teamIds,proto3" json:"team_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -320,6 +333,13 @@ func (x *InputSpace) GetHomeArticleId() int64 {
 		return x.HomeArticleId
 	}
 	return 0
+}
+
+func (x *InputSpace) GetTeamIds() []int64 {
+	if x != nil {
+		return x.TeamIds
+	}
+	return nil
 }
 
 // ListSpacesRequest parameters.
@@ -657,7 +677,7 @@ var File_space_proto protoreflect.FileDescriptor
 const file_space_proto_rawDesc = "" +
 	"\n" +
 	"\vspace.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xe9\x04\n" +
+	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\x90\x05\n" +
 	"\x05Space\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -671,7 +691,8 @@ const file_space_proto_rawDesc = "" +
 	"\x0ererank_enabled\x18\t \x01(\bR\rrerankEnabled\x12+\n" +
 	"\x11chunking_strategy\x18\n" +
 	" \x01(\tR\x10chunkingStrategy\x12&\n" +
-	"\x0fhome_article_id\x18\v \x01(\x03R\rhomeArticleId\x12\x1d\n" +
+	"\x0fhome_article_id\x18\v \x01(\x03R\rhomeArticleId\x12%\n" +
+	"\x05teams\x18\r \x03(\v2\x0f.general.LookupR\x05teams\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -679,7 +700,7 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xe8\x02\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\x83\x03\n" +
 	"\n" +
 	"InputSpace\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -690,7 +711,9 @@ const file_space_proto_rawDesc = "" +
 	"\x15vector_search_enabled\x18\x05 \x01(\bR\x13vectorSearchEnabled\x12%\n" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
 	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12&\n" +
-	"\x0fhome_article_id\x18\b \x01(\x03R\rhomeArticleId\"u\n" +
+	"\x0fhome_article_id\x18\b \x01(\x03R\rhomeArticleId\x12\x19\n" +
+	"\bteam_ids\x18\n" +
+	" \x03(\x03R\ateamIds\"u\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
@@ -746,26 +769,27 @@ var file_space_proto_goTypes = []any{
 	(*Lookup)(nil),             // 8: general.Lookup
 }
 var file_space_proto_depIdxs = []int32{
-	8,  // 0: webitel.kb.Space.created_by:type_name -> general.Lookup
-	8,  // 1: webitel.kb.Space.updated_by:type_name -> general.Lookup
-	0,  // 2: webitel.kb.SpaceList.items:type_name -> webitel.kb.Space
-	1,  // 3: webitel.kb.CreateSpaceRequest.input:type_name -> webitel.kb.InputSpace
-	1,  // 4: webitel.kb.UpdateSpaceRequest.input:type_name -> webitel.kb.InputSpace
-	2,  // 5: webitel.kb.Spaces.ListSpaces:input_type -> webitel.kb.ListSpacesRequest
-	4,  // 6: webitel.kb.Spaces.LocateSpace:input_type -> webitel.kb.LocateSpaceRequest
-	5,  // 7: webitel.kb.Spaces.CreateSpace:input_type -> webitel.kb.CreateSpaceRequest
-	6,  // 8: webitel.kb.Spaces.UpdateSpace:input_type -> webitel.kb.UpdateSpaceRequest
-	7,  // 9: webitel.kb.Spaces.DeleteSpace:input_type -> webitel.kb.DeleteSpaceRequest
-	3,  // 10: webitel.kb.Spaces.ListSpaces:output_type -> webitel.kb.SpaceList
-	0,  // 11: webitel.kb.Spaces.LocateSpace:output_type -> webitel.kb.Space
-	0,  // 12: webitel.kb.Spaces.CreateSpace:output_type -> webitel.kb.Space
-	0,  // 13: webitel.kb.Spaces.UpdateSpace:output_type -> webitel.kb.Space
-	0,  // 14: webitel.kb.Spaces.DeleteSpace:output_type -> webitel.kb.Space
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	8,  // 0: webitel.kb.Space.teams:type_name -> general.Lookup
+	8,  // 1: webitel.kb.Space.created_by:type_name -> general.Lookup
+	8,  // 2: webitel.kb.Space.updated_by:type_name -> general.Lookup
+	0,  // 3: webitel.kb.SpaceList.items:type_name -> webitel.kb.Space
+	1,  // 4: webitel.kb.CreateSpaceRequest.input:type_name -> webitel.kb.InputSpace
+	1,  // 5: webitel.kb.UpdateSpaceRequest.input:type_name -> webitel.kb.InputSpace
+	2,  // 6: webitel.kb.Spaces.ListSpaces:input_type -> webitel.kb.ListSpacesRequest
+	4,  // 7: webitel.kb.Spaces.LocateSpace:input_type -> webitel.kb.LocateSpaceRequest
+	5,  // 8: webitel.kb.Spaces.CreateSpace:input_type -> webitel.kb.CreateSpaceRequest
+	6,  // 9: webitel.kb.Spaces.UpdateSpace:input_type -> webitel.kb.UpdateSpaceRequest
+	7,  // 10: webitel.kb.Spaces.DeleteSpace:input_type -> webitel.kb.DeleteSpaceRequest
+	3,  // 11: webitel.kb.Spaces.ListSpaces:output_type -> webitel.kb.SpaceList
+	0,  // 12: webitel.kb.Spaces.LocateSpace:output_type -> webitel.kb.Space
+	0,  // 13: webitel.kb.Spaces.CreateSpace:output_type -> webitel.kb.Space
+	0,  // 14: webitel.kb.Spaces.UpdateSpace:output_type -> webitel.kb.Space
+	0,  // 15: webitel.kb.Spaces.DeleteSpace:output_type -> webitel.kb.Space
+	11, // [11:16] is the sub-list for method output_type
+	6,  // [6:11] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_space_proto_init() }

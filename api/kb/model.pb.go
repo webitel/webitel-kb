@@ -30,8 +30,8 @@ type EmbeddingModel struct {
 	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Owning domain id; 0 for a global (Webitel-seeded) model.
 	DomainId int64 `protobuf:"varint,2,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	// Model kind: "embedding" or "reranker".
-	Kind string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Model type: "embedding" or "reranker".
+	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	// Human-readable name shown in the admin UI.
 	Name string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	// Provider key (gemini, openai, cohere, azure, bge-m3, e5, bge-reranker, byom).
@@ -98,9 +98,9 @@ func (x *EmbeddingModel) GetDomainId() int64 {
 	return 0
 }
 
-func (x *EmbeddingModel) GetKind() string {
+func (x *EmbeddingModel) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
@@ -171,8 +171,8 @@ func (x *EmbeddingModel) GetCreatedBy() *Lookup {
 // InputEmbeddingModel carries the writable fields of a model.
 type InputEmbeddingModel struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Model kind: "embedding" or "reranker".
-	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Model type: "embedding" or "reranker".
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	// Human-readable name.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Provider key.
@@ -221,9 +221,9 @@ func (*InputEmbeddingModel) Descriptor() ([]byte, []int) {
 	return file_model_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *InputEmbeddingModel) GetKind() string {
+func (x *InputEmbeddingModel) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
@@ -286,8 +286,8 @@ type ListModelsRequest struct {
 	Page int32 `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	// Optional name search.
 	Q string `protobuf:"bytes,3,opt,name=q,proto3" json:"q,omitempty"`
-	// Optional kind filter ("embedding" or "reranker").
-	Kind string `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Optional type filter ("embedding" or "reranker").
+	Type string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
 	// Sorting criteria (e.g. field:asc).
 	Sort string `protobuf:"bytes,5,opt,name=sort,proto3" json:"sort,omitempty"`
 	// Set of fields to return.
@@ -347,9 +347,9 @@ func (x *ListModelsRequest) GetQ() string {
 	return ""
 }
 
-func (x *ListModelsRequest) GetKind() string {
+func (x *ListModelsRequest) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
@@ -671,7 +671,7 @@ const file_model_proto_rawDesc = "" +
 	"\x0eEmbeddingModel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
-	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x05 \x01(\tR\bprovider\x12$\n" +
 	"\x0eis_self_hosted\x18\x06 \x01(\bR\fisSelfHosted\x12\x1b\n" +
@@ -687,7 +687,7 @@ const file_model_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\xf1\x01\n" +
 	"\x13InputEmbeddingModel\x12\x12\n" +
-	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x03 \x01(\tR\bprovider\x12$\n" +
 	"\x0eis_self_hosted\x18\x04 \x01(\bR\fisSelfHosted\x12\x1b\n" +
@@ -701,7 +701,7 @@ const file_model_proto_rawDesc = "" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x12\n" +
-	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04sort\x18\x05 \x01(\tR\x04sort\x12\x16\n" +
 	"\x06fields\x18\x06 \x03(\tR\x06fields\"Z\n" +
 	"\x12EmbeddingModelList\x120\n" +
