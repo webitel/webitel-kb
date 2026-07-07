@@ -4,7 +4,7 @@ CREATE SCHEMA kb;
 CREATE TABLE kb.embedding_model (
     id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     domain_id      bigint NULL REFERENCES directory.wbt_domain (dc),  -- null = global model
-    kind           text NOT NULL DEFAULT 'embedding'
+    type           text NOT NULL DEFAULT 'embedding'
                        CHECK (kind IN ('embedding', 'reranker')),
     name           text NOT NULL,
     provider       text NOT NULL
