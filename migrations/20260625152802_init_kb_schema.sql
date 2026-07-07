@@ -5,7 +5,7 @@ CREATE TABLE kb.embedding_model (
     id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     domain_id      bigint NULL REFERENCES directory.wbt_domain (dc),  -- null = global model
     type           text NOT NULL DEFAULT 'embedding'
-                       CHECK (kind IN ('embedding', 'reranker')),
+                       CHECK (type IN ('embedding', 'reranker')),
     name           text NOT NULL,
     provider       text NOT NULL
                        CHECK (provider IN ('gemini', 'openai', 'cohere', 'azure',
@@ -18,7 +18,7 @@ CREATE TABLE kb.embedding_model (
     validated_at   timestamptz NULL,     -- set after a successful test call
     created_at     timestamptz NOT NULL DEFAULT now(),
     created_by     bigint NULL,
-    CHECK (kind = 'reranker' OR dimensions IS NOT NULL),
+    CHECK (type = 'reranker' OR dimensions IS NOT NULL),
     UNIQUE NULLS NOT DISTINCT (domain_id, name)
 );
 
