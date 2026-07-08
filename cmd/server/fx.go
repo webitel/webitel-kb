@@ -20,6 +20,7 @@ func NewApp(cfg *config.Config) *fx.App {
 			func() *config.Config { return cfg },
 			ProvideLogger,
 			ProvideSD,
+			ProvideAuthManager,
 		),
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
 

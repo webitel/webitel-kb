@@ -24,6 +24,7 @@ import (
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/server/grpc/interceptors"
 	infratls "github.com/webitel/webitel-kb/infra/tls"
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/model"
 )
 
@@ -35,10 +36,11 @@ var Module = fx.Module("grpc_server",
 	),
 )
 
-func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Config, lc fx.Lifecycle) (*Server, error) {
+func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Config, authManager auth.Manager, lc fx.Lifecycle) (*Server, error) {
 	srv, err := New(conf.Service.Addr, func(c *Config) error {
 		c.TLS = tls.Server.Clone()
 		c.Logger = logger
+		c.AuthManager = authManager
 
 		return nil
 	})
@@ -83,8 +85,9 @@ type Server struct {
 }
 
 type Config struct {
-	TLS    *tls.Config
-	Logger *slog.Logger
+	TLS         *tls.Config
+	Logger      *slog.Logger
+	AuthManager auth.Manager
 }
 
 type Option func(*Config) error
@@ -119,12 +122,16 @@ func New(addr string, opts ...Option) (*Server, error) {
 		return nil, err
 	}
 
+	if conf.AuthManager == nil {
+		return nil, fmt.Errorf("grpc server: auth manager is required")
+	}
+
 	s := grpc.NewServer(
 		grpc.Creds(grpcTLS),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			intrcp.UnaryServerErrorInterceptor(),
-			interceptors.NewUnaryAuthInterceptor(),
+			interceptors.NewUnaryAuthInterceptor(conf.AuthManager),
 			validatemiddleware.UnaryServerInterceptor(validator),
 		),
 	)
