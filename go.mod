@@ -3,6 +3,8 @@ module github.com/webitel/webitel-kb
 go 1.26
 
 require (
+	buf.build/gen/go/webitel/webitel-go/grpc/go v1.5.1-20251023140604-18fe32d76f81.2
+	buf.build/gen/go/webitel/webitel-go/protocolbuffers/go v1.36.1-20251023140604-18fe32d76f81.1
 	buf.build/go/protovalidate v1.2.0
 	github.com/ThreeDotsLabs/watermill v1.5.2
 	github.com/ThreeDotsLabs/watermill-amqp/v3 v3.1.0
@@ -10,6 +12,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/mbobakov/grpc-consul-resolver v1.5.3
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/spf13/pflag v1.0.10
 	github.com/urfave/cli/v2 v2.27.7
@@ -24,6 +27,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.uber.org/fx v1.24.0
+	golang.org/x/sync v0.20.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9
 	google.golang.org/grpc v1.81.1
 )
@@ -39,6 +43,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-playground/form v3.1.4+incompatible // indirect
 	github.com/google/cel-go v0.28.0 // indirect
 	github.com/hashicorp/consul/api v1.33.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -52,6 +57,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
@@ -66,7 +72,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 

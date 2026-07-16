@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -11,12 +12,17 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
 	"github.com/webitel/webitel-kb/config"
+	"github.com/webitel/webitel-kb/internal/auth"
+	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
 
+	_ "github.com/mbobakov/grpc-consul-resolver"
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 )
 
@@ -167,6 +173,27 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	}
 
 	return &multiHandler{handlers: newHandlers}
+}
+
+// ProvideAuthManager connects to the webitel-go auth service through Consul
+// and provides the session manager used by the gRPC auth interceptor.
+func ProvideAuthManager(cfg *config.Config, lc fx.Lifecycle) (auth.Manager, error) {
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("consul://%s/go.webitel.app?wait=14s", cfg.Consul.Addr),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy": "round_robin"}`),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return conn.Close()
+		},
+	})
+
+	return webitel_app.New(conn)
 }
 
 func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {
