@@ -28,3 +28,26 @@ func TestCompactSQL(t *testing.T) {
 		})
 	}
 }
+
+func TestEscapeLike(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain text untouched", "gemini", "gemini"},
+		{"percent escaped", "100%", `100\%`},
+		{"underscore escaped", "bge_m3", `bge\_m3`},
+		{"backslash escaped", `a\b`, `a\\b`},
+		{"backslash before metachar stays literal", `\%`, `\\\%`},
+		{"empty", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := escapeLike(tt.in); got != tt.want {
+				t.Fatalf("escapeLike(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
