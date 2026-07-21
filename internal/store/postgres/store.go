@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -10,7 +12,11 @@ import (
 )
 
 type Store struct {
-	dsn  string
+	dsn string
+
+	// mu guards pool: Open/Close run on the service lifecycle while Database
+	// may be called from request goroutines.
+	mu   sync.RWMutex
 	pool *pgxpool.Pool
 }
 
@@ -40,15 +46,32 @@ func (s *Store) Open(ctx context.Context) error {
 		return err
 	}
 
+	s.mu.Lock()
 	s.pool = pool
+	s.mu.Unlock()
 
 	slog.Debug("kb.store.connection_opened", slog.String("message", "postgres: connection opened"))
 
 	return nil
 }
 
+// Database returns the connection pool, or an error until Open has run.
+func (s *Store) Database() (*pgxpool.Pool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.pool == nil {
+		return nil, errors.New("postgres: connection is not opened")
+	}
+
+	return s.pool, nil
+}
+
 // Close releases the connection pool.
 func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.pool != nil {
 		s.pool.Close()
 		s.pool = nil
