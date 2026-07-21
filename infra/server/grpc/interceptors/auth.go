@@ -13,9 +13,6 @@ import (
 	"github.com/webitel/webitel-kb/internal/auth"
 )
 
-// SessionHeader is the context key the authorized caller session is stored under.
-const SessionHeader = "session"
-
 // kbMethodPrefix is the full-method prefix of the KB API services. Methods under
 // it must be present in kb.WebitelAPI; anything else (health, reflection) is infra.
 const kbMethodPrefix = "/webitel.kb."
@@ -65,9 +62,7 @@ func NewUnaryAuthInterceptor(manager auth.Manager) grpc.UnaryServerInterceptor {
 			)
 		}
 
-		ctx = context.WithValue(ctx, SessionHeader, session)
-
-		return handler(ctx, req)
+		return handler(auth.WithSession(ctx, session), req)
 	}
 }
 

@@ -111,7 +111,7 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 			)
 			handler := func(ctx context.Context, _ any) (any, error) {
 				handlerRun = true
-				_, sessionInCtx = ctx.Value(SessionHeader).(auth.Auther)
+				_, sessionInCtx = auth.FromContext(ctx)
 				return "ok", nil
 			}
 
