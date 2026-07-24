@@ -15,9 +15,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/webitel/crypto/cryptobox"
+	"github.com/webitel/crypto/cryptostore"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
 	"github.com/webitel/webitel-kb/config"
+	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -173,6 +176,27 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	}
 
 	return &multiHandler{handlers: newHandlers}
+}
+
+// ProvideEncryptor builds the credential Encryptor over the shared Webitel
+// crypto keyring. Keys are resolved by the library from the environment
+// (WBTL_CRYPTO_CIPHER_KEYRING / WBTL_CRYPTO_CIPHER_KEYFILE, or the well-known
+// system keyring file), outside the service config. A missing or invalid
+// keyring fails the first consumer's construction. The codec is built over the
+// cipher keyring alone: the optional search keyring serves the blind index,
+// which this service does not use, and must not gate startup.
+func ProvideEncryptor() (crypto.Encryptor, error) {
+	cipher, err := cryptobox.Default()
+	if err != nil {
+		return nil, err
+	}
+
+	codec, err := cryptostore.NewCodec(cipher, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return crypto.New(codec), nil
 }
 
 // ProvideAuthManager connects to the webitel-go auth service through Consul

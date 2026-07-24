@@ -21,6 +21,7 @@ func NewApp(cfg *config.Config) *fx.App {
 			ProvideLogger,
 			ProvideSD,
 			ProvideAuthManager,
+			ProvideEncryptor,
 		),
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
 
