@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/pflag"
@@ -18,11 +19,19 @@ type Config struct {
 	Redis    appconfig.Redis    `mapstructure:"redis"`
 	Consul   appconfig.Consul   `mapstructure:"consul"`
 	Pubsub   appconfig.Pubsub   `mapstructure:"pubsub"`
+	Relay    RelayConfig        `mapstructure:"relay"`
 }
 
 type ServiceConfig struct {
 	Addr       string             `mapstructure:"addr"`
 	Connection appconfig.GRPCConn `mapstructure:"conn"`
+}
+
+// RelayConfig tunes the outbox relay poller.
+type RelayConfig struct {
+	Interval       time.Duration `mapstructure:"interval"`
+	Batch          int           `mapstructure:"batch"`
+	PublishTimeout time.Duration `mapstructure:"publish_timeout"`
 }
 
 // LoadServerConfig loads the full configuration required by the gRPC server.
@@ -95,6 +104,9 @@ func LoadMigrateConfig() (*Config, error) {
 func registerServiceFlags() {
 	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
 	appconfig.RegisterGRPCConnFlags(pflag.CommandLine, "service.conn", true)
+	pflag.Duration("relay.interval", time.Second, "outbox relay poll interval")
+	pflag.Int("relay.batch", 100, "outbox relay batch size")
+	pflag.Duration("relay.publish_timeout", 5*time.Second, "outbox relay publish confirmation timeout")
 }
 
 func (c *Config) validate() error {
@@ -128,6 +140,22 @@ func (c *Config) validate() error {
 
 	if !strings.HasPrefix(c.Pubsub.URL, "amqp://") && !strings.HasPrefix(c.Pubsub.URL, "amqps://") {
 		return errors.New("config: pubsub.url must start with amqp:// or amqps://")
+	}
+
+	return c.Relay.validate()
+}
+
+func (c RelayConfig) validate() error {
+	if c.Interval <= 0 {
+		return errors.New("config: relay.interval must be positive")
+	}
+
+	if c.Batch < 1 || c.Batch > 1000 {
+		return errors.New("config: relay.batch must be within [1, 1000]")
+	}
+
+	if c.PublishTimeout <= 0 {
+		return errors.New("config: relay.publish_timeout must be positive")
 	}
 
 	return nil
