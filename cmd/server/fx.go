@@ -10,6 +10,7 @@ import (
 	"github.com/webitel/webitel-kb/config"
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	grpchandler "github.com/webitel/webitel-kb/internal/handler/grpc"
+	"github.com/webitel/webitel-kb/internal/relay"
 	"github.com/webitel/webitel-kb/internal/service"
 	"github.com/webitel/webitel-kb/internal/store/postgres"
 )
@@ -27,6 +28,7 @@ func NewApp(cfg *config.Config) *fx.App {
 		pubsub.Module,
 		tls.Module,
 		postgres.Module,
+		relay.Module,
 		service.Module,
 		grpcsrv.Module,
 		grpchandler.Module,
