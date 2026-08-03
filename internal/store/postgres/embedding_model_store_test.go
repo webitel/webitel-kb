@@ -481,7 +481,7 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 			}
 
 			// Any update invalidates the previous validation.
-			if !strings.Contains(f.gotSQL, "validated_at = $8") {
+			if !strings.Contains(f.gotSQL, "validated_at = $7") {
 				t.Errorf("SQL %q does not reset validated_at", f.gotSQL)
 			}
 
@@ -512,8 +512,9 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 		t.Fatalf("Update: %v", err)
 	}
 
-	// SET order: type, name, provider, is_self_hosted, model_ref, dimensions,
-	// endpoint, validated_at(NULL), config; WHERE: id, domain_id.
+	// SET order: name, provider, is_self_hosted, model_ref, dimensions,
+	// endpoint, validated_at(NULL), config; WHERE: id, domain_id. type is
+	// immutable and must never appear in the statement.
 	assertArg := func(i int, want any) {
 		t.Helper()
 
@@ -542,21 +543,24 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 		}
 	}
 
-	if len(f.gotArgs) != 11 {
-		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
+	if len(f.gotArgs) != 10 {
+		t.Fatalf("args = %d, want 10: %v", len(f.gotArgs), f.gotArgs)
 	}
 
-	assertArg(0, "reranker")
-	assertArg(1, "n1")
-	assertArg(2, "p1")
-	assertArg(3, true)
-	assertArg(4, ptrTo("mr1"))
-	assertArg(5, ptrTo(int32(42)))
-	assertArg(6, ptrTo("ep1"))
-	assertArg(7, nil)
-	assertArg(8, []byte("cfg"))
-	assertArg(9, int64(1))
-	assertArg(10, int64(5))
+	if strings.Contains(f.gotSQL, "type") {
+		t.Errorf("SQL %q writes the immutable type column", f.gotSQL)
+	}
+
+	assertArg(0, "n1")
+	assertArg(1, "p1")
+	assertArg(2, true)
+	assertArg(3, ptrTo("mr1"))
+	assertArg(4, ptrTo(int32(42)))
+	assertArg(5, ptrTo("ep1"))
+	assertArg(6, nil)
+	assertArg(7, []byte("cfg"))
+	assertArg(8, int64(1))
+	assertArg(9, int64(5))
 }
 
 func TestEmbeddingModelDeleteRendersScopedCTE(t *testing.T) {

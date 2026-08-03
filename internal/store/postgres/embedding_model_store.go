@@ -188,7 +188,6 @@ func (s *embeddingModelStore) Update(
 ) (*model.EmbeddingModel, error) {
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Update(embeddingModelTable).
-		Set("type", in.Type).
 		Set("name", in.Name).
 		Set("provider", in.Provider).
 		Set("is_self_hosted", in.IsSelfHosted).
