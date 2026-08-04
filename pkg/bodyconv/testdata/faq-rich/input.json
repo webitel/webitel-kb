@@ -1,0 +1,142 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {"level": 2},
+      "content": [{"type": "text", "text": "Оплата картками"}]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Ми приймаємо "},
+        {"type": "text", "text": "Visa", "marks": [{"type": "bold"}]},
+        {"type": "text", "text": " і "},
+        {"type": "text", "text": "Mastercard", "marks": [{"type": "bold"}]},
+        {"type": "text", "text": ". Комісія "},
+        {"type": "text", "text": "3%", "marks": [{"type": "strike"}]},
+        {"type": "text", "text": " 0% до кінця року."}
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {"level": 2},
+      "content": [{"type": "text", "text": "Як змінити тариф"}]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Відкрийте "},
+        {"type": "text", "text": "Налаштування > Тариф", "marks": [{"type": "code"}]},
+        {"type": "text", "text": " і натисніть "},
+        {"type": "text", "text": "Змінити", "marks": [{"type": "bold"}]},
+        {"type": "text", "text": "."}
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": {"start": 1},
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {"type": "text", "text": "Оберіть новий тариф зі списку "},
+                {"type": "text", "text": "доступних", "marks": [{"type": "italic"}]},
+                {"type": "text", "text": "."}
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Перевірте, що входить у тариф:"}]},
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "кількість операторів"}]}
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "канали звернень"}]}
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {"type": "text", "text": "Підтвердіть зміну."},
+                {"type": "hardBreak"},
+                {"type": "text", "text": "Новий тариф діє з наступного дня."}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "image",
+      "attrs": {
+        "src": "https://kb.example.com/img/tariff-change.png",
+        "alt": "Екран зміни тарифу",
+        "title": "Розділ Тариф у налаштуваннях"
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Питання лишились? Напишіть у "},
+        {
+          "type": "text",
+          "text": "чат підтримки",
+          "marks": [
+            {"type": "link", "attrs": {"href": "https://support.example.com/chat"}},
+            {"type": "bold"}
+          ]
+        },
+        {"type": "text", "text": " або перегляньте "},
+        {"type": "text", "text": "архів відповідей", "marks": [{"type": "underline"}]},
+        {"type": "text", "text": "."}
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {"type": "text", "text": "Знижка діє лише при "},
+            {"type": "text", "text": "річній", "marks": [{"type": "italic"}]},
+            {"type": "text", "text": " оплаті."}
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {"type": "text", "text": "Деталі в "},
+            {
+              "type": "text",
+              "text": "умовах тарифів",
+              "marks": [{"type": "link", "attrs": {"href": "https://kb.example.com/terms"}}]
+            },
+            {"type": "text", "text": "."}
+          ]
+        }
+      ]
+    }
+  ]
+}

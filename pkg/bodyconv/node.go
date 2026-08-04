@@ -3,6 +3,8 @@ package bodyconv
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 )
 
 // Node type names the renderers work with (the TipTap spelling); the
@@ -111,6 +113,10 @@ func normalize(n *node) {
 			n.Marks[i].Type = alias
 		}
 	}
+
+	slices.SortStableFunc(n.Marks, func(a, b mark) int {
+		return strings.Compare(a.Type, b.Type)
+	})
 
 	for i := range n.Content {
 		normalize(&n.Content[i])

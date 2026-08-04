@@ -2,6 +2,9 @@ package bodyconv
 
 import (
 	"errors"
+	"flag"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -236,6 +239,30 @@ func TestConvertBlocks(t *testing.T) {
 			wantMD:    "a\n\nb",
 			wantPlain: "a\n\nb",
 		},
+		{
+			name:      "nested blockquote doubles the prefix",
+			doc:       docJSON(`{"type":"blockquote","content":[` + para(text("зовнішня")) + `,{"type":"blockquote","content":[` + para(text("внутрішня")) + `]}]}`),
+			wantMD:    "> зовнішня\n>\n> > внутрішня",
+			wantPlain: "зовнішня\n\nвнутрішня",
+		},
+		{
+			name:      "two-digit ordered marker widens the continuation indent",
+			doc:       docJSON(`{"type":"orderedList","attrs":{"start":10},"content":[{"type":"listItem","content":[` + para(text("перший")) + `,` + para(text("другий")) + `]}]}`),
+			wantMD:    "10. перший\n\n    другий",
+			wantPlain: "перший\nдругий",
+		},
+		{
+			name:      "image alt with markdown specials is escaped",
+			doc:       docJSON(`{"type":"image","attrs":{"src":"https://x/i.png","alt":"схема [v2]*"}}`),
+			wantMD:    `![схема \[v2\]\*](https://x/i.png)`,
+			wantPlain: "схема [v2]*",
+		},
+		{
+			name:      "empty code block keeps its fence in markdown only",
+			doc:       docJSON(`{"type":"codeBlock"}`, para(text("далі"))),
+			wantMD:    "```\n```\n\nдалі",
+			wantPlain: "далі",
+		},
 	})
 }
 
@@ -293,6 +320,12 @@ func TestConvertMarks(t *testing.T) {
 			name:      "adjacent runs with same marks merge",
 			doc:       docJSON(para(textMarked("аб", `{"type":"bold"}`), textMarked("вг", `{"type":"bold"}`))),
 			wantMD:    "**абвг**",
+			wantPlain: "абвг",
+		},
+		{
+			name:      "adjacent runs with same marks in different order merge too",
+			doc:       docJSON(para(textMarked("аб", `{"type":"bold"}`, `{"type":"italic"}`), textMarked("вг", `{"type":"italic"}`, `{"type":"bold"}`))),
+			wantMD:    "***абвг***",
 			wantPlain: "абвг",
 		},
 		{
@@ -488,6 +521,13 @@ func TestConvertUnknown(t *testing.T) {
 			wantUnknown: []string{"variable"},
 		},
 		{
+			name:        "marks on an unknown inline node render unstyled",
+			doc:         docJSON(para(text("до "), `{"type":"variable","text":"X","marks":[{"type":"bold"}]}`, text(" після"))),
+			wantMD:      "до X після",
+			wantPlain:   "до X після",
+			wantUnknown: []string{"variable"},
+		},
+		{
 			name:        "unknown mark renders unstyled",
 			doc:         docJSON(para(textMarked("виділене", `{"type":"highlight"}`))),
 			wantMD:      "виділене",
@@ -572,66 +612,105 @@ func TestConvertMarkOrderStable(t *testing.T) {
 	}
 }
 
-func TestConvertComposite(t *testing.T) {
-	doc := docJSON(
-		`{"type":"heading","attrs":{"level":1},"content":[`+text("Як скинути пароль")+`]}`,
-		para(
-			text("Натисніть "),
-			textMarked("Забув пароль", `{"type":"bold"}`),
-			text(" і введіть "),
-			textMarked("email", `{"type":"code"}`),
-			text("."),
-		),
-		`{"type":"bulletList","content":[`+
-			`{"type":"listItem","content":[`+para(text("Крок один"))+`]},`+
-			`{"type":"listItem","content":[`+para(text("Крок два"))+`,`+
-			`{"type":"orderedList","content":[{"type":"listItem","content":[`+para(text("Підкрок"))+`]}]}]}]}`,
-		`{"type":"codeBlock","attrs":{"language":"bash"},"content":[`+text("curl https://api.example.com/reset")+`]}`,
-		`{"type":"blockquote","content":[`+para(text("Порада: перевірте спам."))+`]}`,
-		`{"type":"horizontalRule"}`,
-		para(textMarked("Докладніше", `{"type":"link","attrs":{"href":"https://kb.example.com"}}`)),
-	)
+// update rewrites the golden files under testdata with the actual Convert
+// output. The flag exists only in this package, so pass it with an explicit
+// target: go test ./pkg/bodyconv -update
+var update = flag.Bool("update", false, "rewrite golden files with actual Convert output")
 
-	wantMD := "# Як скинути пароль\n\n" +
-		"Натисніть **Забув пароль** і введіть `email`.\n\n" +
-		"- Крок один\n" +
-		"- Крок два\n\n" +
-		"  1. Підкрок\n\n" +
-		"```bash\ncurl https://api.example.com/reset\n```\n\n" +
-		"> Порада: перевірте спам.\n\n" +
-		"---\n\n" +
-		"[Докладніше](https://kb.example.com)"
+// TestConvertGolden runs document-level cases: testdata/<name>/input.json
+// holds the editor document, output.md and output.txt hold the two expected
+// representations verbatim.
+func TestConvertGolden(t *testing.T) {
+	tests := []struct {
+		name        string
+		wantUnknown []string
+	}{
+		{name: "password-reset"},
+		{name: "faq-rich"},
+		{name: "prosemirror-spellings"},
+		{name: "hostile-author-text"},
+		{
+			name:        "unknown-extensions",
+			wantUnknown: []string{"callout", "mention", "table", "tableCell", "tableHeader", "tableRow", "taskItem", "taskList"},
+		},
+	}
 
-	wantPlain := "Як скинути пароль\n\n" +
-		"Натисніть Забув пароль і введіть email.\n\n" +
-		"Крок один\nКрок два\nПідкрок\n\n" +
-		"curl https://api.example.com/reset\n\n" +
-		"Порада: перевірте спам.\n\n" +
-		"Докладніше"
-
-	got, err := Convert([]byte(doc))
+	// A fixture directory without a table entry would silently never run;
+	// require the table and testdata to stay in sync.
+	entries, err := os.ReadDir("testdata")
 	if err != nil {
-		t.Fatalf("Convert: %v", err)
+		t.Fatalf("read testdata: %v", err)
 	}
 
-	if got.Markdown != wantMD {
-		t.Fatalf("markdown:\n%s\n---want---\n%s", got.Markdown, wantMD)
+	onDisk := make([]string, 0, len(entries))
+
+	for _, e := range entries {
+		if e.IsDir() {
+			onDisk = append(onDisk, e.Name())
+		}
 	}
 
-	if got.Plain != wantPlain {
-		t.Fatalf("plain:\n%s\n---want---\n%s", got.Plain, wantPlain)
+	tabled := make([]string, 0, len(tests))
+	for _, tt := range tests {
+		tabled = append(tabled, tt.name)
 	}
 
-	if got.Unknown != nil {
-		t.Fatalf("unknown = %v, want none", got.Unknown)
+	slices.Sort(tabled)
+
+	if !slices.Equal(onDisk, tabled) {
+		t.Fatalf("testdata dirs %v do not match table cases %v", onDisk, tabled)
 	}
 
-	again, err := Convert([]byte(doc))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := os.ReadFile(filepath.Join("testdata", tt.name, "input.json"))
+			if err != nil {
+				t.Fatalf("read input: %v", err)
+			}
+
+			got, err := Convert(doc)
+			if err != nil {
+				t.Fatalf("Convert: %v", err)
+			}
+
+			if !slices.Equal(got.Unknown, tt.wantUnknown) {
+				t.Fatalf("unknown = %v, want %v", got.Unknown, tt.wantUnknown)
+			}
+
+			compareGolden(t, filepath.Join("testdata", tt.name, "output.md"), got.Markdown)
+			compareGolden(t, filepath.Join("testdata", tt.name, "output.txt"), got.Plain)
+
+			again, err := Convert(doc)
+			if err != nil {
+				t.Fatalf("Convert (second run): %v", err)
+			}
+
+			if again.Markdown != got.Markdown || again.Plain != got.Plain || !slices.Equal(again.Unknown, got.Unknown) {
+				t.Fatalf("conversion is not deterministic:\nfirst : md=%q plain=%q unknown=%v\nsecond: md=%q plain=%q unknown=%v",
+					got.Markdown, got.Plain, got.Unknown, again.Markdown, again.Plain, again.Unknown)
+			}
+		})
+	}
+}
+
+// compareGolden matches got against the golden file byte for byte.
+func compareGolden(t *testing.T, path, got string) {
+	t.Helper()
+
+	if *update {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			t.Fatalf("update golden: %v", err)
+		}
+
+		return
+	}
+
+	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("Convert (second run): %v", err)
+		t.Fatalf("read golden: %v (run with -update to regenerate)", err)
 	}
 
-	if again.Markdown != got.Markdown || again.Plain != got.Plain {
-		t.Fatal("conversion is not deterministic")
+	if got != string(want) {
+		t.Fatalf("%s mismatch:\n got: %q\nwant: %q", path, got, string(want))
 	}
 }

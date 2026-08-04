@@ -1,0 +1,70 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {"level": 1},
+      "content": [{"type": "text", "text": "Як скинути пароль"}]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Натисніть "},
+        {"type": "text", "text": "Забув пароль", "marks": [{"type": "bold"}]},
+        {"type": "text", "text": " і введіть "},
+        {"type": "text", "text": "email", "marks": [{"type": "code"}]},
+        {"type": "text", "text": "."}
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Крок один"}]}
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Крок два"}]},
+            {
+              "type": "orderedList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "Підкрок"}]}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {"language": "bash"},
+      "content": [{"type": "text", "text": "curl https://api.example.com/reset"}]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": "Порада: перевірте спам."}]}
+      ]
+    },
+    {"type": "horizontalRule"},
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Докладніше",
+          "marks": [{"type": "link", "attrs": {"href": "https://kb.example.com"}}]
+        }
+      ]
+    }
+  ]
+}
