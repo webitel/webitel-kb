@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+// escapeLike escapes the LIKE pattern metacharacters in s, so the value
+// matches literally under the default backslash escape character.
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
 // CompactSQL collapses whitespace runs in an SQL text to single spaces and
 // strips -- and /* */ comments, preserving quoted literals. Used so rendered
 // queries and test expectations compare stably regardless of formatting.

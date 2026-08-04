@@ -39,6 +39,14 @@ func NewUnitOfWork(db txBeginner) *unitOfWork {
 	return uow
 }
 
+// EmbeddingModelStore returns the registry store bound to the current querier.
+// Constructed on every call: the store is a bare struct over the querier, and
+// building it fresh keeps the transactional value-copy of the unit of work
+// trivially correct — there is no cached store bound to an older querier.
+func (u *unitOfWork) EmbeddingModelStore() store.EmbeddingModelStore {
+	return &embeddingModelStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

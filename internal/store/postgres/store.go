@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	otelpgx "github.com/webitel/webitel-go-kit/infra/otel/instrumentation/pgx"
@@ -66,6 +68,56 @@ func (s *Store) Database() (*pgxpool.Pool, error) {
 
 	return s.pool, nil
 }
+
+// The Store itself acts as the pool-backed Querier and transaction beginner,
+// resolving the pool on every call: providers wire the unit of work before the
+// service starts, but the pool exists only after Open has run.
+
+// Begin starts a transaction on the pool.
+func (s *Store) Begin(ctx context.Context) (pgx.Tx, error) {
+	pool, err := s.Database()
+	if err != nil {
+		return nil, err
+	}
+
+	return pool.Begin(ctx)
+}
+
+// Exec runs a statement on the pool.
+func (s *Store) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	pool, err := s.Database()
+	if err != nil {
+		return pgconn.CommandTag{}, err
+	}
+
+	return pool.Exec(ctx, sql, args...)
+}
+
+// Query runs a query on the pool.
+func (s *Store) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	pool, err := s.Database()
+	if err != nil {
+		return nil, err
+	}
+
+	return pool.Query(ctx, sql, args...)
+}
+
+// QueryRow runs a single-row query on the pool. QueryRow cannot fail by
+// contract, so a pool error surfaces on Scan.
+func (s *Store) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	pool, err := s.Database()
+	if err != nil {
+		return errRow{err: err}
+	}
+
+	return pool.QueryRow(ctx, sql, args...)
+}
+
+// errRow delivers a row-acquisition error through the pgx.Row contract.
+type errRow struct{ err error }
+
+func (r errRow) Scan(...any) error { return r.err }
 
 // Close releases the connection pool.
 func (s *Store) Close() error {
