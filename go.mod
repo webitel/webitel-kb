@@ -3,7 +3,7 @@ module github.com/webitel/webitel-kb
 go 1.26
 
 require (
-	buf.build/gen/go/webitel/webitel-go/grpc/go v1.5.1-20251023140604-18fe32d76f81.2
+	buf.build/gen/go/webitel/webitel-go/grpc/go v1.6.2-20260528093848-00aedb783a79.1
 	buf.build/gen/go/webitel/webitel-go/protocolbuffers/go v1.36.11-20260528093848-00aedb783a79.1
 	buf.build/go/protovalidate v1.2.0
 	github.com/Masterminds/squirrel v1.5.4
