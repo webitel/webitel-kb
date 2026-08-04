@@ -8,6 +8,7 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 
 	"github.com/webitel/webitel-kb/config"
+	"github.com/webitel/webitel-kb/infra/crypto"
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	grpchandler "github.com/webitel/webitel-kb/internal/handler/grpc"
 	"github.com/webitel/webitel-kb/internal/service"
@@ -21,8 +22,10 @@ func NewApp(cfg *config.Config) *fx.App {
 			ProvideLogger,
 			ProvideSD,
 			ProvideAuthManager,
+			ProvideEncryptor,
 		),
 		fx.Invoke(func(discovery discovery.DiscoveryProvider) error { return nil }),
+		fx.Invoke(func(crypto.Encryptor) {}),
 
 		pubsub.Module,
 		tls.Module,
