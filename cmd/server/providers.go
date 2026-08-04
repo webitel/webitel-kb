@@ -182,7 +182,7 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 // crypto keyring. Keys are resolved by the library from the environment
 // (WBTL_CRYPTO_CIPHER_KEYRING / WBTL_CRYPTO_CIPHER_KEYFILE, or the well-known
 // system keyring file), outside the service config. A missing or invalid
-// keyring fails the first consumer's construction. The codec is built over the
+// keyring fails startup. The codec is built over the
 // cipher keyring alone: the optional search keyring serves the blind index,
 // which this service does not use, and must not gate startup.
 func ProvideEncryptor() (crypto.Encryptor, error) {
