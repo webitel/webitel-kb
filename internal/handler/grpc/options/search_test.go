@@ -21,7 +21,7 @@ type stubAuther struct {
 	userID int64
 }
 
-func (s stubAuther) GetUserId() int64 { return s.userID }
+func (s stubAuther) GetUserID() int64 { return s.userID }
 
 const testUserID int64 = 42
 
@@ -50,6 +50,7 @@ func TestNewSearchOptionsRequiresSession(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewSearchOptions without a session must fail")
 	}
+
 	if got := errors.Code(err); got != codes.Unauthenticated {
 		t.Fatalf("error code = %v, want %v", got, codes.Unauthenticated)
 	}
@@ -78,9 +79,11 @@ func TestWithPagination(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewSearchOptions: %v", err)
 			}
+
 			if got := opts.GetPage(); got != tt.wantPage {
 				t.Errorf("GetPage() = %d, want %d", got, tt.wantPage)
 			}
+
 			if got := opts.GetSize(); got != tt.wantSize {
 				t.Errorf("GetSize() = %d, want %d", got, tt.wantSize)
 			}
@@ -128,9 +131,11 @@ func TestSearchOptionsDefaultsWithoutBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchOptions: %v", err)
 	}
+
 	if got := opts.GetPage(); got != 1 {
 		t.Errorf("GetPage() = %d, want 1", got)
 	}
+
 	if got := opts.GetSize(); got != options.DefaultSearchSize {
 		t.Errorf("GetSize() = %d, want %d", got, options.DefaultSearchSize)
 	}
@@ -157,6 +162,7 @@ func TestWithFields(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewSearchOptions: %v", err)
 			}
+
 			if got := opts.GetFields(); !slices.Equal(got, tt.want) {
 				t.Fatalf("GetFields() = %v, want %v", got, tt.want)
 			}
@@ -173,20 +179,24 @@ func TestSearchOptionsPassThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSearchOptions: %v", err)
 	}
+
 	if got := opts.GetSort(); got != "-created_at" {
 		t.Errorf("GetSort() = %q, want %q", got, "-created_at")
 	}
+
 	if got := opts.GetSearch(); got != "hello" {
 		t.Errorf("GetSearch() = %q, want %q", got, "hello")
 	}
+
 	if got := opts.GetIDs(); !slices.Equal(got, []int64{1, 2}) {
 		t.Errorf("GetIDs() = %v, want [1 2]", got)
 	}
+
 	if opts.GetAuthOpts() == nil {
 		t.Fatal("GetAuthOpts() = nil, want the session from context")
 	}
 
-	if got := opts.GetAuthOpts().GetUserId(); got != testUserID {
+	if got := opts.GetAuthOpts().GetUserID(); got != testUserID {
 		t.Errorf("GetAuthOpts() carries user %d, want the context session %d", got, testUserID)
 	}
 }

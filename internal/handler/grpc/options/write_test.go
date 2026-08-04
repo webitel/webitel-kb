@@ -38,6 +38,7 @@ func TestWriteOptionsRequireSession(t *testing.T) {
 			if err == nil {
 				t.Fatal("options without a session must fail")
 			}
+
 			if got := errors.Code(err); got != codes.Unauthenticated {
 				t.Fatalf("error code = %v, want %v", got, codes.Unauthenticated)
 			}
@@ -89,14 +90,16 @@ func TestCreateOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCreateOptions: %v", err)
 	}
+
 	if got := opts.GetFields(); !slices.Equal(got, []string{"id", "name"}) {
 		t.Errorf("GetFields() = %v, want [id name]", got)
 	}
+
 	if opts.GetAuthOpts() == nil {
 		t.Fatal("GetAuthOpts() = nil, want the session from context")
 	}
 
-	if got := opts.GetAuthOpts().GetUserId(); got != testUserID {
+	if got := opts.GetAuthOpts().GetUserID(); got != testUserID {
 		t.Errorf("GetAuthOpts() carries user %d, want the context session %d", got, testUserID)
 	}
 }
@@ -109,9 +112,11 @@ func TestUpdateOptionsFieldsAndID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewUpdateOptions: %v", err)
 	}
+
 	if got := opts.GetFields(); !slices.Equal(got, []string{"id", "name"}) {
 		t.Errorf("GetFields() = %v, want [id name]", got)
 	}
+
 	if got := opts.GetID(); got != 5 {
 		t.Errorf("GetID() = %d, want 5", got)
 	}
@@ -125,9 +130,11 @@ func TestDeleteOptionsFieldsAndID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeleteOptions: %v", err)
 	}
+
 	if got := opts.GetFields(); !slices.Equal(got, []string{"id"}) {
 		t.Errorf("GetFields() = %v, want [id]", got)
 	}
+
 	if got := opts.GetID(); got != 9 {
 		t.Errorf("GetID() = %d, want 9", got)
 	}

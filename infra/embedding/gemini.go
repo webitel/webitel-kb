@@ -41,6 +41,7 @@ func NewGemini(opts ...GeminiOption) *Gemini {
 	for _, opt := range opts {
 		opt(g)
 	}
+
 	return g
 }
 
@@ -55,8 +56,8 @@ type geminiPart struct {
 type geminiEmbedRequest struct {
 	Model                string        `json:"model"`
 	Content              geminiContent `json:"content"`
-	TaskType             string        `json:"taskType,omitempty"`
-	OutputDimensionality int           `json:"outputDimensionality,omitempty"`
+	TaskType             string        `json:"taskType,omitempty"`             //nolint:tagliatelle // Gemini API wire format
+	OutputDimensionality int           `json:"outputDimensionality,omitempty"` //nolint:tagliatelle // Gemini API wire format
 }
 
 type geminiBatchRequest struct {
@@ -71,7 +72,7 @@ type geminiBatchResponse struct {
 
 func (g *Gemini) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, error) {
 	if len(req.Texts) == 0 {
-		return EmbedResult{Vectors: [][]float32{}}, nil
+		return EmbedResult{Vectors: make([][]float32, 0)}, nil
 	}
 
 	model := geminiModelPath(req.ModelRef)
@@ -109,6 +110,7 @@ func (g *Gemini) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, erro
 			l2Normalize(vectors[i])
 		}
 	}
+
 	return EmbedResult{Vectors: vectors}, nil
 }
 
@@ -121,6 +123,7 @@ func geminiModelPath(ref string) string {
 	if strings.HasPrefix(ref, "models/") {
 		return ref
 	}
+
 	return "models/" + ref
 }
 
@@ -128,6 +131,7 @@ func geminiTaskType(t TaskType) string {
 	if t == TaskQuery {
 		return "RETRIEVAL_QUERY"
 	}
+
 	return "RETRIEVAL_DOCUMENT"
 }
 
@@ -137,9 +141,11 @@ func l2Normalize(v []float32) {
 	for _, x := range v {
 		sum += float64(x) * float64(x)
 	}
+
 	if sum == 0 {
 		return
 	}
+
 	norm := math.Sqrt(sum)
 	for i, x := range v {
 		v[i] = float32(float64(x) / norm)

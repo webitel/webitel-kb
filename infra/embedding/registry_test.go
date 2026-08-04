@@ -31,11 +31,14 @@ func TestRegistryForModel(t *testing.T) {
 				if !errors.Is(err, ErrUnsupported) {
 					t.Fatalf("want ErrUnsupported, got %v", err)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+
 			if got != tt.want {
 				t.Errorf("provider %q mapped to wrong implementation", tt.provider)
 			}

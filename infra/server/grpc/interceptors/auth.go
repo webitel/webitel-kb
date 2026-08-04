@@ -9,7 +9,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
-	kb "github.com/webitel/webitel-kb/api/kb"
+	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/auth"
 )
 
@@ -36,6 +36,7 @@ func NewUnaryAuthInterceptor(manager auth.Manager) grpc.UnaryServerInterceptor {
 					errors.WithID("auth.interceptor.unknown_method"),
 				)
 			}
+
 			return handler(ctx, req)
 		}
 
@@ -75,12 +76,14 @@ func objClassWithAction(fullMethod string) (string, []string, auth.AccessMode, b
 	if !ok {
 		return "", nil, auth.NONE, false
 	}
+
 	method, ok := service.WebitelMethods[methodName]
 	if !ok {
 		return "", nil, auth.NONE, false
 	}
 
 	var accessMode auth.AccessMode
+
 	switch method.Access {
 	case 0:
 		accessMode = auth.Add
@@ -98,11 +101,13 @@ func objClassWithAction(fullMethod string) (string, []string, auth.AccessMode, b
 // checkLicenses reports the required licenses the session lacks.
 func checkLicenses(session auth.Auther, licenses []string) []string {
 	var missing []string
+
 	for _, license := range licenses {
 		if !session.CheckLicenseAccess(license) {
 			missing = append(missing, license)
 		}
 	}
+
 	return missing
 }
 
@@ -112,5 +117,6 @@ func splitFullMethodName(fullMethod string) (string, string) {
 	if i := strings.Index(fullMethod, "/"); i >= 0 {
 		return reg.ReplaceAllString(fullMethod[:i], ""), fullMethod[i+1:]
 	}
+
 	return "unknown", "unknown"
 }

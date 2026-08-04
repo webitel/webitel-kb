@@ -25,10 +25,12 @@ type fakeManager struct {
 func (m *fakeManager) AuthorizeFromContext(_ context.Context, objClass string, access auth.AccessMode) (auth.Auther, error) {
 	m.called = true
 	m.calledObjClass = objClass
+
 	m.calledAccess = access
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	return m.session, nil
 }
 
@@ -109,9 +111,11 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 				handlerRun   bool
 				sessionInCtx bool
 			)
+
 			handler := func(ctx context.Context, _ any) (any, error) {
 				handlerRun = true
 				_, sessionInCtx = auth.FromContext(ctx)
+
 				return "ok", nil
 			}
 
@@ -134,17 +138,21 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 			if handlerRun != tt.wantHandlerRun {
 				t.Errorf("handler run = %v, want %v", handlerRun, tt.wantHandlerRun)
 			}
+
 			if tt.manager.called != tt.wantAuthorize {
 				t.Errorf("authorize called = %v, want %v", tt.manager.called, tt.wantAuthorize)
 			}
+
 			if tt.wantAuthorize {
 				if tt.manager.calledObjClass != tt.wantObjClass {
 					t.Errorf("objclass = %q, want %q", tt.manager.calledObjClass, tt.wantObjClass)
 				}
+
 				if tt.manager.calledAccess != tt.wantAccess {
 					t.Errorf("access = %v, want %v", tt.manager.calledAccess, tt.wantAccess)
 				}
 			}
+
 			if sessionInCtx != tt.wantSessionInCtx {
 				t.Errorf("session in ctx = %v, want %v", sessionInCtx, tt.wantSessionInCtx)
 			}

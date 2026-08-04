@@ -129,9 +129,9 @@ type fakeAuther struct {
 }
 
 func (a fakeAuther) GetRoles() []int64                            { return nil }
-func (a fakeAuther) GetUserId() int64                             { return a.userID }
-func (a fakeAuther) GetUserIp() string                            { return "" }
-func (a fakeAuther) GetDomainId() int64                           { return a.domainID }
+func (a fakeAuther) GetUserID() int64                             { return a.userID }
+func (a fakeAuther) GetUserIP() string                            { return "" }
+func (a fakeAuther) GetDomainID() int64                           { return a.domainID }
 func (a fakeAuther) GetPermissions() []string                     { return nil }
 func (a fakeAuther) GetObjectScope(string) auth.ObjectScoper      { return nil }
 func (a fakeAuther) GetAllObjectScopes() []auth.ObjectScoper      { return nil }

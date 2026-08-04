@@ -34,9 +34,9 @@ const (
 // Auther describes an authorized caller session resolved from the access token.
 type Auther interface {
 	GetRoles() []int64
-	GetUserId() int64
-	GetUserIp() string
-	GetDomainId() int64
+	GetUserID() int64
+	GetUserIP() string
+	GetDomainID() int64
 	GetPermissions() []string
 	GetObjectScope(string) ObjectScoper
 	GetAllObjectScopes() []ObjectScoper

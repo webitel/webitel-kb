@@ -13,7 +13,7 @@ type UserAuthSession struct {
 	Scopes           map[string]*Scope
 	License          map[string]bool
 	Roles            []*Role
-	DomainId         int64
+	DomainID         int64
 	ExpiresAt        int64
 	SuperCreate      bool
 	SuperEdit        bool
@@ -21,35 +21,37 @@ type UserAuthSession struct {
 	SuperSelect      bool
 	MainAccess       auth.AccessMode
 	MainObjClassName string
-	UserIp           string
+	UserIP           string
 }
 
-func (s *UserAuthSession) GetUserId() int64 {
-	if s.User == nil || s.User.Id <= 0 {
+func (s *UserAuthSession) GetUserID() int64 {
+	if s.User == nil || s.User.ID <= 0 {
 		return 0
 	}
-	return s.User.Id
+
+	return s.User.ID
 }
 
-func (s *UserAuthSession) GetUserIp() string {
-	if s.UserIp == "" {
+func (s *UserAuthSession) GetUserIP() string {
+	if s.UserIP == "" {
 		return "unknown"
 	}
-	return s.UserIp
+
+	return s.UserIP
 }
 
-func (s *UserAuthSession) GetDomainId() int64 {
-	return s.DomainId
+func (s *UserAuthSession) GetDomainID() int64 {
+	return s.DomainID
 }
 
 func (s *UserAuthSession) GetRoles() []int64 {
-	roles := []int64{s.GetUserId()}
+	roles := make([]int64, 0, 1+len(s.Roles))
+
+	roles = append(roles, s.GetUserID())
 	for _, role := range s.Roles {
-		roles = append(
-			roles,
-			role.Id,
-		)
+		roles = append(roles, role.ID)
 	}
+
 	return roles
 }
 
@@ -57,18 +59,21 @@ func (s *UserAuthSession) GetObjectScope(sc string) auth.ObjectScoper {
 	if sc == "" {
 		return nil
 	}
+
 	scope, found := s.Scopes[sc]
 	if !found {
 		return nil
 	}
+
 	return scope
 }
 
 func (s *UserAuthSession) GetAllObjectScopes() []auth.ObjectScoper {
-	var res []auth.ObjectScoper
+	res := make([]auth.ObjectScoper, 0, len(s.Scopes))
 	for _, scope := range s.Scopes {
 		res = append(res, scope)
 	}
+
 	return res
 }
 
@@ -80,6 +85,7 @@ func (s *UserAuthSession) CheckLicenseAccess(name string) bool {
 	if legit, found := s.License[name]; found {
 		return legit
 	}
+
 	return false
 }
 
@@ -112,10 +118,15 @@ func (s *UserAuthSession) CheckObacAccess(scopeName string, accessType auth.Acce
 			require, bypass = "r", s.SuperSelect
 		case auth.Add, auth.Read | auth.Add:
 			require, bypass = "x", s.SuperCreate
+		case auth.FULL:
+			require = "rwxd"
+			bypass = s.SuperSelect && s.SuperEdit && s.SuperCreate && s.SuperDelete
 		}
+
 		if bypass {
 			return true
 		}
+
 		for i := len(require) - 1; i >= 0; i-- {
 			mode := require[i]
 			if strings.IndexByte(scope.GetAccess(), mode) < 0 {
@@ -132,6 +143,7 @@ func (s *UserAuthSession) IsRbacCheckRequired(scopeName string, accessType auth.
 	if scope == nil {
 		return false
 	}
+
 	rbacEnabled := scope.IsRbacUsed()
 	if rbacEnabled {
 		var bypass bool
@@ -145,11 +157,15 @@ func (s *UserAuthSession) IsRbacCheckRequired(scopeName string, accessType auth.
 			bypass = s.SuperSelect
 		case auth.Add, auth.Read | auth.Add:
 			bypass = s.SuperCreate
+		case auth.FULL:
+			bypass = s.SuperSelect && s.SuperEdit && s.SuperCreate && s.SuperDelete
 		}
+
 		if bypass {
 			return false
 		}
 	}
+
 	return rbacEnabled
 }
 
@@ -163,6 +179,7 @@ func (s *UserAuthSession) HasPermission(perm string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -177,5 +194,6 @@ func (s *UserAuthSession) HasSuperPermission(permission auth.SuperPermission) bo
 	case auth.SuperSelectPermission:
 		return s.SuperSelect
 	}
+
 	return false
 }

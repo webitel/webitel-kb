@@ -54,6 +54,7 @@ func (i *Manager) AuthorizeFromContext(ctx context.Context, mainObjClassName str
 			errors.WithID("auth.webitel_app.metadata.missing"),
 		)
 	}
+
 	token = info.Get(session.AuthTokenName)
 
 	if len(token) < 1 || token[0] == "" {
@@ -77,30 +78,39 @@ func (i *Manager) AuthorizeFromContext(ctx context.Context, mainObjClassName str
 		)
 	}
 
-	return ConstructSessionFromUserInfo(sess.(*authmodel.Userinfo), mainObjClassName, mainAccessMode, getClientIP(ctx)), nil
+	userinfo, ok := sess.(*authmodel.Userinfo)
+	if !ok {
+		return nil, errors.Internal(
+			"unexpected user info payload",
+			errors.WithID("auth.webitel_app.user_info.type"),
+		)
+	}
+
+	return ConstructSessionFromUserInfo(userinfo, mainObjClassName, mainAccessMode, getClientIP(ctx)), nil
 }
 
 func ConstructSessionFromUserInfo(userinfo *authmodel.Userinfo, mainObjClass string, mainAccess auth.AccessMode, ip string) *session.UserAuthSession {
 	sess := &session.UserAuthSession{
 		User: &session.User{
-			Id:        userinfo.UserId,
-			Name:      userinfo.Name,
-			Username:  userinfo.Username,
-			Extension: userinfo.Extension,
+			ID:        userinfo.GetUserId(),
+			Name:      userinfo.GetName(),
+			Username:  userinfo.GetUsername(),
+			Extension: userinfo.GetExtension(),
 		},
-		ExpiresAt:        userinfo.ExpiresAt,
-		DomainId:         userinfo.Dc,
+		ExpiresAt:        userinfo.GetExpiresAt(),
+		DomainID:         userinfo.GetDc(),
 		Permissions:      make([]string, 0),
-		License:          map[string]bool{},
-		Scopes:           map[string]*session.Scope{},
+		License:          make(map[string]bool),
+		Scopes:           make(map[string]*session.Scope),
 		MainAccess:       mainAccess,
 		MainObjClassName: mainObjClass,
-		UserIp:           ip,
+		UserIP:           ip,
 	}
-	for _, lic := range userinfo.License {
-		sess.License[lic.Id] = lic.ExpiresAt > time.Now().UnixMilli()
+	for _, lic := range userinfo.GetLicense() {
+		sess.License[lic.GetId()] = lic.GetExpiresAt() > time.Now().UnixMilli()
 	}
-	for _, permission := range userinfo.Permissions {
+
+	for _, permission := range userinfo.GetPermissions() {
 		switch auth.SuperPermission(permission.GetId()) {
 		case auth.SuperCreatePermission:
 			sess.SuperCreate = true
@@ -111,27 +121,29 @@ func ConstructSessionFromUserInfo(userinfo *authmodel.Userinfo, mainObjClass str
 		case auth.SuperSelectPermission:
 			sess.SuperSelect = true
 		}
+
 		sess.Permissions = append(sess.Permissions, permission.GetId())
 	}
-	for _, scope := range userinfo.Scope {
-		sess.Scopes[scope.Class] = &session.Scope{
-			Id:     scope.GetId(),
+
+	for _, scope := range userinfo.GetScope() {
+		sess.Scopes[scope.GetClass()] = &session.Scope{
+			ID:     scope.GetId(),
 			Name:   scope.GetName(),
-			Abac:   scope.Abac,
-			Obac:   scope.Obac,
-			Rbac:   scope.Rbac,
-			Class:  scope.Class,
-			Access: scope.Access,
+			Abac:   scope.GetAbac(),
+			Obac:   scope.GetObac(),
+			Rbac:   scope.GetRbac(),
+			Class:  scope.GetClass(),
+			Access: scope.GetAccess(),
 		}
 	}
 
-	for i, role := range userinfo.Roles {
+	for i, role := range userinfo.GetRoles() {
 		if i == 0 {
 			sess.Roles = make([]*session.Role, 0)
 		}
 
 		sess.Roles = append(sess.Roles, &session.Role{
-			Id:   role.GetId(),
+			ID:   role.GetId(),
 			Name: role.GetName(),
 		})
 	}

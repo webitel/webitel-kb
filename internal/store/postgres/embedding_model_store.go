@@ -98,7 +98,7 @@ func (s *embeddingModelStore) List(
 	}
 
 	sql, args, err := queryobject.NewEmbeddingModelQuery(queryobject.EmbeddingModelFrom).
-		WithDomainScope(opts.GetAuthOpts().GetDomainId()).
+		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithType(filter.Type).
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
@@ -137,7 +137,7 @@ func (s *embeddingModelStore) Locate(ctx context.Context, opts options.Searcher)
 	}
 
 	sql, args, err := queryobject.NewEmbeddingModelQuery(queryobject.EmbeddingModelFrom).
-		WithDomainScope(opts.GetAuthOpts().GetDomainId()).
+		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithIDs(opts.GetIDs()).
 		WithFields(opts.GetFields()).
 		ToSQL()
@@ -170,9 +170,9 @@ func (s *embeddingModelStore) Create(
 			"model_ref", "dimensions", "endpoint", "config", "created_by",
 		).
 		Values(
-			session.GetDomainId(), in.Type, in.Name, in.Provider, in.IsSelfHosted,
+			session.GetDomainID(), in.Type, in.Name, in.Provider, in.IsSelfHosted,
 			nullIfEmpty(in.ModelRef), nullIfZero(in.Dimensions), nullIfEmpty(in.Endpoint),
-			config, nullIfZero(session.GetUserId()),
+			config, nullIfZero(session.GetUserID()),
 		).
 		Suffix("RETURNING *").
 		ToSql()
@@ -203,7 +203,7 @@ func (s *embeddingModelStore) Update(
 
 	sql, args, err := builder.
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainId()).
+		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -217,7 +217,7 @@ func (s *embeddingModelStore) Delete(ctx context.Context, opts options.Deleter) 
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Delete(embeddingModelTable).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainId()).
+		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -232,7 +232,7 @@ func (s *embeddingModelStore) MarkValidated(ctx context.Context, opts options.Up
 		Update(embeddingModelTable).
 		Set("validated_at", squirrel.Expr("now()")).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainId()).
+		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
