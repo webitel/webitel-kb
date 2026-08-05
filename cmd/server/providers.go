@@ -22,6 +22,7 @@ import (
 
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
+	"github.com/webitel/webitel-kb/infra/embedding"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -204,6 +205,12 @@ func ProvideEncryptor() (crypto.Encryptor, error) {
 	}
 
 	return crypto.New(codec), nil
+}
+
+// ProvideEmbeddingRegistry exposes the embedding/reranker provider clients the
+// model registry validates against.
+func ProvideEmbeddingRegistry() *embedding.Registry {
+	return embedding.NewRegistry()
 }
 
 // ProvideAuthManager connects to the webitel-go auth service through Consul
