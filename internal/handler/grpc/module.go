@@ -1,9 +1,10 @@
 package grpc
 
 import (
-	kb "github.com/webitel/webitel-kb/api/kb"
-	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	"go.uber.org/fx"
+
+	"github.com/webitel/webitel-kb/api/kb"
+	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 )
 
 var Module = fx.Module("grpc",

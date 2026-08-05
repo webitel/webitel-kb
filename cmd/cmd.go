@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
+
 	"github.com/webitel/webitel-kb/cmd/migrate"
 	"github.com/webitel/webitel-kb/cmd/server"
 	"github.com/webitel/webitel-kb/internal/model"

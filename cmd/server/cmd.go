@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli/v2"
+
 	"github.com/webitel/webitel-kb/config"
 )
 
@@ -27,6 +28,7 @@ func CMD() *cli.Command {
 			if err != nil {
 				return err
 			}
+
 			app := NewApp(cfg)
 
 			if err := app.Start(c.Context); err != nil {
@@ -38,6 +40,7 @@ func CMD() *cli.Command {
 			<-stop
 
 			slog.Info("Shutting down...")
+
 			return app.Stop(context.Background())
 		},
 	}

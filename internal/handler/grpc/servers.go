@@ -1,7 +1,7 @@
 package grpc
 
 import (
-	kb "github.com/webitel/webitel-kb/api/kb"
+	"github.com/webitel/webitel-kb/api/kb"
 )
 
 type SpacesServer struct {

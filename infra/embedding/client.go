@@ -42,11 +42,13 @@ func newHTTPClient(timeout time.Duration, hc *http.Client) *httpClient {
 		if timeout <= 0 {
 			timeout = defaultTimeout
 		}
+
 		hc = &http.Client{
 			Timeout:   timeout,
 			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		}
 	}
+
 	return &httpClient{hc: hc, retries: defaultRetries, backoff: 200 * time.Millisecond}
 }
 
@@ -59,6 +61,7 @@ func (c *httpClient) doJSON(ctx context.Context, method, url string, headers map
 	}
 
 	var lastErr error
+
 	for attempt := 0; attempt <= c.retries; attempt++ {
 		if attempt > 0 {
 			if err := sleep(ctx, c.backoff<<(attempt-1)); err != nil {
@@ -70,7 +73,9 @@ func (c *httpClient) doJSON(ctx context.Context, method, url string, headers map
 		if err != nil {
 			return fmt.Errorf("embedding: build request: %w", err)
 		}
+
 		req.Header.Set("Content-Type", "application/json")
+
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
@@ -78,14 +83,17 @@ func (c *httpClient) doJSON(ctx context.Context, method, url string, headers map
 		resp, err := c.hc.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("embedding: request failed: %w", err)
+
 			continue
 		}
 
-		body, apiErr, retry := readResponse(resp)
+		body, retry, apiErr := readResponse(resp)
 		if retry {
 			lastErr = apiErr
+
 			continue
 		}
+
 		if apiErr != nil {
 			return apiErr
 		}
@@ -93,6 +101,7 @@ func (c *httpClient) doJSON(ctx context.Context, method, url string, headers map
 		if err := json.Unmarshal(body, respOut); err != nil {
 			return fmt.Errorf("embedding: decode response: %w", err)
 		}
+
 		return nil
 	}
 
@@ -101,27 +110,30 @@ func (c *httpClient) doJSON(ctx context.Context, method, url string, headers map
 
 // readResponse reads the body and classifies the status: it returns the body on
 // 2xx, an *APIError otherwise, and reports whether the status is retryable.
-func readResponse(resp *http.Response) (body []byte, apiErr error, retry bool) {
+func readResponse(resp *http.Response) (body []byte, retry bool, apiErr error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("embedding: read response: %w", err), false
+			return nil, false, fmt.Errorf("embedding: read response: %w", err)
 		}
-		return b, nil, false
+
+		return b, false, nil
 	}
 
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	err := &APIError{StatusCode: resp.StatusCode, Body: string(snippet)}
 	retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-	return nil, err, retryable
+
+	return nil, retryable, err
 }
 
 // sleep waits for d or until ctx is done.
 func sleep(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

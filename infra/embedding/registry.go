@@ -23,7 +23,7 @@ type Registry struct {
 	endpoint Provider
 }
 
-// RegistryOption configures the shared HTTP behaviour of the registry providers.
+// RegistryOption configures the shared HTTP behavior of the registry providers.
 type RegistryOption func(*registryConfig)
 
 type registryConfig struct {
@@ -48,15 +48,16 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 		opt(&cfg)
 	}
 
-	geminiOpts := []GeminiOption{}
+	geminiOpts := make([]GeminiOption, 0, 2)
 	if cfg.httpClient != nil {
 		geminiOpts = append(geminiOpts, WithGeminiHTTPClient(cfg.httpClient))
 	}
+
 	if cfg.geminiBaseURL != "" {
 		geminiOpts = append(geminiOpts, WithGeminiBaseURL(cfg.geminiBaseURL))
 	}
 
-	endpointOpts := []EndpointOption{}
+	endpointOpts := make([]EndpointOption, 0, 1)
 	if cfg.httpClient != nil {
 		endpointOpts = append(endpointOpts, WithEndpointHTTPClient(cfg.httpClient))
 	}

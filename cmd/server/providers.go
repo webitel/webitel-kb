@@ -19,13 +19,16 @@ import (
 	"github.com/webitel/crypto/cryptostore"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
+
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
 
+	// Register the consul:// gRPC resolver used by ProvideAuthManager.
 	_ "github.com/mbobakov/grpc-consul-resolver"
+	// Register the consul provider in the discovery factory used by ProvideSD.
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 )
 
@@ -50,6 +53,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		} else {
 			h = slog.NewTextHandler(os.Stdout, opts)
 		}
+
 		handlers = append(handlers, h)
 	}
 
@@ -61,7 +65,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		}
 
 		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
+			OnStop: func(_ context.Context) error {
 				return f.Close()
 			},
 		})
@@ -72,6 +76,7 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		} else {
 			h = slog.NewTextHandler(f, opts)
 		}
+
 		handlers = append(handlers, h)
 	}
 
@@ -103,11 +108,13 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 	}
 
 	var finalHandler slog.Handler
-	if len(handlers) == 0 {
+
+	switch len(handlers) {
+	case 0:
 		finalHandler = slog.NewTextHandler(os.Stdout, opts)
-	} else if len(handlers) == 1 {
+	case 1:
 		finalHandler = handlers[0]
-	} else {
+	default:
 		finalHandler = MultiHandler(handlers...)
 	}
 
@@ -212,7 +219,7 @@ func ProvideAuthManager(cfg *config.Config, lc fx.Lifecycle) (auth.Manager, erro
 	}
 
 	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return conn.Close()
 		},
 	})

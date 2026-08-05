@@ -49,8 +49,9 @@ func ProvidePubSub(cfg *config.Config, l *slog.Logger, lc fx.Lifecycle) (Provide
 	if err != nil {
 		return nil, err
 	}
+
 	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return router.Close()
 		},
 		OnStart: func(ctx context.Context) error {
@@ -70,6 +71,7 @@ func NewDefaultProvider(router *message.Router, factory factory.Factory) (Provid
 	if router == nil {
 		return nil, errors.New("router is required")
 	}
+
 	if factory == nil {
 		return nil, errors.New("factory is required")
 	}

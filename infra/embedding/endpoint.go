@@ -2,6 +2,7 @@ package embedding
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,6 +27,7 @@ func NewEndpoint(opts ...EndpointOption) *Endpoint {
 	for _, opt := range opts {
 		opt(e)
 	}
+
 	return e
 }
 
@@ -52,10 +54,11 @@ type endpointRerankResponse struct {
 
 func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, error) {
 	if req.Endpoint == "" {
-		return EmbedResult{}, fmt.Errorf("embedding: endpoint url is required")
+		return EmbedResult{}, errors.New("embedding: endpoint url is required")
 	}
+
 	if len(req.Texts) == 0 {
-		return EmbedResult{Vectors: [][]float32{}}, nil
+		return EmbedResult{Vectors: make([][]float32, 0)}, nil
 	}
 
 	body := endpointEmbedRequest{
@@ -73,12 +76,13 @@ func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, er
 	if len(out.Embeddings) != len(req.Texts) {
 		return EmbedResult{}, fmt.Errorf("embedding: endpoint returned %d vectors for %d texts", len(out.Embeddings), len(req.Texts))
 	}
+
 	return EmbedResult{Vectors: out.Embeddings}, nil
 }
 
 func (e *Endpoint) Rerank(ctx context.Context, req RerankRequest) (RerankResult, error) {
 	if req.Endpoint == "" {
-		return RerankResult{}, fmt.Errorf("embedding: endpoint url is required")
+		return RerankResult{}, errors.New("embedding: endpoint url is required")
 	}
 
 	body := endpointRerankRequest{
@@ -95,13 +99,15 @@ func (e *Endpoint) Rerank(ctx context.Context, req RerankRequest) (RerankResult,
 	if len(out.Scores) != len(req.Documents) {
 		return RerankResult{}, fmt.Errorf("embedding: endpoint returned %d scores for %d documents", len(out.Scores), len(req.Documents))
 	}
-	return RerankResult{Scores: out.Scores}, nil
+
+	return RerankResult(out), nil
 }
 
 func endpointTask(t TaskType) string {
 	if t == TaskQuery {
 		return "query"
 	}
+
 	return "document"
 }
 
