@@ -23,6 +23,7 @@ func NewApp(cfg *config.Config) *fx.App {
 			ProvideSD,
 			ProvideAuthManager,
 			ProvideEncryptor,
+			ProvideEmbeddingRegistry,
 		),
 		fx.Invoke(func(discovery.DiscoveryProvider) error { return nil }),
 		fx.Invoke(func(crypto.Encryptor) {}),

@@ -12,14 +12,6 @@ func NewSpacesServer() *SpacesServer {
 	return &SpacesServer{}
 }
 
-type EmbeddingModelsServer struct {
-	kb.UnimplementedEmbeddingModelsServer
-}
-
-func NewEmbeddingModelsServer() *EmbeddingModelsServer {
-	return &EmbeddingModelsServer{}
-}
-
 type ArticlesServer struct {
 	kb.UnimplementedArticlesServer
 }
