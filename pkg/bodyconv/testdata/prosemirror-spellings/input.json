@@ -1,0 +1,63 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {"level": 1},
+      "content": [{"type": "text", "text": "Налаштування черги"}]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Черга розподіляє "},
+        {"type": "text", "text": "вхідні дзвінки", "marks": [{"type": "strong"}]},
+        {"type": "text", "text": " між "},
+        {"type": "text", "text": "вільними", "marks": [{"type": "em"}]},
+        {"type": "text", "text": " операторами."}
+      ]
+    },
+    {
+      "type": "bullet_list",
+      "content": [
+        {
+          "type": "list_item",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "стратегія обдзвону"}]}
+          ]
+        },
+        {
+          "type": "list_item",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "пріоритети"}]},
+            {
+              "type": "ordered_list",
+              "attrs": {"start": 5},
+              "content": [
+                {
+                  "type": "list_item",
+                  "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "вищий обробляється першим"}]}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "code_block",
+      "attrs": {"language": "json"},
+      "content": [{"type": "text", "text": "{\"strategy\": \"round-robin\"}"}]
+    },
+    {"type": "horizontal_rule"},
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Зміни застосовуються одразу."},
+        {"type": "hard_break"},
+        {"type": "text", "text": "Активні дзвінки не перериваються."}
+      ]
+    }
+  ]
+}

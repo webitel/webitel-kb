@@ -1,0 +1,59 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "## не заголовок"}]}
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "- не вкладений список"}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": "1. не нумерація"}]}
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "> не цитата"}]}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": "---"}]},
+        {"type": "paragraph", "content": [{"type": "text", "text": "### теж не заголовок"}]},
+        {
+          "type": "paragraph",
+          "content": [
+            {"type": "text", "text": "Ціни"},
+            {"type": "hardBreak"},
+            {"type": "text", "text": "==="}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [{"type": "text", "text": "#hashtag без пробілу лишається як є"}]
+    },
+    {
+      "type": "orderedList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "2025. Підсумки року"}]}
+          ]
+        }
+      ]
+    }
+  ]
+}

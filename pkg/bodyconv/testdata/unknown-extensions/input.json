@@ -1,0 +1,78 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [{"type": "text", "text": "Порівняння тарифів:"}]
+    },
+    {
+      "type": "table",
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Тариф"}]}
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Ціна"}]}
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Старт"}]}
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "0 грн"}]}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {"type": "text", "text": "Відповідальний: "},
+        {"type": "mention", "attrs": {"id": "7", "label": "@ivan"}},
+        {"type": "text", "text": " з команди білінгу."}
+      ]
+    },
+    {
+      "type": "taskList",
+      "content": [
+        {
+          "type": "taskItem",
+          "attrs": {"checked": false},
+          "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Оновити скриншоти тарифів"}]}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {"kind": "warning"},
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [{"type": "text", "text": "Важливо: ціни вказано без ПДВ."}]
+        }
+      ]
+    }
+  ]
+}
