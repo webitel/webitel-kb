@@ -47,6 +47,11 @@ func (u *unitOfWork) EmbeddingModelStore() store.EmbeddingModelStore {
 	return &embeddingModelStore{db: u.querier}
 }
 
+// SpaceStore returns the space store bound to the current querier.
+func (u *unitOfWork) SpaceStore() store.SpaceStore {
+	return &spaceStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

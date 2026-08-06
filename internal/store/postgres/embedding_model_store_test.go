@@ -86,24 +86,34 @@ func (r fakeRow) Scan(dest ...any) error {
 	return nil
 }
 
-// fakeQuerier records the statement it received and plays back preset rows.
+// fakeQuerier records every statement it received (gotSQL/gotArgs hold the
+// last one) and plays back preset rows.
 type fakeQuerier struct {
 	gotSQL  string
 	gotArgs []any
+
+	sqls     []string
+	argsList [][]any
 
 	rows pgx.Rows
 	row  fakeRow
 	err  error
 }
 
-func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+func (f *fakeQuerier) record(sql string, args []any) {
 	f.gotSQL, f.gotArgs = sql, args
+	f.sqls = append(f.sqls, sql)
+	f.argsList = append(f.argsList, args)
+}
+
+func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	f.record(sql, args)
 
 	return pgconn.CommandTag{}, f.err
 }
 
 func (f *fakeQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
-	f.gotSQL, f.gotArgs = sql, args
+	f.record(sql, args)
 
 	if f.err != nil {
 		return nil, f.err
@@ -117,7 +127,7 @@ func (f *fakeQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Row
 }
 
 func (f *fakeQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
-	f.gotSQL, f.gotArgs = sql, args
+	f.record(sql, args)
 
 	return f.row
 }

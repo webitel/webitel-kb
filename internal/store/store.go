@@ -21,6 +21,45 @@ type UnitOfWork interface {
 
 	// EmbeddingModelStore accesses the embedding model registry.
 	EmbeddingModelStore() EmbeddingModelStore
+
+	// SpaceStore accesses knowledge-base spaces.
+	SpaceStore() SpaceStore
+}
+
+// SpaceStore persists knowledge-base spaces and their team binding. Every read
+// and write is scoped to the caller's domain.
+type SpaceStore interface {
+	// List returns a page of spaces and whether a next page exists.
+	List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error)
+
+	// Locate returns the single space the options identify by id.
+	Locate(ctx context.Context, opts options.Searcher) (*model.Space, error)
+
+	// LocateForUpdate is Locate with the row locked until the transaction
+	// ends: the read a read-then-write flow bases its decisions on.
+	LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.Space, error)
+
+	// Create inserts a space owned by the caller's domain. The team binding is
+	// written separately via ReplaceTeams.
+	Create(ctx context.Context, opts options.Creator, in *model.Space) (*model.Space, error)
+
+	// Update rewrites the writable fields of the space opts identify. The
+	// immutable columns (language, migration target) are not part of the
+	// statement at all.
+	Update(ctx context.Context, opts options.Updator, in *model.Space) (*model.Space, error)
+
+	// Delete removes the space opts identify and returns its last state. The
+	// team binding goes with it; any remaining article blocks the delete.
+	Delete(ctx context.Context, opts options.Deleter) (*model.Space, error)
+
+	// ReplaceTeams rewrites the team binding of a domain's space to exactly the
+	// given set; an empty set removes the binding.
+	ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error
+
+	// HasArticles reports whether any article still references a domain's
+	// space — the same condition the schema enforces on delete, checked here
+	// so the caller can fail with a domain error instead of a raw constraint.
+	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
 }
 
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see
