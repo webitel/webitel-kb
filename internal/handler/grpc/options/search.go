@@ -57,7 +57,7 @@ func NewLocateOptions(ctx context.Context, opts ...SearchOption) (*SearchOptions
 		return nil, err
 	}
 
-	if len(search.ids) != 1 {
+	if len(search.ids) != 1 || search.ids[0] <= 0 {
 		return nil, errors.InvalidArgument(
 			"exactly one id is required to locate an entity",
 			errors.WithID("options.locate.id_required"),
