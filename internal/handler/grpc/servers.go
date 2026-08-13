@@ -4,14 +4,6 @@ import (
 	"github.com/webitel/webitel-kb/api/kb"
 )
 
-type SpacesServer struct {
-	kb.UnimplementedSpacesServer
-}
-
-func NewSpacesServer() *SpacesServer {
-	return &SpacesServer{}
-}
-
 type EmbeddingModelsServer struct {
 	kb.UnimplementedEmbeddingModelsServer
 }
