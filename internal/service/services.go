@@ -9,7 +9,10 @@ import (
 )
 
 var Module = fx.Module("service",
-	fx.Provide(provideEmbeddingModelService),
+	fx.Provide(
+		NewSpaceService,
+		provideEmbeddingModelService,
+	),
 )
 
 // provideEmbeddingModelService binds the concrete registry to the service's

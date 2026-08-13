@@ -234,3 +234,15 @@ func TestNewLocateOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestNewLocateOptionsRejectsNonPositiveID(t *testing.T) {
+	for _, id := range []int64{0, -1} {
+		if _, err := NewLocateOptions(authorizedContext(), WithID(id)); errors.Code(err) != codes.InvalidArgument {
+			t.Fatalf("id %d err = %v, want InvalidArgument", id, err)
+		}
+	}
+
+	if _, err := NewLocateOptions(authorizedContext(), WithID(7)); err != nil {
+		t.Fatalf("positive id rejected: %v", err)
+	}
+}

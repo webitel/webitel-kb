@@ -9,7 +9,6 @@ import (
 
 	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/infra/embedding"
-	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -415,21 +414,3 @@ func validEndpointURL(raw string) bool {
 
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
-
-// readOptions is the service-internal options.Searcher carrier for in-flow
-// reads.
-type readOptions struct {
-	auth   auth.Auther
-	ids    []int64
-	fields []string
-}
-
-var _ options.Searcher = readOptions{}
-
-func (o readOptions) GetAuthOpts() auth.Auther { return o.auth }
-func (o readOptions) GetFields() []string      { return o.fields }
-func (o readOptions) GetSearch() string        { return "" }
-func (o readOptions) GetPage() int             { return 1 }
-func (o readOptions) GetSize() int             { return 1 }
-func (o readOptions) GetSort() string          { return "" }
-func (o readOptions) GetIDs() []int64          { return o.ids }

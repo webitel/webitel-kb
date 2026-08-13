@@ -24,3 +24,16 @@ func lookupToProto(l *model.Lookup) *kb.Lookup {
 
 	return &kb.Lookup{Id: l.ID, Name: l.Name}
 }
+
+func lookupsToProto(ls []model.Lookup) []*kb.Lookup {
+	if len(ls) == 0 {
+		return nil
+	}
+
+	out := make([]*kb.Lookup, 0, len(ls))
+	for _, l := range ls {
+		out = append(out, &kb.Lookup{Id: l.ID, Name: l.Name})
+	}
+
+	return out
+}

@@ -2,12 +2,9 @@ package postgres
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/Masterminds/squirrel"
-
-	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -93,7 +90,7 @@ func (s *embeddingModelStore) List(
 		sorts = []string{defaultEmbeddingModelSort}
 	}
 
-	if !slices.ContainsFunc(sorts, func(s string) bool { return s[1:] == "id" }) {
+	if !containsSortField(sorts, "id") {
 		sorts = append(sorts, "+id")
 	}
 
@@ -126,14 +123,8 @@ func (s *embeddingModelStore) List(
 }
 
 func (s *embeddingModelStore) Locate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
-	// The options constructor enforces this too; the store re-checks so a
-	// misbuilt caller cannot fetch an arbitrary row (no ids) or turn a
-	// multi-row result into an internal error.
 	if len(opts.GetIDs()) != 1 {
-		return nil, errors.InvalidArgument(
-			"exactly one id is required to locate an entity",
-			errors.WithID("store.pg.embedding_model.locate_id"),
-		)
+		return nil, errLocateSingleID
 	}
 
 	sql, args, err := queryobject.NewEmbeddingModelQuery(queryobject.EmbeddingModelFrom).
@@ -253,12 +244,8 @@ func (s *embeddingModelStore) GetConfig(ctx context.Context, id, domainID int64)
 	return config, nil
 }
 
-// writeReturning wraps a write statement into a CTE named m — the alias the
-// query object's field expressions reference — and reads the written row back
-// through the query object in the same statement: atomic, and rendered by the
-// exact code path every read uses. The write is scoped to the caller's domain,
-// so touching another domain's (or a global) model reads back zero rows and
-// surfaces as not-found.
+// writeReturning reads the written row back via cteReadBack, rendering the
+// read through the entity query object over the CTE named m.
 func (s *embeddingModelStore) writeReturning(
 	ctx context.Context, writeSQL string, writeArgs []any, fields []string,
 ) (*model.EmbeddingModel, error) {
@@ -269,42 +256,5 @@ func (s *embeddingModelStore) writeReturning(
 		return nil, ParseError(err)
 	}
 
-	// The read-back carries no filters, so it renders no placeholders; anything
-	// else would clash with the write's $N numbering.
-	if len(readArgs) != 0 {
-		return nil, errors.Internal(
-			"storage error",
-			errors.WithID("store.pg.embedding_model.cte_args"),
-		)
-	}
-
-	rows, err := s.db.Query(ctx, "WITH m AS ("+writeSQL+") "+readSQL, writeArgs...)
-	if err != nil {
-		return nil, ParseError(err)
-	}
-
-	item, err := collectRow(rows, mapEmbeddingModel)
-	if err != nil {
-		return nil, ParseError(err)
-	}
-
-	return item, nil
-}
-
-// nullIfEmpty maps the zero value to NULL, keeping optional columns NULL
-// instead of storing empty strings or zeroes.
-func nullIfEmpty(s string) *string {
-	if s == "" {
-		return nil
-	}
-
-	return &s
-}
-
-func nullIfZero[T int32 | int64](v T) *T {
-	if v == 0 {
-		return nil
-	}
-
-	return &v
+	return cteReadBack(ctx, s.db, writeSQL, writeArgs, readSQL, readArgs, mapEmbeddingModel)
 }
