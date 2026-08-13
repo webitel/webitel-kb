@@ -24,6 +24,34 @@ type UnitOfWork interface {
 
 	// SpaceStore accesses knowledge-base spaces.
 	SpaceStore() SpaceStore
+
+	// ArticleStore accesses knowledge-base articles.
+	ArticleStore() ArticleStore
+}
+
+// ArticleStore persists knowledge-base articles. Every read and write is
+// scoped to the caller's domain through the owning space; reads never see
+// soft-deleted rows. Multi-statement flows are grouped by the service in one
+// transaction.
+type ArticleStore interface {
+	// List returns a page of articles and whether a next page exists.
+	List(ctx context.Context, opts options.Searcher, filter model.ArticleFilter) ([]*model.Article, bool, error)
+
+	// Locate returns the single article the options identify by id.
+	Locate(ctx context.Context, opts options.Searcher) (*model.Article, error)
+
+	// Create inserts an article into its space, deriving depth from the parent.
+	// Unset type and state take their default code.
+	Create(ctx context.Context, opts options.Creator, in *model.Article) (*model.Article, error)
+
+	// Update rewrites the writable fields of the article opts identify and
+	// bumps its version. The write is guarded by the optimistic-lock version:
+	// a mismatch fails with a version conflict.
+	Update(ctx context.Context, opts options.Updator, in *model.Article, expectedVer int32) (*model.Article, error)
+
+	// Delete soft-deletes the article opts identify together with its subtree
+	// and returns the root's last state.
+	Delete(ctx context.Context, opts options.Deleter, expectedVer int32) (*model.Article, error)
 }
 
 // SpaceStore persists knowledge-base spaces and their team binding. Every read

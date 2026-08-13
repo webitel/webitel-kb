@@ -24,6 +24,7 @@ require (
 	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
+	github.com/webitel/webitel-go-kit/pkg/etag v0.2.0
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.1.1
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0

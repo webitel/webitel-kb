@@ -52,6 +52,11 @@ func (u *unitOfWork) SpaceStore() store.SpaceStore {
 	return &spaceStore{db: u.querier}
 }
 
+// ArticleStore returns the article store bound to the current querier.
+func (u *unitOfWork) ArticleStore() store.ArticleStore {
+	return &articleStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

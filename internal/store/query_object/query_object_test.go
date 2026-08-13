@@ -73,12 +73,21 @@ func (q *testQueryObject) EnsureJoins(requiredJoin int) {
 func mustSQL(t *testing.T, q QueryObject) string {
 	t.Helper()
 
-	sql, _, err := q.ToSQL()
+	sql, _ := mustSQLArgs(t, q)
+
+	return sql
+}
+
+// mustSQLArgs renders q with its arguments, failing the test on error.
+func mustSQLArgs(t *testing.T, q QueryObject) (string, []any) {
+	t.Helper()
+
+	sql, args, err := q.ToSQL()
 	if err != nil {
 		t.Fatalf("ToSQL: %v", err)
 	}
 
-	return sql
+	return sql, args
 }
 
 func TestWithFields(t *testing.T) {
