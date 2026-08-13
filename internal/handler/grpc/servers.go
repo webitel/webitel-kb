@@ -4,14 +4,6 @@ import (
 	"github.com/webitel/webitel-kb/api/kb"
 )
 
-type EmbeddingModelsServer struct {
-	kb.UnimplementedEmbeddingModelsServer
-}
-
-func NewEmbeddingModelsServer() *EmbeddingModelsServer {
-	return &EmbeddingModelsServer{}
-}
-
 type ArticlesServer struct {
 	kb.UnimplementedArticlesServer
 }

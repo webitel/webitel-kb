@@ -131,14 +131,14 @@ func (f *fakeSpaceStore) HasArticles(context.Context, int64, int64) (bool, error
 	return f.hasArticles, nil
 }
 
-// fakeModelStore serves the validated-model gate.
-type fakeModelStore struct {
+// gateModelStore serves the validated-model gate.
+type gateModelStore struct {
 	models map[int64]*model.EmbeddingModel
 
 	locatedIDs []int64
 }
 
-func (f *fakeModelStore) Locate(_ context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
 	id := opts.GetIDs()[0]
 	f.locatedIDs = append(f.locatedIDs, id)
 
@@ -150,27 +150,27 @@ func (f *fakeModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 	return found, nil
 }
 
-func (f *fakeModelStore) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {
+func (f *gateModelStore) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {
 	return nil, false, nil
 }
 
-func (f *fakeModelStore) Create(context.Context, options.Creator, *model.EmbeddingModel, []byte) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Create(context.Context, options.Creator, *model.EmbeddingModel, []byte) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
 
-func (f *fakeModelStore) Update(context.Context, options.Updator, *model.EmbeddingModel, []byte, bool) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Update(context.Context, options.Updator, *model.EmbeddingModel, []byte, bool) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
 
-func (f *fakeModelStore) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
 
-func (f *fakeModelStore) MarkValidated(context.Context, options.Updator) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) MarkValidated(context.Context, options.Updator) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
 
-func (f *fakeModelStore) GetConfig(context.Context, int64, int64) ([]byte, error) {
+func (f *gateModelStore) GetConfig(context.Context, int64, int64) ([]byte, error) {
 	return nil, nil
 }
 
@@ -178,7 +178,7 @@ func (f *fakeModelStore) GetConfig(context.Context, int64, int64) ([]byte, error
 // counts transactions.
 type fakeUow struct {
 	spaces *fakeSpaceStore
-	models *fakeModelStore
+	models *gateModelStore
 
 	transactions int
 }
@@ -203,7 +203,7 @@ func newSpaceFixture() (*SpaceService, *fakeUow) {
 			written:  &model.Space{ID: 7},
 			readBack: &model.Space{ID: 7, Name: "read-back"},
 		},
-		models: &fakeModelStore{models: map[int64]*model.EmbeddingModel{
+		models: &gateModelStore{models: map[int64]*model.EmbeddingModel{
 			3: validatedModel(3, model.ModelTypeEmbedding),
 			4: validatedModel(4, model.ModelTypeReranker),
 		}},
