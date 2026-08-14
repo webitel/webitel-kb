@@ -3,6 +3,7 @@ package bodyconv
 import (
 	"errors"
 	"flag"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -712,5 +713,36 @@ func compareGolden(t *testing.T, path, got string) {
 
 	if got != string(want) {
 		t.Fatalf("%s mismatch:\n got: %q\nwant: %q", path, got, string(want))
+	}
+}
+
+func TestAttrIntClampsInsteadOfNarrowing(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  int
+	}{
+		{name: "in range", value: float64(7), want: 7},
+		{name: "fraction truncates", value: 7.9, want: 7},
+		{name: "above the range clamps up", value: 1e19, want: math.MaxInt},
+		{name: "below the range clamps down", value: -1e19, want: math.MinInt},
+		{name: "positive infinity clamps up", value: math.Inf(1), want: math.MaxInt},
+		{name: "negative infinity clamps down", value: math.Inf(-1), want: math.MinInt},
+		{name: "not a number falls back", value: math.NaN(), want: 3},
+		{name: "wrong type falls back", value: "8", want: 3},
+		{name: "missing attribute falls back", value: nil, want: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &node{}
+			if tt.value != nil {
+				n.Attrs = map[string]any{"start": tt.value}
+			}
+
+			if got := n.attrInt("start", 3); got != tt.want {
+				t.Fatalf("attrInt = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }

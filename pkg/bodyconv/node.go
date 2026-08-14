@@ -3,6 +3,7 @@ package bodyconv
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 )
@@ -166,11 +167,19 @@ func (n *node) attrString(key string) string {
 
 // attrInt reads a numeric attribute; JSON numbers decode as float64.
 func (n *node) attrInt(key string, def int) int {
-	if v, ok := n.Attrs[key].(float64); ok {
-		return int(v)
+	v, ok := n.Attrs[key].(float64)
+	if !ok || math.IsNaN(v) {
+		return def
 	}
 
-	return def
+	switch {
+	case v >= math.MaxInt:
+		return math.MaxInt
+	case v <= math.MinInt:
+		return math.MinInt
+	}
+
+	return int(v)
 }
 
 func (n *node) hasMark(name string) bool {
