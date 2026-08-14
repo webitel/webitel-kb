@@ -17,6 +17,18 @@ func cteReadBack[R, M any](
 	readSQL string, readArgs []any,
 	mapper func(*R) *M,
 ) (*M, error) {
+	return readBackCTEs(ctx, db, "WITH m AS ("+writeSQL+") ", writeArgs, readSQL, readArgs, mapper)
+}
+
+// readBackCTEs reads a written row back through readSQL appended to a
+// caller-composed CTE prefix whose last CTE is named m, serving writes that
+// need more than one CTE (a recursive cascade).
+func readBackCTEs[R, M any](
+	ctx context.Context, db Querier,
+	ctes string, writeArgs []any,
+	readSQL string, readArgs []any,
+	mapper func(*R) *M,
+) (*M, error) {
 	// The read-back must carry no filters, so it renders no placeholders;
 	// anything else would clash with the write's $N numbering.
 	if len(readArgs) != 0 {
@@ -26,7 +38,7 @@ func cteReadBack[R, M any](
 		)
 	}
 
-	rows, err := db.Query(ctx, "WITH m AS ("+writeSQL+") "+readSQL, writeArgs...)
+	rows, err := db.Query(ctx, ctes+readSQL, writeArgs...)
 	if err != nil {
 		return nil, ParseError(err)
 	}

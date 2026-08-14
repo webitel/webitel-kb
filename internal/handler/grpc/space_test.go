@@ -117,6 +117,7 @@ func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context
 
 func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return fakeModels{u} }
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return fakeSpaces{u} }
+func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
 
 type fakeSpaces struct{ u *fakeUow }
 

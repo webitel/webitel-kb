@@ -41,6 +41,15 @@ func nullIfZero[T int32 | int64](v T) *T {
 	return &v
 }
 
+// nonNilSlice keeps a NOT NULL array column from receiving NULL.
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return make([]T, 0)
+	}
+
+	return s
+}
+
 // defaultIfEmpty lets the database default fill a column the caller left empty.
 func defaultIfEmpty(s string) any {
 	if s == "" {
