@@ -26,7 +26,7 @@ require (
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/etag v0.2.0
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.1.1
-	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
+	go.opentelemetry.io/contrib/bridges/otelslog v0.20.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
 	go.opentelemetry.io/otel v1.45.0
@@ -74,7 +74,7 @@ require (
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/webitel/crypto/env v0.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel/log v0.20.0 // indirect
+	go.opentelemetry.io/otel/log v0.21.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v0.19.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.45.0 // indirect
