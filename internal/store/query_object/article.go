@@ -45,7 +45,7 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 				requiresJoin: articleJoinSpace,
 			},
 			"parent_id":            {sqlExpr: "m.parent_id", aliasedExpr: "m.parent_id AS parent_id"},
-			"depth":                {sqlExpr: "m.depth", aliasedExpr: "m.depth AS depth"},
+			"depth":                {sqlExpr: "m.depth", aliasedExpr: "m.depth AS depth", sortable: true},
 			"type":                 {sqlExpr: "m.type", aliasedExpr: "m.type AS type"},
 			"subject":              {sqlExpr: "m.subject", aliasedExpr: "m.subject AS subject", sortable: true},
 			"tags":                 {sqlExpr: "m.tags", aliasedExpr: "m.tags AS tags"},
@@ -109,6 +109,47 @@ func (q *ArticleQuery) WithDomainScope(domainID int64) *ArticleQuery {
 	return q
 }
 
+// WithLockForUpdate locks the selected article rows until the transaction
+// ends. Locks only the article relation: a locking clause cannot cover the
+// nullable side of the user joins.
+func (q *ArticleQuery) WithLockForUpdate() *ArticleQuery {
+	q.builder = q.builder.Suffix("FOR UPDATE OF m")
+
+	return q
+}
+
+// WithParent keeps the children of the given parent: nil means any parent, a
+// zero value means top-level articles, otherwise the children of that id.
+func (q *ArticleQuery) WithParent(parentID *int64) *ArticleQuery {
+	switch {
+	case parentID == nil:
+	case *parentID == 0:
+		q.builder = q.builder.Where("m.parent_id IS NULL")
+	default:
+		q.builder = q.builder.Where("m.parent_id = ?", *parentID)
+	}
+
+	return q
+}
+
+// WithTags keeps articles carrying the given tags: all of them when matchAll,
+// at least one otherwise. An empty list means any.
+func (q *ArticleQuery) WithTags(tags []string, matchAll bool) *ArticleQuery {
+	if len(tags) == 0 {
+		return q
+	}
+
+	if matchAll {
+		q.builder = q.builder.Where("m.tags @> ?", tags)
+
+		return q
+	}
+
+	q.builder = q.builder.Where("m.tags && ?", tags)
+
+	return q
+}
+
 // WithSpace keeps the articles of the given space; 0 means any.
 func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
 	if spaceID > 0 {
@@ -140,7 +181,7 @@ func (q *ArticleQuery) WithState(code int32) *ArticleQuery {
 // case-insensitively.
 func (q *ArticleQuery) WithSearch(term string) *ArticleQuery {
 	if term != "" {
-		q.builder = q.builder.Where("m.subject ILIKE ?", "%"+escapeLike(term)+"%")
+		q.builder = q.builder.Where("m.subject ILIKE ?", "%"+EscapeLike(term)+"%")
 	}
 
 	return q

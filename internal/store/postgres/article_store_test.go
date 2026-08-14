@@ -280,3 +280,304 @@ func TestArticleScanMapsRecord(t *testing.T) {
 		t.Fatalf("lookups = %+v, %+v", got.Space, got.CreatedBy)
 	}
 }
+
+func TestArticleMoveUnderParent(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(11)}}}}
+	s := &articleStore{db: f}
+
+	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
+
+	moved, err := s.Move(context.Background(), opts, 21, 3)
+	if err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	if moved.ID != 11 {
+		t.Fatalf("moved = %+v", moved)
+	}
+
+	for _, want := range []string{
+		"WITH RECURSIVE subtree AS (",
+		// The guards live inside the root UPDATE, where a concurrent writer
+		// cannot slip past them.
+		"WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL",
+		"s.id = a.space_id AND s.domain_id = $2",
+		"p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL",
+		"p.id NOT IN (SELECT id FROM subtree)",
+		"p.depth + 1 + (SELECT value FROM height) <= 5",
+		// Descendants take an absolute depth from their level in the walk, so a
+		// concurrent move of an ancestor cannot skew them; they join the root,
+		// so a guard miss moves nothing, and the root itself is excluded,
+		// because one row may not be written twice per statement.
+		"SET depth = root.depth + subtree.level",
+		"FROM subtree, root WHERE a.id = subtree.id AND a.id <> $1",
+		"SELECT c.id, t.level + 1 FROM kb.article c JOIN subtree t ON c.parent_id = t.id",
+		"ver = a.ver + 1",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	if f.gotArgs[4] != int64(21) {
+		t.Errorf("args[4] = %v, want the new parent", f.gotArgs[4])
+	}
+}
+
+func TestArticleMoveToTopLevel(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(11)}}}}
+	s := &articleStore{db: f}
+
+	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
+
+	if _, err := s.Move(context.Background(), opts, 0, 3); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	for _, want := range []string{
+		"SET parent_id = NULL, depth = 1, ver = a.ver + 1",
+		"1 + (SELECT value FROM height) <= 5",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	// No parent argument: the top level has none to join.
+	if len(f.gotArgs) != 4 {
+		t.Errorf("args = %v, want four of them", f.gotArgs)
+	}
+}
+
+func TestArticleMoveRejectionReasons(t *testing.T) {
+	// A move can miss for two very different reasons, and only one of them is
+	// worth retrying: a stale version is a conflict, while a destination the
+	// article may not take is a permanent rejection.
+	tests := []struct {
+		name      string
+		storedVer int32
+		scanErr   error
+		expectVer int32
+		wantCode  codes.Code
+		wantID    string
+	}{
+		{
+			name: "stale version conflicts", storedVer: 4, expectVer: 3,
+			wantCode: codes.Aborted, wantID: "kb.article.version_conflict",
+		},
+		{
+			name: "current version means the destination refused", storedVer: 3, expectVer: 3,
+			wantCode: codes.InvalidArgument, wantID: "kb.article.move_rejected",
+		},
+		{
+			name: "missing article stays not found", scanErr: pgx.ErrNoRows, expectVer: 3,
+			wantCode: codes.NotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{row: fakeRow{vals: []any{tt.storedVer}, err: tt.scanErr}}
+			s := &articleStore{db: f}
+
+			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5}, fields: []string{"id"}, id: 11}
+
+			_, err := s.Move(context.Background(), opts, 21, tt.expectVer)
+
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("error = %v, want %v", err, tt.wantCode)
+			}
+
+			if tt.wantID != "" && errors.ID(err) != tt.wantID {
+				t.Fatalf("error id = %q, want %q", errors.ID(err), tt.wantID)
+			}
+		})
+	}
+}
+
+func TestArticleMovePinsPositionalArgs(t *testing.T) {
+	// The arguments are positional: swapping the guard version with the author
+	// would compare the optimistic lock against a user id.
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(11)}}}}
+	s := &articleStore{db: f}
+
+	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
+
+	if _, err := s.Move(context.Background(), opts, 21, 3); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	if f.gotArgs[0] != int64(11) || f.gotArgs[1] != int64(5) || f.gotArgs[2] != int32(3) {
+		t.Fatalf("args = %v, want the article, the domain and the expected version", f.gotArgs)
+	}
+
+	author, ok := f.gotArgs[3].(*int64)
+	if !ok || author == nil || *author != 9 {
+		t.Fatalf("args[3] = %v, want the author", f.gotArgs[3])
+	}
+}
+
+func TestArticleAncestorsWalkUp(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &articleStore{db: f}
+
+	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, fields: []string{"id"}}
+
+	if _, err := s.Ancestors(context.Background(), opts, 12); err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+
+	for _, want := range []string{
+		"WITH RECURSIVE anc AS (",
+		"JOIN kb.article p ON p.id = a.parent_id",
+		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
+		"SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id",
+		"FROM anc m",
+		"ORDER BY m.depth ASC",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	if f.gotArgs[0] != int64(12) || f.gotArgs[1] != int64(5) {
+		t.Errorf("args = %v, want the article and the domain", f.gotArgs)
+	}
+}
+
+func TestArticleTreeScopesAndNests(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"id", "parent_id", "subject", "type", "depth"},
+		vals: [][]any{
+			{int64(1), int64(0), "A", int32(1), int32(1)},
+			{int64(2), int64(1), "A1", int32(1), int32(2)},
+		},
+	}}
+	s := &articleStore{db: f}
+
+	roots, err := s.Tree(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7)
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+
+	if len(roots) != 1 || len(roots[0].Children) != 1 || roots[0].Children[0].ID != 2 {
+		t.Fatalf("tree = %+v", roots)
+	}
+
+	for _, want := range []string{
+		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
+		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+}
+
+func TestArticleSubtreeCarriesDepth(t *testing.T) {
+	// The caller validates a move against the height of the subtree, so the
+	// depth has to travel with the ids.
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"id", "depth"},
+		vals: [][]any{{int64(11), int32(2)}, {int64(12), int32(3)}},
+	}}
+	s := &articleStore{db: f}
+
+	nodes, err := s.Subtree(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 11)
+	if err != nil {
+		t.Fatalf("Subtree: %v", err)
+	}
+
+	if len(nodes) != 2 || nodes[0].ID != 11 || nodes[0].Depth != 2 || nodes[1].Depth != 3 {
+		t.Fatalf("nodes = %+v", nodes)
+	}
+
+	if !strings.Contains(f.gotSQL, "a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL") {
+		t.Errorf("SQL %q misses the scope", f.gotSQL)
+	}
+
+	if f.gotArgs[0] != int64(11) || f.gotArgs[1] != int64(5) {
+		t.Errorf("args = %v, want the article and the caller domain", f.gotArgs)
+	}
+}
+
+func TestArticleSuggestTags(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"t"}, vals: [][]any{{"howto"}, {"hr"}}}}
+	s := &articleStore{db: f}
+
+	tags, err := s.SuggestTags(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, "h%", 0)
+	if err != nil {
+		t.Fatalf("SuggestTags: %v", err)
+	}
+
+	if len(tags) != 2 || tags[0] != "howto" {
+		t.Fatalf("tags = %v", tags)
+	}
+
+	for _, want := range []string{
+		"SELECT DISTINCT t FROM kb.article m",
+		"CROSS JOIN LATERAL unnest(m.tags) AS t",
+		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
+		"ORDER BY t LIMIT $4",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	// The prefix is escaped, and a non-positive size falls back to a bound.
+	if f.gotArgs[2] != `h\%%` {
+		t.Errorf("args[2] = %q, want the escaped prefix", f.gotArgs[2])
+	}
+
+	if f.gotArgs[3] != defaultSuggestSize {
+		t.Errorf("args[3] = %v, want the default size", f.gotArgs[3])
+	}
+
+	if f.gotArgs[0] != int64(5) || f.gotArgs[1] != int64(7) {
+		t.Errorf("args = %v, want the caller domain and the space", f.gotArgs)
+	}
+}
+
+func TestArticleSuggestTagsHonoursSize(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"t"}}}
+	s := &articleStore{db: f}
+
+	if _, err := s.SuggestTags(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, "h", 3); err != nil {
+		t.Fatalf("SuggestTags: %v", err)
+	}
+
+	if f.gotArgs[3] != 3 {
+		t.Errorf("args[3] = %v, want the requested size", f.gotArgs[3])
+	}
+}
+
+func TestArticleListAppliesParentAndTagFilters(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &articleStore{db: f}
+
+	filter := model.ArticleFilter{ParentID: ptrTo(int64(0)), Tags: []string{"vpn"}, TagsMatchAll: true}
+
+	if _, _, err := s.List(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, filter); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	for _, want := range []string{"m.parent_id IS NULL", "m.tags@>$"} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+}
+
+func TestArticleLocateForUpdateLocks(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
+	s := &articleStore{db: f}
+
+	if _, err := s.LocateForUpdate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{1}}); err != nil {
+		t.Fatalf("LocateForUpdate: %v", err)
+	}
+
+	if !strings.Contains(f.gotSQL, "FOR UPDATE OF m") {
+		t.Fatalf("SQL %q does not lock the row", f.gotSQL)
+	}
+}

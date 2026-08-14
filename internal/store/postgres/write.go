@@ -6,6 +6,13 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 )
 
+// errCTEReadArgs rejects a read rendered over a CTE that carries its own
+// placeholders, the $N numbering belongs to the statement the CTE wraps.
+var errCTEReadArgs = errors.Internal(
+	"storage error",
+	errors.WithID("store.pg.cte_read_back_args"),
+)
+
 // cteReadBack wraps a write statement into a CTE named m — the alias entity
 // query objects reference — and reads the written row back through the given
 // SELECT in the same statement: atomic, and rendered by the exact code path
@@ -29,13 +36,8 @@ func readBackCTEs[R, M any](
 	readSQL string, readArgs []any,
 	mapper func(*R) *M,
 ) (*M, error) {
-	// The read-back must carry no filters, so it renders no placeholders;
-	// anything else would clash with the write's $N numbering.
 	if len(readArgs) != 0 {
-		return nil, errors.Internal(
-			"storage error",
-			errors.WithID("store.pg.cte_read_back_args"),
-		)
+		return nil, errCTEReadArgs
 	}
 
 	rows, err := db.Query(ctx, ctes+readSQL, writeArgs...)

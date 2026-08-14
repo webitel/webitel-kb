@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -59,6 +61,100 @@ const deleteArticleCTEs = `WITH RECURSIVE root AS (
 ), m AS (
 	SELECT * FROM root
 ) `
+
+// moveSubtreeCTEs reparent the article and rebase the depth of everything
+// below it. The root carries every guard in its own WHERE, so a concurrent
+// writer cannot slip past them, and the descendants join the root, so a guard
+// miss moves nothing. The root is excluded from the descendant update: one row
+// may not be written twice in the same statement. Descendants take an absolute
+// depth from their level in the walk rather than a relative shift, so a
+// concurrent move of an ancestor cannot leave the subtree skewed.
+const moveSubtreeCTEs = `WITH RECURSIVE subtree AS (
+	SELECT a.id, 0 AS level FROM kb.article a WHERE a.id = $1 AND a.deleted_at IS NULL
+	UNION ALL
+	SELECT c.id, t.level + 1 FROM kb.article c JOIN subtree t ON c.parent_id = t.id
+	WHERE c.deleted_at IS NULL
+), height AS (
+	SELECT max(sub.level) AS value FROM subtree sub
+), root AS (
+	%s
+), descendants AS (
+	UPDATE kb.article a SET depth = root.depth + subtree.level, updated_at = now(), updated_by = $4
+	FROM subtree, root WHERE a.id = subtree.id AND a.id <> $1
+	RETURNING a.id
+), m AS (
+	SELECT * FROM root
+) `
+
+// moveUnderRoot reparents under another article of the same space.
+const moveUnderRoot = `UPDATE kb.article a
+	SET parent_id = p.id, depth = p.depth + 1, ver = a.ver + 1,
+	    updated_at = now(), updated_by = $4
+	FROM kb.space s, kb.article p
+	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
+	  AND s.id = a.space_id AND s.domain_id = $2
+	  AND p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL
+	  AND p.id <> a.id AND p.id NOT IN (SELECT id FROM subtree)
+	  AND p.depth + 1 + (SELECT value FROM height) <= 5
+	RETURNING a.*`
+
+// moveToTopRoot moves the article to the top level, where it has no parent to
+// derive the depth from.
+const moveToTopRoot = `UPDATE kb.article a
+	SET parent_id = NULL, depth = 1, ver = a.ver + 1,
+	    updated_at = now(), updated_by = $4
+	FROM kb.space s
+	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
+	  AND s.id = a.space_id AND s.domain_id = $2
+	  AND 1 + (SELECT value FROM height) <= 5
+	RETURNING a.*`
+
+// ancestorsCTE walks up the parent chain of an article, excluding the article
+// itself, and carries whole rows so the entity query object can render the
+// read model over it.
+const ancestorsCTE = `WITH RECURSIVE anc AS (
+	SELECT p.* FROM kb.article a
+	JOIN kb.article p ON p.id = a.parent_id
+	JOIN kb.space s ON s.id = a.space_id
+	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+	UNION ALL
+	SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id
+	WHERE g.deleted_at IS NULL
+) `
+
+// subtreeSQL lists an article and everything below it within the domain.
+const subtreeSQL = `WITH RECURSIVE subtree AS (
+	SELECT a.id, a.depth FROM kb.article a JOIN kb.space s ON s.id = a.space_id
+	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+	UNION ALL
+	SELECT c.id, c.depth FROM kb.article c JOIN subtree t ON c.parent_id = t.id
+	WHERE c.deleted_at IS NULL
+)
+SELECT id, depth FROM subtree`
+
+// treeSQL reads the visible hierarchy of a space flat; the nesting is built
+// in the application.
+const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth
+	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
+	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
+	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id`
+
+// suggestTagsSQL lists the distinct tags of a space matching a prefix.
+const suggestTagsSQL = `SELECT DISTINCT t FROM kb.article m
+	JOIN kb.space s ON s.id = m.space_id
+	CROSS JOIN LATERAL unnest(m.tags) AS t
+	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3
+	ORDER BY t LIMIT $4`
+
+// defaultSuggestSize bounds a suggestion listing the caller left unbounded.
+const defaultSuggestSize = 20
+
+// errVersionConflict reports a write whose optimistic-lock version no longer
+// matches the stored one.
+var errVersionConflict = errors.Aborted(
+	"article was changed concurrently",
+	errors.WithID("kb.article.version_conflict"),
+)
 
 // articleVerSQL reads the current version of a visible article for the
 // conflict/not-found distinction after a guarded write matched nothing.
@@ -150,6 +246,8 @@ func (s *articleStore) List(
 		WithSpace(filter.SpaceID).
 		WithType(filter.Type).
 		WithState(filter.State).
+		WithParent(filter.ParentID).
+		WithTags(filter.Tags, filter.TagsMatchAll).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).
@@ -174,16 +272,29 @@ func (s *articleStore) List(
 }
 
 func (s *articleStore) Locate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
+	return s.locateArticle(ctx, opts, false)
+}
+
+func (s *articleStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
+	return s.locateArticle(ctx, opts, true)
+}
+
+func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher, lock bool) (*model.Article, error) {
 	if len(opts.GetIDs()) != 1 {
 		return nil, errLocateSingleID
 	}
 
-	sql, args, err := queryobject.NewArticleQuery(queryobject.ArticleFrom).
+	query := queryobject.NewArticleQuery(queryobject.ArticleFrom).
 		WithVisible().
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithIDs(opts.GetIDs()).
-		WithFields(opts.GetFields()).
-		ToSQL()
+		WithFields(opts.GetFields())
+
+	if lock {
+		query.WithLockForUpdate()
+	}
+
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, ParseError(err)
 	}
@@ -293,6 +404,151 @@ func (s *articleStore) Delete(
 	return deleted, nil
 }
 
+func (s *articleStore) Move(
+	ctx context.Context, opts options.Updator, newParentID int64, expectedVer int32,
+) (*model.Article, error) {
+	session := opts.GetAuthOpts()
+
+	readSQL, readArgs, err := queryobject.NewArticleQuery("m").
+		WithFields(opts.GetFields()).
+		ToSQL()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	writeArgs := []any{
+		opts.GetID(), session.GetDomainID(), expectedVer, nullIfZero(session.GetUserID()),
+	}
+
+	rootSQL := moveToTopRoot
+	if newParentID != 0 {
+		rootSQL = moveUnderRoot
+
+		writeArgs = append(writeArgs, newParentID)
+	}
+
+	moved, err := readBackCTEs(
+		ctx, s.db, fmt.Sprintf(moveSubtreeCTEs, rootSQL), writeArgs, readSQL, readArgs, mapArticle,
+	)
+	if err != nil {
+		return nil, s.resolveMoveMiss(ctx, err, opts.GetID(), session.GetDomainID(), expectedVer)
+	}
+
+	return moved, nil
+}
+
+// resolveMoveMiss explains a move that matched nothing. Unlike the other
+// writes, a move can also be refused by the destination itself, and that is a
+// permanent rejection the caller must not retry.
+func (s *articleStore) resolveMoveMiss(
+	ctx context.Context, err error, id, domainID int64, expectedVer int32,
+) error {
+	if errors.Code(err) != codes.NotFound {
+		return err
+	}
+
+	var ver int32
+	if scanErr := s.db.QueryRow(ctx, articleVerSQL, id, domainID).Scan(&ver); scanErr != nil {
+		return err
+	}
+
+	if ver != expectedVer {
+		return errVersionConflict
+	}
+
+	return errors.InvalidArgument(
+		"the destination does not accept this article",
+		errors.WithID("kb.article.move_rejected"),
+	)
+}
+
+func (s *articleStore) Ancestors(
+	ctx context.Context, opts options.Searcher, articleID int64,
+) ([]*model.Article, error) {
+	readSQL, readArgs, err := queryobject.NewArticleQuery("anc m").
+		WithFields(opts.GetFields()).
+		WithSort("+depth").
+		ToSQL()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	if len(readArgs) != 0 {
+		return nil, errCTEReadArgs
+	}
+
+	rows, err := s.db.Query(ctx, ancestorsCTE+readSQL, articleID, opts.GetAuthOpts().GetDomainID())
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	items, err := collectRows(rows, mapArticle)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return items, nil
+}
+
+func (s *articleStore) Tree(
+	ctx context.Context, opts options.Searcher, spaceID int64,
+) ([]*model.TreeNode, error) {
+	rows, err := s.db.Query(ctx, treeSQL, opts.GetAuthOpts().GetDomainID(), spaceID)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	nodes, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*model.TreeNode, error) {
+		node := new(model.TreeNode)
+		err := row.Scan(&node.ID, &node.ParentID, &node.Subject, &node.Type, &node.Depth)
+
+		return node, err
+	})
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return model.BuildTree(nodes), nil
+}
+
+func (s *articleStore) Subtree(
+	ctx context.Context, opts options.Searcher, articleID int64,
+) ([]model.SubtreeNode, error) {
+	rows, err := s.db.Query(ctx, subtreeSQL, articleID, opts.GetAuthOpts().GetDomainID())
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	nodes, err := pgx.CollectRows(rows, pgx.RowToStructByPos[model.SubtreeNode])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return nodes, nil
+}
+
+func (s *articleStore) SuggestTags(
+	ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int,
+) ([]string, error) {
+	if size <= 0 {
+		size = defaultSuggestSize
+	}
+
+	rows, err := s.db.Query(ctx, suggestTagsSQL,
+		opts.GetAuthOpts().GetDomainID(), spaceID, queryobject.EscapeLike(prefix)+"%", size,
+	)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	tags, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return tags, nil
+}
+
 // resolveWriteMiss tells a version conflict apart from a genuinely missing
 // row after a guarded write matched nothing.
 func (s *articleStore) resolveWriteMiss(ctx context.Context, err error, id, domainID int64) error {
@@ -305,10 +561,7 @@ func (s *articleStore) resolveWriteMiss(ctx context.Context, err error, id, doma
 		return err
 	}
 
-	return errors.Aborted(
-		"article was changed concurrently",
-		errors.WithID("kb.article.version_conflict"),
-	)
+	return errVersionConflict
 }
 
 // writeReturning reads the written row back via cteReadBack, rendering the

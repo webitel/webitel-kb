@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// escapeLike escapes the LIKE pattern metacharacters in s, so the value
+// EscapeLike escapes the LIKE pattern metacharacters in s, so the value
 // matches literally under the default backslash escape character.
-func escapeLike(s string) string {
+func EscapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
 

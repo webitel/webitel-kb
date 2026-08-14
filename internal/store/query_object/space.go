@@ -111,7 +111,7 @@ func (q *SpaceQuery) WithLockForUpdate() *SpaceQuery {
 // WithSearch keeps spaces whose name contains the term, case-insensitively.
 func (q *SpaceQuery) WithSearch(term string) *SpaceQuery {
 	if term != "" {
-		q.builder = q.builder.Where("m.name ILIKE ?", "%"+escapeLike(term)+"%")
+		q.builder = q.builder.Where("m.name ILIKE ?", "%"+EscapeLike(term)+"%")
 	}
 
 	return q
