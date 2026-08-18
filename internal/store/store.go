@@ -27,6 +27,9 @@ type UnitOfWork interface {
 
 	// ArticleStore accesses knowledge-base articles.
 	ArticleStore() ArticleStore
+
+	// ArticleVersionStore accesses the version history of articles.
+	ArticleVersionStore() ArticleVersionStore
 }
 
 // ArticleStore persists knowledge-base articles. Every read and write is
@@ -52,6 +55,48 @@ type ArticleStore interface {
 	// Delete soft-deletes the article opts identify together with its subtree
 	// and returns the root's last state.
 	Delete(ctx context.Context, opts options.Deleter, expectedVer int32) (*model.Article, error)
+
+	// LocateForUpdate is Locate with the row locked until the transaction
+	// ends: the read a read-then-write flow bases its decisions on.
+	LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.Article, error)
+
+	// Move reparents the article opts identify, shifting the depth of its
+	// whole subtree. A zero newParentID moves it to the top level. The write
+	// rejects a cycle, a foreign parent and a subtree that would outgrow the
+	// maximum depth, and is guarded by the optimistic-lock version.
+	Move(ctx context.Context, opts options.Updator, newParentID int64, expectedVer int32) (*model.Article, error)
+
+	// Ancestors returns the ancestor chain of an article, root first; the
+	// article itself is not part of it.
+	Ancestors(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.Article, error)
+
+	// Tree returns the hierarchy of a space as its root nodes; an oversized
+	// space is refused.
+	Tree(ctx context.Context, opts options.Searcher, spaceID int64) ([]*model.TreeNode, error)
+
+	// Subtree returns an article and everything below it with their depth, so
+	// a caller can validate a move before attempting it.
+	Subtree(ctx context.Context, opts options.Searcher, articleID int64) ([]model.SubtreeNode, error)
+
+	// SuggestTags returns the distinct tags of a space matching a prefix.
+	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
+}
+
+// ArticleVersionStore persists the immutable version history of articles.
+// Reads and writes are scoped to the caller's domain through the owning
+// article and its space.
+type ArticleVersionStore interface {
+	// List returns a page of versions of an article, newest first, and
+	// whether a next page exists.
+	List(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.ArticleVersion, bool, error)
+
+	// Locate returns a single version of an article by its number.
+	Locate(ctx context.Context, opts options.Searcher, articleID int64, number int32) (*model.ArticleVersion, error)
+
+	// Create appends a version to an article, numbering it after the current
+	// last one and building the search vector with the given text search
+	// configuration.
+	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion, textSearchConfig string) (*model.ArticleVersion, error)
 }
 
 // SpaceStore persists knowledge-base spaces and their team binding. Every read

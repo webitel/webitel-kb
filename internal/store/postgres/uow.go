@@ -57,6 +57,11 @@ func (u *unitOfWork) ArticleStore() store.ArticleStore {
 	return &articleStore{db: u.querier}
 }
 
+// ArticleVersionStore returns the version store bound to the current querier.
+func (u *unitOfWork) ArticleVersionStore() store.ArticleVersionStore {
+	return &articleVersionStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

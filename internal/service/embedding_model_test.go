@@ -155,6 +155,7 @@ func (f *fakeModelUoW) WithinTransaction(
 func (f *fakeModelUoW) EmbeddingModelStore() store.EmbeddingModelStore { return f.models }
 func (f *fakeModelUoW) SpaceStore() store.SpaceStore                   { return nil }
 func (f *fakeModelUoW) ArticleStore() store.ArticleStore               { return nil }
+func (f *fakeModelUoW) ArticleVersionStore() store.ArticleVersionStore { return nil }
 
 // fakeSealer marks what passed through encryption, so a test can tell a sealed
 // credential from a plaintext leak.

@@ -2,6 +2,9 @@ package model
 
 import "time"
 
+// MaxArticleDepth is the hierarchy ceiling, backstopped by a CHECK in the schema.
+const MaxArticleDepth int32 = 5
+
 // Article type codes.
 const (
 	ArticleTypeArticle int32 = 1
@@ -56,4 +59,55 @@ type ArticleFilter struct {
 	SpaceID int64
 	Type    int32
 	State   int32
+	// ParentID selects by parent: nil any, zero top-level, otherwise the
+	// children of that article.
+	ParentID *int64
+	// Tags keeps articles carrying them; TagsMatchAll switches the match from
+	// any tag to all of them.
+	Tags         []string
+	TagsMatchAll bool
+}
+
+// SubtreeNode is an article of a subtree together with its depth, enough for
+// a caller to validate a move before attempting it.
+type SubtreeNode struct {
+	ID    int64
+	Depth int32
+}
+
+// TreeNode is a node of the article hierarchy of a space.
+type TreeNode struct {
+	ID       int64
+	ParentID int64
+	Subject  string
+	Type     int32
+	Depth    int32
+	Children []*TreeNode
+}
+
+// BuildTree arranges flat nodes into the forest of a space, keeping the input
+// order among siblings. Nodes whose parent is missing from the input are
+// dropped: they hang under an article the caller may not see.
+func BuildTree(nodes []*TreeNode) []*TreeNode {
+	byID := make(map[int64]*TreeNode, len(nodes))
+	for _, node := range nodes {
+		node.Children = nil
+		byID[node.ID] = node
+	}
+
+	roots := make([]*TreeNode, 0, len(nodes))
+
+	for _, node := range nodes {
+		if node.ParentID == 0 {
+			roots = append(roots, node)
+
+			continue
+		}
+
+		if parent, ok := byID[node.ParentID]; ok {
+			parent.Children = append(parent.Children, node)
+		}
+	}
+
+	return roots
 }

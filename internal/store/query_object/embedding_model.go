@@ -86,7 +86,7 @@ func (q *EmbeddingModelQuery) WithType(modelType string) *EmbeddingModelQuery {
 // WithSearch keeps models whose name contains the term, case-insensitively.
 func (q *EmbeddingModelQuery) WithSearch(term string) *EmbeddingModelQuery {
 	if term != "" {
-		q.builder = q.builder.Where("m.name ILIKE ?", "%"+escapeLike(term)+"%")
+		q.builder = q.builder.Where("m.name ILIKE ?", "%"+EscapeLike(term)+"%")
 	}
 
 	return q

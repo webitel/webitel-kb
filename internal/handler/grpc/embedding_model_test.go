@@ -93,6 +93,7 @@ func (f *modelUoWFake) WithinTransaction(
 func (f *modelUoWFake) EmbeddingModelStore() store.EmbeddingModelStore { return f.models }
 func (f *modelUoWFake) SpaceStore() store.SpaceStore                   { return nil }
 func (f *modelUoWFake) ArticleStore() store.ArticleStore               { return nil }
+func (f *modelUoWFake) ArticleVersionStore() store.ArticleVersionStore { return nil }
 
 func TestModelToProto(t *testing.T) {
 	now := time.Now()

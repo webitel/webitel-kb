@@ -180,3 +180,82 @@ func TestArticleCTEReadBack(t *testing.T) {
 		t.Fatalf("SQL %q does not select from the CTE", sql)
 	}
 }
+
+func TestArticleParentFilter(t *testing.T) {
+	tests := []struct {
+		name    string
+		parent  *int64
+		want    string
+		absent  string
+		numArgs int
+	}{
+		{name: "nil means any parent", parent: nil, absent: "m.parent_id"},
+		{name: "zero means top level", parent: ptrTo(int64(0)), want: "m.parent_id IS NULL"},
+		{name: "id means its children", parent: ptrTo(int64(7)), want: "m.parent_id=$1", numArgs: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, args := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithParent(tt.parent))
+
+			if tt.want != "" && !strings.Contains(sql, tt.want) {
+				t.Errorf("SQL %q does not contain %q", sql, tt.want)
+			}
+
+			if tt.absent != "" && strings.Contains(sql, tt.absent) {
+				t.Errorf("SQL %q must not contain %q", sql, tt.absent)
+			}
+
+			if len(args) != tt.numArgs {
+				t.Errorf("args = %v, want %d of them", args, tt.numArgs)
+			}
+		})
+	}
+}
+
+func TestArticleTagsFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		tags     []string
+		matchAll bool
+		want     string
+		absent   string
+	}{
+		{name: "any tag overlaps", tags: []string{"vpn", "hr"}, want: "m.tags&&$1"},
+		{name: "all tags contain", tags: []string{"vpn", "hr"}, matchAll: true, want: "m.tags@>$1"},
+		{name: "empty list disables the filter", tags: nil, absent: "m.tags"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithTags(tt.tags, tt.matchAll))
+
+			if tt.want != "" && !strings.Contains(sql, tt.want) {
+				t.Errorf("SQL %q does not contain %q", sql, tt.want)
+			}
+
+			if tt.absent != "" && strings.Contains(sql, tt.absent) {
+				t.Errorf("SQL %q must not contain %q", sql, tt.absent)
+			}
+		})
+	}
+}
+
+func TestArticleDepthIsSortable(t *testing.T) {
+	// Ancestors order by depth; an unsortable field would be dropped silently.
+	sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithSort("+depth"))
+
+	if !strings.Contains(sql, "ORDER BY m.depth ASC") {
+		t.Fatalf("SQL %q misses the depth order", sql)
+	}
+}
+
+func TestArticleLockForUpdate(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithLockForUpdate())
+
+	if !strings.Contains(sql, "FOR UPDATE OF m") {
+		t.Fatalf("SQL %q does not lock the article rows", sql)
+	}
+}
+
+func ptrTo[T any](v T) *T { return &v }

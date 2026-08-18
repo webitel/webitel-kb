@@ -192,6 +192,7 @@ func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context
 func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return u.models }
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return u.spaces }
 func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
+func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 
 func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 	return &model.EmbeddingModel{ID: id, Type: modelType, ValidatedAt: time.Now()}
