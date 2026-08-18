@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -304,7 +305,7 @@ func TestArticleMoveUnderParent(t *testing.T) {
 		"s.id = a.space_id AND s.domain_id = $2",
 		"p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL",
 		"p.id NOT IN (SELECT id FROM subtree)",
-		"p.depth + 1 + (SELECT value FROM height) <= 5",
+		fmt.Sprintf("p.depth + 1 + (SELECT value FROM height) <= %d", model.MaxArticleDepth),
 		// Descendants take an absolute depth from their level in the walk, so a
 		// concurrent move of an ancestor cannot skew them; they join the root,
 		// so a guard miss moves nothing, and the root itself is excluded,
@@ -336,7 +337,7 @@ func TestArticleMoveToTopLevel(t *testing.T) {
 
 	for _, want := range []string{
 		"SET parent_id = NULL, depth = 1, ver = a.ver + 1",
-		"1 + (SELECT value FROM height) <= 5",
+		fmt.Sprintf("1 + (SELECT value FROM height) <= %d", model.MaxArticleDepth),
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
@@ -467,10 +468,34 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 	for _, want := range []string{
 		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
 		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
+		"LIMIT $3",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
+	}
+
+	if f.gotArgs[2] != maxTreeNodes+1 {
+		t.Errorf("args[2] = %v, want one past the ceiling", f.gotArgs[2])
+	}
+}
+
+func TestArticleTreeRefusesAnOversizedSpace(t *testing.T) {
+	vals := make([][]any, 0, maxTreeNodes+1)
+	for i := range maxTreeNodes + 1 {
+		vals = append(vals, []any{int64(i + 1), int64(0), "A", int32(1), int32(1)})
+	}
+
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"id", "parent_id", "subject", "type", "depth"},
+		vals: vals,
+	}}
+	s := &articleStore{db: f}
+
+	_, err := s.Tree(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7)
+
+	if errors.Code(err) != codes.ResourceExhausted || errors.ID(err) != "kb.article.tree_too_large" {
+		t.Fatalf("error = %v, want the tree ceiling", err)
 	}
 }
 

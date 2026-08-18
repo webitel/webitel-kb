@@ -36,6 +36,9 @@ const createVersionSQL = `INSERT INTO kb.article_version
 	      SELECT 1 FROM kb.article_version src WHERE src.id = $8::bigint AND src.article_id = a.id))
 	RETURNING *`
 
+// versionNumberConstraint marks a lost race for the next version number.
+const versionNumberConstraint = "article_version_article_id_version_number_key"
+
 type articleVersionStore struct {
 	db Querier
 }
@@ -181,6 +184,10 @@ func versionWriteError(err error) error {
 
 	var pgErr *pgconn.PgError
 	if !stderrors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
+		return err
+	}
+
+	if pgErr.ConstraintName != versionNumberConstraint {
 		return err
 	}
 

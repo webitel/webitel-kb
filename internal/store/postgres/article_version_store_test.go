@@ -226,9 +226,14 @@ func TestArticleVersionCreatePassesOtherErrors(t *testing.T) {
 			wantCode: codes.NotFound,
 		},
 		{
-			name:     "another unique violation stays already exists",
+			name:     "a foreign key violation stays aborted",
 			queryErr: &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation},
 			wantCode: codes.Aborted,
+		},
+		{
+			name:     "a unique violation on another constraint stays a duplicate",
+			queryErr: &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "article_version_pkey"},
+			wantCode: codes.AlreadyExists,
 		},
 	}
 

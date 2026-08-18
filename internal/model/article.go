@@ -2,6 +2,9 @@ package model
 
 import "time"
 
+// MaxArticleDepth is the hierarchy ceiling, backstopped by a CHECK in the schema.
+const MaxArticleDepth int32 = 5
+
 // Article type codes.
 const (
 	ArticleTypeArticle int32 = 1

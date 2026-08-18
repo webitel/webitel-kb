@@ -87,7 +87,7 @@ const moveSubtreeCTEs = `WITH RECURSIVE subtree AS (
 ) `
 
 // moveUnderRoot reparents under another article of the same space.
-const moveUnderRoot = `UPDATE kb.article a
+var moveUnderRoot = fmt.Sprintf(`UPDATE kb.article a
 	SET parent_id = p.id, depth = p.depth + 1, ver = a.ver + 1,
 	    updated_at = now(), updated_by = $4
 	FROM kb.space s, kb.article p
@@ -95,19 +95,19 @@ const moveUnderRoot = `UPDATE kb.article a
 	  AND s.id = a.space_id AND s.domain_id = $2
 	  AND p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL
 	  AND p.id <> a.id AND p.id NOT IN (SELECT id FROM subtree)
-	  AND p.depth + 1 + (SELECT value FROM height) <= 5
-	RETURNING a.*`
+	  AND p.depth + 1 + (SELECT value FROM height) <= %d
+	RETURNING a.*`, model.MaxArticleDepth)
 
 // moveToTopRoot moves the article to the top level, where it has no parent to
 // derive the depth from.
-const moveToTopRoot = `UPDATE kb.article a
+var moveToTopRoot = fmt.Sprintf(`UPDATE kb.article a
 	SET parent_id = NULL, depth = 1, ver = a.ver + 1,
 	    updated_at = now(), updated_by = $4
 	FROM kb.space s
 	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
 	  AND s.id = a.space_id AND s.domain_id = $2
-	  AND 1 + (SELECT value FROM height) <= 5
-	RETURNING a.*`
+	  AND 1 + (SELECT value FROM height) <= %d
+	RETURNING a.*`, model.MaxArticleDepth)
 
 // ancestorsCTE walks up the parent chain of an article, excluding the article
 // itself, and carries whole rows so the entity query object can render the
@@ -133,11 +133,23 @@ const subtreeSQL = `WITH RECURSIVE subtree AS (
 SELECT id, depth FROM subtree`
 
 // treeSQL reads the visible hierarchy of a space flat; the nesting is built
-// in the application.
+// in the application; the limit reads one row past the ceiling to spot an
+// oversized space.
 const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth
 	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
 	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
-	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id`
+	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id
+	LIMIT $3`
+
+// maxTreeNodes bounds a whole-space tree the contract cannot paginate.
+const maxTreeNodes = 10000
+
+// errTreeTooLarge reports a hierarchy too large for one response.
+var errTreeTooLarge = errors.New(
+	"the space hierarchy is too large to return at once: list the children level by level",
+	errors.WithCode(codes.ResourceExhausted),
+	errors.WithID("kb.article.tree_too_large"),
+)
 
 // suggestTagsSQL lists the distinct tags of a space matching a prefix.
 const suggestTagsSQL = `SELECT DISTINCT t FROM kb.article m
@@ -493,7 +505,7 @@ func (s *articleStore) Ancestors(
 func (s *articleStore) Tree(
 	ctx context.Context, opts options.Searcher, spaceID int64,
 ) ([]*model.TreeNode, error) {
-	rows, err := s.db.Query(ctx, treeSQL, opts.GetAuthOpts().GetDomainID(), spaceID)
+	rows, err := s.db.Query(ctx, treeSQL, opts.GetAuthOpts().GetDomainID(), spaceID, maxTreeNodes+1)
 	if err != nil {
 		return nil, ParseError(err)
 	}
@@ -506,6 +518,10 @@ func (s *articleStore) Tree(
 	})
 	if err != nil {
 		return nil, ParseError(err)
+	}
+
+	if len(nodes) > maxTreeNodes {
+		return nil, errTreeTooLarge
 	}
 
 	return model.BuildTree(nodes), nil

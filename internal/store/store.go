@@ -70,7 +70,8 @@ type ArticleStore interface {
 	// article itself is not part of it.
 	Ancestors(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.Article, error)
 
-	// Tree returns the hierarchy of a space as its root nodes.
+	// Tree returns the hierarchy of a space as its root nodes; an oversized
+	// space is refused.
 	Tree(ctx context.Context, opts options.Searcher, spaceID int64) ([]*model.TreeNode, error)
 
 	// Subtree returns an article and everything below it with their depth, so
