@@ -38,12 +38,3 @@ func ReindexQueueArgs() map[string]any {
 func ReindexRoutingKey(articleID int64) string {
 	return strconv.FormatInt(articleID, 10)
 }
-
-// Advisory-lock identity of the single active relay. The database is shared
-// by several Webitel services, so the lock uses the two-key form with a
-// service-scoped class id; other webitel-kb singletons take the next object
-// ids under the same class.
-const (
-	AdvisoryLockClassID int32 = 27490 // "kb" in ASCII, big-endian
-	AdvisoryLockRelayID int32 = 1
-)

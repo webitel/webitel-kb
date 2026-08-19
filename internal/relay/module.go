@@ -7,6 +7,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-kb/config"
+	"github.com/webitel/webitel-kb/infra/leader"
 	"github.com/webitel/webitel-kb/infra/pubsub/reliable"
 	"github.com/webitel/webitel-kb/internal/store/postgres"
 )
@@ -22,23 +23,14 @@ var Module = fx.Module("relay",
 // scheme is already validated at config load; the poller intentionally does
 // not check Pubsub.Driver, whose default names the broker product, not the
 // protocol.
-func providePoller(cfg *config.Config, store *postgres.Store, log *slog.Logger) *Poller {
-	open := func(ctx context.Context) (Session, error) {
-		session, err := store.AcquireOutboxSession(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		return session, nil
-	}
-
-	poller := New(Config{
+func providePoller(
+	cfg *config.Config, store *postgres.Store, elector leader.Elector, log *slog.Logger,
+) *Poller {
+	return New(Config{
 		Interval:       cfg.Relay.Interval,
 		Batch:          cfg.Relay.Batch,
 		PublishTimeout: cfg.Relay.PublishTimeout,
-	}, open, reliable.NewPublisher(cfg.Pubsub.URL), log)
-
-	return poller
+	}, store, reliable.NewPublisher(cfg.Pubsub.URL), elector, log)
 }
 
 // registerPoller ties the loop to the fx lifecycle. Depending on *Poller

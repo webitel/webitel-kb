@@ -17,10 +17,7 @@ import (
 
 var errNoMoreBatches = errors.New("script exhausted")
 
-type fakeSession struct {
-	leader    bool
-	leaderErr error
-
+type fakeOutbox struct {
 	batches  [][]model.OutboxEvent
 	fetchErr error // returned once the scripted batches run out
 
@@ -29,14 +26,9 @@ type fakeSession struct {
 
 	backlogCalls int
 	fetchCalls   int
-	closed       bool
 }
 
-func (s *fakeSession) TryLeaderLock(context.Context) (bool, error) {
-	return s.leader, s.leaderErr
-}
-
-func (s *fakeSession) FetchUnpublished(context.Context, int) ([]model.OutboxEvent, error) {
+func (s *fakeOutbox) FetchUnpublished(context.Context, int) ([]model.OutboxEvent, error) {
 	s.fetchCalls++
 
 	if len(s.batches) == 0 {
@@ -49,7 +41,7 @@ func (s *fakeSession) FetchUnpublished(context.Context, int) ([]model.OutboxEven
 	return batch, nil
 }
 
-func (s *fakeSession) MarkPublished(_ context.Context, ids []int64) error {
+func (s *fakeOutbox) MarkPublished(_ context.Context, ids []int64) error {
 	if s.markErr != nil {
 		return s.markErr
 	}
@@ -59,13 +51,27 @@ func (s *fakeSession) MarkPublished(_ context.Context, ids []int64) error {
 	return nil
 }
 
-func (s *fakeSession) Backlog(context.Context) (int64, time.Duration, error) {
+func (s *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) {
 	s.backlogCalls++
 
 	return 1, time.Second, nil
 }
 
-func (s *fakeSession) Close(context.Context) { s.closed = true }
+// directElector promotes the instance at once, the way Consul would.
+type directElector struct {
+	runs int
+	err  error
+}
+
+func (e *directElector) Run(ctx context.Context, lead func(context.Context) error) {
+	for ctx.Err() == nil {
+		e.runs++
+
+		if e.err = lead(ctx); e.err != nil {
+			return
+		}
+	}
+}
 
 type pubCall struct {
 	exchange string
@@ -119,19 +125,23 @@ func outboxEvents(ids ...int64) []model.OutboxEvent {
 	return events
 }
 
-func newTestPoller(session Session, broker Broker) *Poller {
-	open := func(context.Context) (Session, error) { return session, nil }
+func newTestPoller(outbox Outbox, broker Broker) *Poller {
+	return newTestPollerWith(outbox, broker, &directElector{})
+}
+
+func newTestPollerWith(outbox Outbox, broker Broker, elector Elector) *Poller {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	return New(Config{Interval: time.Millisecond, Batch: 2, PublishTimeout: time.Second}, open, broker, log)
+	return New(Config{Interval: time.Millisecond, Batch: 2, PublishTimeout: time.Second},
+		outbox, broker, elector, log)
 }
 
 func TestTickPublishesBatchInOrder(t *testing.T) {
-	session := &fakeSession{batches: [][]model.OutboxEvent{outboxEvents(1, 2, 3)}}
+	outbox := &fakeOutbox{batches: [][]model.OutboxEvent{outboxEvents(1, 2, 3)}}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	published, fetched, err := p.tick(t.Context(), session)
+	published, fetched, err := p.tick(t.Context())
 	if err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -167,23 +177,23 @@ func TestTickPublishesBatchInOrder(t *testing.T) {
 		}
 	}
 
-	if len(session.marked) != 1 || len(session.marked[0]) != 3 {
-		t.Fatalf("marked = %v, want one batch of 3", session.marked)
+	if len(outbox.marked) != 1 || len(outbox.marked[0]) != 3 {
+		t.Fatalf("marked = %v, want one batch of 3", outbox.marked)
 	}
 
-	for i, id := range session.marked[0] {
+	for i, id := range outbox.marked[0] {
 		if id != int64(i+1) {
-			t.Fatalf("marked ids = %v, want [1 2 3]", session.marked[0])
+			t.Fatalf("marked ids = %v, want [1 2 3]", outbox.marked[0])
 		}
 	}
 }
 
 func TestTickStopsAtFirstFailure(t *testing.T) {
-	session := &fakeSession{batches: [][]model.OutboxEvent{outboxEvents(1, 2, 3, 4, 5)}}
+	outbox := &fakeOutbox{batches: [][]model.OutboxEvent{outboxEvents(1, 2, 3, 4, 5)}}
 	broker := &fakeBroker{failAt: 2}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	published, fetched, err := p.tick(t.Context(), session)
+	published, fetched, err := p.tick(t.Context())
 	if err != nil {
 		t.Fatalf("tick must not fail on a publish error, got %v", err)
 	}
@@ -196,22 +206,22 @@ func TestTickStopsAtFirstFailure(t *testing.T) {
 		t.Fatalf("published/fetched = %d/%d, want 2/5", published, fetched)
 	}
 
-	if len(session.marked) != 1 || len(session.marked[0]) != 2 ||
-		session.marked[0][0] != 1 || session.marked[0][1] != 2 {
-		t.Fatalf("marked = %v, want the [1 2] prefix only", session.marked)
+	if len(outbox.marked) != 1 || len(outbox.marked[0]) != 2 ||
+		outbox.marked[0][0] != 1 || outbox.marked[0][1] != 2 {
+		t.Fatalf("marked = %v, want the [1 2] prefix only", outbox.marked)
 	}
 
-	if session.backlogCalls == 0 {
+	if outbox.backlogCalls == 0 {
 		t.Fatal("a failed tick must report the backlog")
 	}
 }
 
 func TestTickHeadFailure(t *testing.T) {
-	session := &fakeSession{batches: [][]model.OutboxEvent{outboxEvents(1, 2)}}
+	outbox := &fakeOutbox{batches: [][]model.OutboxEvent{outboxEvents(1, 2)}}
 	broker := &fakeBroker{failAt: 0}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	published, fetched, err := p.tick(t.Context(), session)
+	published, fetched, err := p.tick(t.Context())
 	if err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -220,17 +230,17 @@ func TestTickHeadFailure(t *testing.T) {
 		t.Fatalf("published/fetched = %d/%d, want 0/2", published, fetched)
 	}
 
-	if len(session.marked) != 0 {
-		t.Fatalf("marked = %v, want nothing", session.marked)
+	if len(outbox.marked) != 0 {
+		t.Fatalf("marked = %v, want nothing", outbox.marked)
 	}
 }
 
 func TestTickEmptyBatch(t *testing.T) {
-	session := &fakeSession{}
+	outbox := &fakeOutbox{}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	published, fetched, err := p.tick(t.Context(), session)
+	published, fetched, err := p.tick(t.Context())
 	if err != nil || published != 0 || fetched != 0 {
 		t.Fatalf("tick = %d/%d/%v, want 0/0/nil", published, fetched, err)
 	}
@@ -241,68 +251,37 @@ func TestTickEmptyBatch(t *testing.T) {
 }
 
 func TestTickMarkFailurePropagates(t *testing.T) {
-	session := &fakeSession{
+	outbox := &fakeOutbox{
 		batches: [][]model.OutboxEvent{outboxEvents(1)},
 		markErr: errors.New("db down"),
 	}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	if _, _, err := p.tick(t.Context(), session); err == nil {
+	if _, _, err := p.tick(t.Context()); err == nil {
 		t.Fatal("a database failure must propagate out of the tick")
 	}
 }
 
-func TestCycleStandbySkipsOutbox(t *testing.T) {
-	session := &fakeSession{leader: false}
-	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
-
-	delay := p.cycle(t.Context(), newBackoff(time.Millisecond, time.Second))
-
-	if delay != p.cfg.Interval {
-		t.Fatalf("standby delay = %v, want interval %v", delay, p.cfg.Interval)
-	}
-
-	if session.fetchCalls != 0 {
-		t.Fatal("standby instance read the outbox")
-	}
-
-	if broker.declares != 0 {
-		t.Fatal("standby instance declared topology")
-	}
-
-	if !session.closed {
-		t.Fatal("standby cycle leaked the session")
-	}
-}
-
-func TestCycleDeclareFailureDropsLeadership(t *testing.T) {
-	session := &fakeSession{leader: true}
+func TestLeadDeclareFailureEndsTerm(t *testing.T) {
+	outbox := &fakeOutbox{}
 	broker := &fakeBroker{failAt: -1, declareErr: errors.New("amqp down")}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	delay := p.cycle(t.Context(), newBackoff(time.Millisecond, time.Second))
-
-	if delay <= 0 {
-		t.Fatalf("delay = %v, want a backoff pause", delay)
+	if err := p.lead(t.Context()); err == nil {
+		t.Fatal("declare failure did not end the term")
 	}
 
-	if session.fetchCalls != 0 {
+	if outbox.fetchCalls != 0 {
 		t.Fatal("outbox was read before topology was ready")
 	}
-
-	if !session.closed {
-		t.Fatal("session leaked after declare failure")
-	}
 }
 
-func TestCycleDrainsThenDropsOnDBError(t *testing.T) {
+func TestLeadDrainsThenReturnsDBError(t *testing.T) {
 	// Batch size is 2: a full first batch must trigger an immediate drain
 	// tick, the short second batch a paced one; the scripted fetch error then
-	// ends leadership with a backoff delay.
-	session := &fakeSession{
-		leader: true,
+	// ends the term so another instance can take over.
+	outbox := &fakeOutbox{
 		batches: [][]model.OutboxEvent{
 			outboxEvents(1, 2),
 			outboxEvents(3),
@@ -310,31 +289,40 @@ func TestCycleDrainsThenDropsOnDBError(t *testing.T) {
 		fetchErr: errNoMoreBatches,
 	}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
-	delay := p.cycle(t.Context(), newBackoff(time.Millisecond, time.Second))
-
-	if delay <= 0 {
-		t.Fatalf("delay = %v, want a backoff pause after the DB error", delay)
+	err := p.lead(t.Context())
+	if !errors.Is(err, errNoMoreBatches) {
+		t.Fatalf("lead error = %v, want the database failure", err)
 	}
 
 	if len(broker.calls) != 3 {
 		t.Fatalf("published %d messages, want 3", len(broker.calls))
 	}
 
-	if session.fetchCalls != 3 {
-		t.Fatalf("fetch called %d times, want 3", session.fetchCalls)
+	if outbox.fetchCalls != 3 {
+		t.Fatalf("fetch called %d times, want 3", outbox.fetchCalls)
 	}
+}
 
-	if !session.closed {
-		t.Fatal("session leaked after leadership ended")
+func TestLeadStopsWithTheTerm(t *testing.T) {
+	outbox := &fakeOutbox{}
+	broker := &fakeBroker{failAt: -1}
+	p := newTestPoller(outbox, broker)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := p.lead(ctx); err != nil {
+		t.Fatalf("a canceled term reported an error: %v", err)
 	}
 }
 
 func TestStartStop(t *testing.T) {
-	session := &fakeSession{leader: true}
+	outbox := &fakeOutbox{}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	elector := &directElector{}
+	p := newTestPollerWith(outbox, broker, elector)
 
 	p.Start()
 
@@ -351,44 +339,48 @@ func TestStartStop(t *testing.T) {
 	if !broker.closed {
 		t.Fatal("Stop did not close the broker")
 	}
+
+	if elector.runs == 0 {
+		t.Fatal("the loop never campaigned for leadership")
+	}
 }
 
 func TestObserveBacklogCadence(t *testing.T) {
-	session := &fakeSession{batches: [][]model.OutboxEvent{
+	outbox := &fakeOutbox{batches: [][]model.OutboxEvent{
 		outboxEvents(1),
 		outboxEvents(2),
 		outboxEvents(3),
 	}}
 	broker := &fakeBroker{failAt: -1}
-	p := newTestPoller(session, broker)
+	p := newTestPoller(outbox, broker)
 
 	// First successful tick reports (initial observation)...
-	if _, _, err := p.tick(t.Context(), session); err != nil {
+	if _, _, err := p.tick(t.Context()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
 
-	if session.backlogCalls != 1 {
-		t.Fatalf("backlog calls after first tick = %d, want 1", session.backlogCalls)
+	if outbox.backlogCalls != 1 {
+		t.Fatalf("backlog calls after first tick = %d, want 1", outbox.backlogCalls)
 	}
 
 	// ...the next successful tick inside the throttle window must not.
-	if _, _, err := p.tick(t.Context(), session); err != nil {
+	if _, _, err := p.tick(t.Context()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
 
-	if session.backlogCalls != 1 {
-		t.Fatalf("backlog calls inside throttle window = %d, want still 1", session.backlogCalls)
+	if outbox.backlogCalls != 1 {
+		t.Fatalf("backlog calls inside throttle window = %d, want still 1", outbox.backlogCalls)
 	}
 
 	// A publish failure reports regardless of the window.
 	broker.failAt = len(broker.calls)
 
-	if _, _, err := p.tick(t.Context(), session); err != nil {
+	if _, _, err := p.tick(t.Context()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
 
-	if session.backlogCalls != 2 {
-		t.Fatalf("backlog calls after failure = %d, want 2", session.backlogCalls)
+	if outbox.backlogCalls != 2 {
+		t.Fatalf("backlog calls after failure = %d, want 2", outbox.backlogCalls)
 	}
 }
 

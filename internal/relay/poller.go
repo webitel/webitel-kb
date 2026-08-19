@@ -1,13 +1,13 @@
 // Package relay ships pending outbox envelopes to the message broker without
-// inspecting them. One instance holds a session advisory lock and publishes in
-// outbox id order; the others stand by and take over when the leader's
-// database connection dies. Publishing is confirmed by the broker before a row
-// is marked, so delivery is at-least-once and duplicates are the consumer's
-// normal case.
+// inspecting them. The instance that holds the cluster leadership publishes in
+// outbox id order; the others stand by. Publishing is confirmed by the broker
+// before a row is marked, so delivery is at-least-once and duplicates are the
+// consumer's normal case.
 package relay
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -22,20 +22,21 @@ const (
 	// a backlog exists.
 	backlogLogEvery = 30 * time.Second
 
-	// detachedOpTimeout bounds the operations that must run even during
-	// shutdown: releasing the leader lock and stamping an already-confirmed
-	// publish prefix.
+	// detachedOpTimeout bounds the work that must run even during shutdown:
+	// stamping an already-confirmed publish prefix.
 	detachedOpTimeout = 5 * time.Second
 )
 
-// Session is the relay's outbox view, pinned to one database connection that
-// also carries the leader lock.
-type Session interface {
-	TryLeaderLock(ctx context.Context) (bool, error)
+// Outbox is the relay's view of the queue.
+type Outbox interface {
 	FetchUnpublished(ctx context.Context, limit int) ([]model.OutboxEvent, error)
 	MarkPublished(ctx context.Context, ids []int64) error
 	Backlog(ctx context.Context) (count int64, oldest time.Duration, err error)
-	Close(ctx context.Context)
+}
+
+// Elector runs the callback while this instance leads the cluster.
+type Elector interface {
+	Run(ctx context.Context, lead func(ctx context.Context) error)
 }
 
 // Broker publishes envelopes with delivery confirmation.
@@ -62,10 +63,11 @@ type Config struct {
 
 // Poller runs the relay loop.
 type Poller struct {
-	cfg    Config
-	open   func(ctx context.Context) (Session, error)
-	broker Broker
-	log    *slog.Logger
+	cfg     Config
+	outbox  Outbox
+	broker  Broker
+	elector Elector
+	log     *slog.Logger
 
 	cancel         context.CancelFunc
 	done           chan struct{}
@@ -73,12 +75,13 @@ type Poller struct {
 }
 
 // New assembles a poller; Start launches it.
-func New(cfg Config, open func(ctx context.Context) (Session, error), broker Broker, log *slog.Logger) *Poller {
+func New(cfg Config, outbox Outbox, broker Broker, elector Elector, log *slog.Logger) *Poller {
 	return &Poller{
-		cfg:    cfg,
-		open:   open,
-		broker: broker,
-		log:    log,
+		cfg:     cfg,
+		outbox:  outbox,
+		broker:  broker,
+		elector: elector,
+		log:     log,
 	}
 }
 
@@ -116,83 +119,29 @@ func (p *Poller) Stop(ctx context.Context) error {
 func (p *Poller) run(ctx context.Context) {
 	defer close(p.done)
 
+	p.elector.Run(ctx, p.lead)
+}
+
+// lead relays while this instance holds leadership. A database failure ends
+// the term so a healthier instance can take over; publish failures do not,
+// they only slow the ticks down.
+func (p *Poller) lead(ctx context.Context) error {
+	if err := p.broker.Declare(ctx, reindexTopology()); err != nil {
+		return fmt.Errorf("relay: declare topology: %w", err)
+	}
+
 	b := newBackoff(time.Second, 30*time.Second)
 
 	for ctx.Err() == nil {
-		if delay := p.cycle(ctx, b); delay > 0 {
-			sleep(ctx, delay)
-		}
-	}
-}
-
-// cycle opens a session and, when this instance wins leadership, relays until
-// an error or shutdown; it returns how long to sleep before the next cycle.
-func (p *Poller) cycle(ctx context.Context, b *backoff) time.Duration {
-	session, err := p.open(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return 0
-		}
-
-		p.log.Error("kb.relay.session_failed", slog.Any("error", err))
-
-		return b.next()
-	}
-	// The unlock must run even when ctx is already canceled on shutdown, but
-	// with its own bound: an unresponsive database must not hang the stop.
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedOpTimeout)
-		defer cancel()
-
-		session.Close(closeCtx)
-	}()
-
-	leader, err := session.TryLeaderLock(ctx)
-	if err != nil {
-		p.log.Error("kb.relay.leader_lock_failed", slog.Any("error", err))
-
-		return b.next()
-	}
-
-	if !leader {
-		// Another live instance leads; local failures, if any, are over.
-		b.reset()
-		p.log.Debug("kb.relay.standby")
-
-		return p.cfg.Interval
-	}
-
-	if err := p.broker.Declare(ctx, reindexTopology()); err != nil {
-		p.log.Error("kb.relay.declare_failed", slog.Any("error", err))
-
-		return b.next()
-	}
-
-	b.reset()
-	p.log.Info("kb.relay.leader_acquired")
-
-	return p.lead(ctx, session, b)
-}
-
-// lead ticks until shutdown or a database error; a database error drops
-// leadership so a healthier instance can take over.
-func (p *Poller) lead(ctx context.Context, session Session, b *backoff) time.Duration {
-	for {
-		if ctx.Err() != nil {
-			return 0
-		}
-
-		published, fetched, err := p.tick(ctx, session)
+		published, fetched, err := p.tick(ctx)
 
 		switch {
 		case err != nil:
 			if ctx.Err() != nil {
-				return 0
+				return nil
 			}
 
-			p.log.Error("kb.relay.tick_failed", slog.Any("error", err))
-
-			return b.next()
+			return err
 		case fetched > 0 && published == 0:
 			// The head of the queue cannot be published (broker down or a
 			// failing message): stay leader, retry with growing pauses.
@@ -205,14 +154,16 @@ func (p *Poller) lead(ctx context.Context, session Session, b *backoff) time.Dur
 			sleep(ctx, p.cfg.Interval)
 		}
 	}
+
+	return nil
 }
 
 // tick publishes one batch in outbox id order, stopping at the first failure,
 // and marks the contiguous successful prefix. A publish failure is not an
 // error: the unpublished tail is retried next tick. Only database failures
 // propagate.
-func (p *Poller) tick(ctx context.Context, session Session) (published, fetched int, err error) {
-	events, err := session.FetchUnpublished(ctx, p.cfg.Batch)
+func (p *Poller) tick(ctx context.Context) (published, fetched int, err error) {
+	events, err := p.outbox.FetchUnpublished(ctx, p.cfg.Batch)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -243,7 +194,7 @@ func (p *Poller) tick(ctx context.Context, session Session) (published, fetched 
 		// survive a shutdown-canceled ctx, or every graceful restart would
 		// republish it.
 		markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedOpTimeout)
-		err := session.MarkPublished(markCtx, ids)
+		err := p.outbox.MarkPublished(markCtx, ids)
 
 		cancel()
 
@@ -256,7 +207,7 @@ func (p *Poller) tick(ctx context.Context, session Session) (published, fetched 
 		slog.Int("fetched", len(events)),
 		slog.Int("published", len(ids)))
 
-	p.observeBacklog(ctx, session, len(ids) < len(events))
+	p.observeBacklog(ctx, len(ids) < len(events))
 
 	return len(ids), len(events), nil
 }
@@ -277,14 +228,14 @@ func (p *Poller) publish(ctx context.Context, e *model.OutboxEvent) error {
 // most once per backlogLogEvery otherwise. The worker-side metrics only see
 // messages that already reached the broker, so this is the sole signal of a
 // stuck relay.
-func (p *Poller) observeBacklog(ctx context.Context, session Session, failed bool) {
+func (p *Poller) observeBacklog(ctx context.Context, failed bool) {
 	if !failed && time.Since(p.lastBacklogLog) < backlogLogEvery {
 		return
 	}
 
 	p.lastBacklogLog = time.Now()
 
-	count, oldest, err := session.Backlog(ctx)
+	count, oldest, err := p.outbox.Backlog(ctx)
 	if err != nil {
 		p.log.Debug("kb.relay.backlog_failed", slog.Any("error", err))
 

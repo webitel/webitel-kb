@@ -79,7 +79,29 @@ error and the outbox row stays unpublished.
 Changing an exchange type or queue arguments in place is impossible: it is a
 delete+recreate ops step.
 
-## 5. Delivery and idempotency
+## 5. Relay leadership
+
+Exactly one kb-api instance relays at a time. Leadership is a Consul KV lock:
+the instance holds a session (TTL `10s`, behavior `release`) on the key
+`service/webitel-kb/leader`, whose value is the instance id. The session is
+renewed every `5s`, and standby instances block on the key, so a released key is
+picked up at once rather than on a poll.
+
+Two Consul rules shape the numbers: an abandoned session is invalidated at up to
+**twice** its TTL, and a lock delay of zero is read as "unset" and replaced by a
+15s default. Hence the ten second TTL (the Consul minimum) and an explicitly
+tiny lock delay: an unclean death costs up to 20s of standstill, well inside the
+re-index lag budget.
+
+What follows from it:
+
+- a graceful stop destroys the session and frees the key at once, so a rolling
+  restart barely pauses publishing;
+- at a handover an in-flight message may be published twice, and outbox order
+  may be crossed exactly at that boundary. Both are covered by the worker
+  idempotency;
+
+## 6. Delivery and idempotency
 
 At-least-once; duplicates are normal (crash between publish and mark, relay
 leader change with a publish in flight). Normative worker idempotency, NOT
@@ -89,7 +111,7 @@ message_id dedup:
 - published-version swap is monotonic (a stale job cannot roll back a newer version);
 - retention cleanup of previous-version chunks runs only AFTER a successful swap.
 
-## 6. Consumption: ack, retry, DLQ
+## 7. Consumption: ack, retry, DLQ
 
 - `basic_ack` manually AFTER processing completes.
 - Transient errors (timeout/429/5xx): up to 5 in-process retries with
@@ -101,10 +123,10 @@ message_id dedup:
 - DLQ carries the `x-death` header. Redrive is manual (fix the cause, republish
   to `kb.reindex`). No automatic redrive in v1.
 
-## 7. Ordering
+## 8. Ordering
 
-Guaranteed by "one active relay publishes in outbox id order" plus "one
-consumer with prefetch=1". Multiple worker instances are allowed for failover;
+Guaranteed by "one active relay publishes in outbox id order" plus
+"one consumer with prefetch=1". Multiple worker instances are allowed for failover;
 only one consumes.
 
 Seeding scale-out: adding consumers is allowed and deliberately breaks
@@ -112,7 +134,7 @@ per-article FIFO. Safe: the monotonic swap guard decides correctness; a losing
 job leaves at most orphan chunks of its own version. Do NOT build cross-instance
 ordering coordination.
 
-## 8. Schema evolution
+## 9. Schema evolution
 
 Consumer: ignore unknown fields; unknown `type` or `schema` greater than
 supported: `basic_nack(requeue=False)` to DLQ with a log.
@@ -120,7 +142,7 @@ supported: `basic_nack(requeue=False)` to DLQ with a log.
 Producer: additive fields keep `schema`; changing or removing a field bumps it
 and requires worker sign-off before release.
 
-## 9. `kb.article.index_state`
+## 10. `kb.article.index_state`
 
 Numeric codes are authoritative:
 
