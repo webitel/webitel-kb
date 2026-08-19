@@ -80,6 +80,11 @@ type ArticleStore interface {
 
 	// SuggestTags returns the distinct tags of a space matching a prefix.
 	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
+
+	// AcquireSpaceMoveLock serializes article moves within a space until the
+	// transaction ends, so concurrent moves cannot weave a cycle their
+	// snapshots would not see.
+	AcquireSpaceMoveLock(ctx context.Context, spaceID int64) error
 }
 
 // ArticleVersionStore persists the immutable version history of articles.

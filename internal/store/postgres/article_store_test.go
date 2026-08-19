@@ -606,3 +606,20 @@ func TestArticleLocateForUpdateLocks(t *testing.T) {
 		t.Fatalf("SQL %q does not lock the row", f.gotSQL)
 	}
 }
+
+func TestArticleAcquireSpaceMoveLock(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &articleStore{db: f}
+
+	if err := s.AcquireSpaceMoveLock(context.Background(), 7); err != nil {
+		t.Fatalf("AcquireSpaceMoveLock: %v", err)
+	}
+
+	if !strings.Contains(f.gotSQL, "pg_advisory_xact_lock") {
+		t.Fatalf("SQL %q does not take a transaction advisory lock", f.gotSQL)
+	}
+
+	if f.gotArgs[0] != 27491 || f.gotArgs[1] != int64(7) {
+		t.Fatalf("args = %v, want the move lock class and the space id", f.gotArgs)
+	}
+}
