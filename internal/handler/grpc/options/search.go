@@ -94,6 +94,17 @@ func WithPagination(pager Pager) SearchOption {
 	}
 }
 
+// WithUnlimitedSize disables paging for a request the contract gives no pager,
+// so a listing bounded by the data itself is never cut at a default page.
+func WithUnlimitedSize() SearchOption {
+	return func(s *SearchOptions) error {
+		s.size = options.UnlimitedSize
+		s.page = 1
+
+		return nil
+	}
+}
+
 // WithFields applies the requested output fields. Names are only normalized
 // here; the store validates them against its own field metadata, so the allowed
 // set is declared in exactly one place.
