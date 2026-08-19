@@ -20,7 +20,7 @@ const noteLimit = 50
 
 // ArticleService owns the article business rules: input validation, body
 // conversion, the versioned save flow and hierarchy validation with honest
-// errors. 
+// errors.
 type ArticleService struct {
 	uow store.UnitOfWork
 }
