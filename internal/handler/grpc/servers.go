@@ -4,30 +4,6 @@ import (
 	"github.com/webitel/webitel-kb/api/kb"
 )
 
-type ArticlesServer struct {
-	kb.UnimplementedArticlesServer
-}
-
-func NewArticlesServer() *ArticlesServer {
-	return &ArticlesServer{}
-}
-
-type VersionsServer struct {
-	kb.UnimplementedVersionsServer
-}
-
-func NewVersionsServer() *VersionsServer {
-	return &VersionsServer{}
-}
-
-type TagsServer struct {
-	kb.UnimplementedTagsServer
-}
-
-func NewTagsServer() *TagsServer {
-	return &TagsServer{}
-}
-
 type AttachmentsServer struct {
 	kb.UnimplementedAttachmentsServer
 }
