@@ -11,9 +11,10 @@ import (
 
 // A renewal Consul never answers must return a bounded error, not hang.
 func TestRenewIsBoundedWhenConsulStalls(t *testing.T) {
+	blocked := make(chan struct{})
+
 	// Hang until the client's deadline fires or the test ends, so
 	// httptest.Close never waits on a live handler.
-	blocked := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
@@ -25,7 +26,7 @@ func TestRenewIsBoundedWhenConsulStalls(t *testing.T) {
 
 	cfg := api.DefaultConfig()
 	cfg.Address = srv.URL
-	// No idle connections, so a cancelled request leaks no goroutine for goleak.
+	// No idle connections, so a canceled request leaks no goroutine for goleak.
 	cfg.Transport.DisableKeepAlives = true
 	defer cfg.Transport.CloseIdleConnections()
 
