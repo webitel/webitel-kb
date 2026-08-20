@@ -60,9 +60,15 @@ func (f *fakeArticleStore) List(_ context.Context, _ options.Searcher, filter mo
 func (f *fakeArticleStore) Locate(_ context.Context, opts options.Searcher) (*model.Article, error) {
 	f.plainLocates++
 	f.locateFields = append(f.locateFields, opts.GetFields())
+	f.step("locate")
 
 	if f.locateErr != nil {
 		return nil, f.locateErr
+	}
+
+	ids := opts.GetIDs()
+	if f.current != nil && len(ids) == 1 && ids[0] == f.current.ID {
+		return f.current, nil
 	}
 
 	if f.located == nil {
@@ -522,10 +528,11 @@ func TestArticleMoveFlow(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	// The space lock comes before any validation read, all inside one
-	// transaction, so concurrent moves serialize on a consistent snapshot.
+	// The space lock comes before every row lock and before any validation
+	// read, all inside one transaction: concurrent moves then serialize on a
+	// consistent snapshot instead of deadlocking on inverted lock order.
 	order := strings.Join(uow.articles.callOrder, ",")
-	if order != "locate-for-update,space-lock,subtree,move" {
+	if order != "locate,space-lock,locate-for-update,subtree,locate,move" {
 		t.Fatalf("flow order = %s", order)
 	}
 
@@ -582,8 +589,9 @@ func TestArticleMoveToTopSkipsTargetChecks(t *testing.T) {
 		t.Fatalf("Move: %v", err)
 	}
 
-	if uow.articles.plainLocates != 0 {
-		t.Fatal("moving to the top level needs no target read")
+	// Only the read that finds the space to lock; no target to validate.
+	if uow.articles.plainLocates != 1 {
+		t.Fatalf("plain locates = %d, want only the space read", uow.articles.plainLocates)
 	}
 
 	if uow.articles.moveCalls != 1 {

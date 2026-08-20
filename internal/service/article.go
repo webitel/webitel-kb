@@ -270,14 +270,21 @@ func (s *ArticleService) Move(
 	var moved *model.Article
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
-		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth"},
+		located, err := tx.ArticleStore().Locate(ctx, readOptions{
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"},
 		})
 		if err != nil {
 			return err
 		}
 
-		if err := tx.ArticleStore().AcquireSpaceMoveLock(ctx, current.SpaceID); err != nil {
+		if err := tx.ArticleStore().AcquireSpaceMoveLock(ctx, located.SpaceID); err != nil {
+			return err
+		}
+
+		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth"},
+		})
+		if err != nil {
 			return err
 		}
 
