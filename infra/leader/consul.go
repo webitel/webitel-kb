@@ -20,8 +20,37 @@ func (c consulClient) Create(ctx context.Context, entry *api.SessionEntry) (stri
 	return id, err
 }
 
-func (c consulClient) Renew(ttl, sessionID string, done <-chan struct{}) error {
-	return c.client.Session().RenewPeriodic(ttl, sessionID, nil, done)
+// Renew refreshes the session until done closes, bounding every request with a
+// deadline. Unlike RenewPeriodic, a stalled request cannot hang teardown.
+func (c consulClient) Renew(period, sessionID string, done <-chan struct{}) error {
+	every, err := time.ParseDuration(period)
+	if err != nil {
+		return err
+	}
+
+	// Refresh twice per period; both stay under the session TTL.
+	ticker := time.NewTicker(every / 2)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return nil
+		case <-ticker.C:
+			if err := c.renewOnce(sessionID, every); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (c consulClient) renewOnce(sessionID string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	_, _, err := c.client.Session().Renew(sessionID, (&api.WriteOptions{}).WithContext(ctx))
+
+	return err
 }
 
 func (c consulClient) Acquire(ctx context.Context, pair *api.KVPair) (bool, error) {

@@ -182,8 +182,8 @@ func (p *Publisher) Declare(_ context.Context, topology Topology) error {
 	return nil
 }
 
-// Close tears the connection down; in-flight and future calls fail with
-// ErrClosed.
+// Close tears the connection down. It shares the lock with Publish, so it waits
+// out an in-flight call; only calls started after Close fail with ErrClosed.
 func (p *Publisher) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
