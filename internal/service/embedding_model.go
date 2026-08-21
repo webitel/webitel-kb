@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"net/url"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -368,6 +369,16 @@ func validateDimensions(in *model.EmbeddingModel) error {
 		return errors.InvalidArgument(
 			"dimensions are required for an embedding model",
 			errors.WithID("kb.model.dimensions_required"),
+		)
+	}
+
+	// Chunk vectors live in one fixed-size column, so a model of any other
+	// size is rejected here instead of failing later in the worker.
+	if in.Type == model.ModelTypeEmbedding && in.Dimensions != model.EmbeddingStorageDimensions {
+		return errors.InvalidArgument(
+			fmt.Sprintf("dimensions must be %d to match the embedding storage",
+				model.EmbeddingStorageDimensions),
+			errors.WithID("kb.model.dimensions_unsupported"),
 		)
 	}
 
