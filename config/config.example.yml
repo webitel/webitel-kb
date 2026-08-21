@@ -26,3 +26,8 @@ consul:
 pubsub:
   url: "amqp://webitel:webitel@127.0.0.1:5672/"
   driver: "amqp"
+
+relay:
+  interval: 1s
+  batch: 100
+  publish_timeout: 5s

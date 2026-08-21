@@ -7,10 +7,12 @@ import (
 
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
+	"github.com/webitel/webitel-kb/infra/leader"
 	"github.com/webitel/webitel-kb/infra/pubsub"
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	"github.com/webitel/webitel-kb/infra/tls"
 	grpchandler "github.com/webitel/webitel-kb/internal/handler/grpc"
+	"github.com/webitel/webitel-kb/internal/relay"
 	"github.com/webitel/webitel-kb/internal/service"
 	"github.com/webitel/webitel-kb/internal/store/postgres"
 )
@@ -31,6 +33,8 @@ func NewApp(cfg *config.Config) *fx.App {
 		pubsub.Module,
 		tls.Module,
 		postgres.Module,
+		leader.Module,
+		relay.Module,
 		service.Module,
 		grpcsrv.Module,
 		grpchandler.Module,
