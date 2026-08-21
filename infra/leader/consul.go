@@ -48,9 +48,18 @@ func (c consulClient) renewOnce(sessionID string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	_, _, err := c.client.Session().Renew(sessionID, (&api.WriteOptions{}).WithContext(ctx))
+	entry, _, err := c.client.Session().Renew(sessionID, (&api.WriteOptions{}).WithContext(ctx))
+	if err != nil {
+		return err
+	}
 
-	return err
+	// Consul answers a session it no longer knows with 404, which the client
+	// reports as a nil entry and no error. That is a loss, not a renewal.
+	if entry == nil {
+		return api.ErrSessionExpired
+	}
+
+	return nil
 }
 
 func (c consulClient) Acquire(ctx context.Context, pair *api.KVPair) (bool, error) {
