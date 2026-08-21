@@ -237,11 +237,11 @@ func cloudInput() *model.EmbeddingModel {
 func embeddedInput() *model.EmbeddingModel {
 	return &model.EmbeddingModel{
 		Type:         model.ModelTypeEmbedding,
-		Name:         "bge local",
-		Provider:     embedding.ProviderBGEM3,
+		Name:         "e5 local",
+		Provider:     embedding.ProviderE5,
 		IsSelfHosted: true,
-		ModelRef:     "BAAI/bge-m3",
-		Dimensions:   1024,
+		ModelRef:     "intfloat/multilingual-e5-base",
+		Dimensions:   768,
 		Endpoint:     "http://embedder:8080",
 	}
 }
@@ -311,6 +311,26 @@ func TestValidateInput(t *testing.T) {
 			name:   "embedding without dimensions",
 			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 0 },
 			apiKey: "k", create: true, wantID: "kb.model.dimensions_required",
+		},
+		{
+			name:   "embedding above the storage vector",
+			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 1024 },
+			apiKey: "k", create: true, wantID: "kb.model.dimensions_unsupported",
+		},
+		{
+			name:   "embedding resized on update",
+			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 3072 },
+			create: false, wantID: "kb.model.dimensions_unsupported",
+		},
+		{
+			name: "self-hosted model above the storage vector",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Provider = embedding.ProviderBGEM3
+				in.ModelRef = "BAAI/bge-m3"
+				in.Dimensions = 1024
+			},
+			create: true, wantID: "kb.model.dimensions_unsupported",
 		},
 		{
 			name: "reranker with dimensions",
