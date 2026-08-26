@@ -10,7 +10,7 @@ const (
 
 // EmbeddingStorageDimensions is the vector size of kb.chunk_embedding. The ANN
 // index needs the size in the column type, so one installation stores exactly
-// one dimension and models of any other size cannot be registered.
+// one dimension and every embedding model is registered with it.
 const EmbeddingStorageDimensions int32 = 768
 
 // EmbeddingModel is a registry entry of an embedding or reranker model. The

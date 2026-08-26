@@ -226,11 +226,10 @@ func newModelService(models *fakeModelStore, sealer fakeSealer, resolver *fakeRe
 
 func cloudInput() *model.EmbeddingModel {
 	return &model.EmbeddingModel{
-		Type:       model.ModelTypeEmbedding,
-		Name:       "gemini prod",
-		Provider:   embedding.ProviderGemini,
-		ModelRef:   "gemini-embedding-001",
-		Dimensions: 768,
+		Type:     model.ModelTypeEmbedding,
+		Name:     "gemini prod",
+		Provider: embedding.ProviderGemini,
+		ModelRef: "gemini-embedding-001",
 	}
 }
 
@@ -241,7 +240,6 @@ func embeddedInput() *model.EmbeddingModel {
 		Provider:     embedding.ProviderE5,
 		IsSelfHosted: true,
 		ModelRef:     "intfloat/multilingual-e5-base",
-		Dimensions:   768,
 		Endpoint:     "http://embedder:8080",
 	}
 }
@@ -308,46 +306,11 @@ func TestValidateInput(t *testing.T) {
 			apiKey: "k", create: true, wantID: "kb.model.model_ref_required",
 		},
 		{
-			name:   "embedding without dimensions",
-			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 0 },
-			apiKey: "k", create: true, wantID: "kb.model.dimensions_required",
-		},
-		{
-			name:   "embedding above the storage vector",
-			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 1024 },
-			apiKey: "k", create: true, wantID: "kb.model.dimensions_unsupported",
-		},
-		{
-			name:   "embedding resized on update",
-			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 3072 },
-			create: false, wantID: "kb.model.dimensions_unsupported",
-		},
-		{
-			name: "self-hosted model above the storage vector",
-			mutate: func(in *model.EmbeddingModel) {
-				*in = *embeddedInput()
-				in.Provider = embedding.ProviderBGEM3
-				in.ModelRef = "BAAI/bge-m3"
-				in.Dimensions = 1024
-			},
-			create: true, wantID: "kb.model.dimensions_unsupported",
-		},
-		{
-			name: "reranker with dimensions",
-			mutate: func(in *model.EmbeddingModel) {
-				*in = *embeddedInput()
-				in.Type = model.ModelTypeReranker
-				in.Provider = embedding.ProviderBGEReranker
-			},
-			create: true, wantID: "kb.model.dimensions_not_applicable",
-		},
-		{
 			name: "valid embedded reranker",
 			mutate: func(in *model.EmbeddingModel) {
 				*in = *embeddedInput()
 				in.Type = model.ModelTypeReranker
 				in.Provider = embedding.ProviderBGEReranker
-				in.Dimensions = 0
 			},
 			create: true,
 		},
@@ -399,6 +362,69 @@ func TestValidateInput(t *testing.T) {
 
 			if err == nil || errors.ID(err) != tt.wantID {
 				t.Fatalf("validateInput error = %v, want id %q", err, tt.wantID)
+			}
+		})
+	}
+}
+
+func TestStorageDimensionsAreAssigned(t *testing.T) {
+	rerankerInput := func() *model.EmbeddingModel {
+		in := embeddedInput()
+		in.Type = model.ModelTypeReranker
+		in.Provider = embedding.ProviderBGEReranker
+
+		return in
+	}
+
+	tests := []struct {
+		name  string
+		in    *model.EmbeddingModel
+		asked int32
+		want  int32
+	}{
+		{name: "embedding takes the storage size", in: cloudInput(), want: model.EmbeddingStorageDimensions},
+		{
+			name: "embedding ignores the asked size", in: cloudInput(),
+			asked: 1024, want: model.EmbeddingStorageDimensions,
+		},
+		{name: "reranker takes none", in: rerankerInput()},
+		{name: "reranker ignores the asked size", in: rerankerInput(), asked: 768},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{
+				located: &model.EmbeddingModel{ID: 1, Type: tt.in.Type},
+				written: &model.EmbeddingModel{ID: 1},
+			}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1}
+			apiKey := ""
+
+			if !tt.in.IsSelfHosted {
+				apiKey = "k"
+			}
+
+			in := *tt.in
+			in.Dimensions = tt.asked
+
+			if _, err := svc.Create(context.Background(), opts, &in, apiKey); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			if models.createIn.Dimensions != tt.want {
+				t.Fatalf("created dimensions = %d, want %d", models.createIn.Dimensions, tt.want)
+			}
+
+			in = *tt.in
+			in.Dimensions = tt.asked
+
+			if _, err := svc.Update(context.Background(), opts, &in, ""); err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if models.updateIn.Dimensions != tt.want {
+				t.Fatalf("updated dimensions = %d, want %d", models.updateIn.Dimensions, tt.want)
 			}
 		})
 	}

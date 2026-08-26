@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	stderrors "errors"
-	"fmt"
 	"net/url"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -86,6 +85,8 @@ func (s *EmbeddingModelService) Create(
 		return nil, err
 	}
 
+	setStorageDimensions(in)
+
 	config, err := s.sealKey(ctx, apiKey)
 	if err != nil {
 		return nil, err
@@ -105,6 +106,8 @@ func (s *EmbeddingModelService) Update(
 	if err := validateInput(in, apiKey, false); err != nil {
 		return nil, err
 	}
+
+	setStorageDimensions(in)
 
 	found, err := s.uow.EmbeddingModelStore().Locate(ctx, readOptions{
 		auth:   opts.GetAuthOpts(),
@@ -329,10 +332,6 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 		)
 	}
 
-	if err := validateDimensions(in); err != nil {
-		return err
-	}
-
 	if in.Endpoint != "" && !validEndpointURL(in.Endpoint) {
 		return errors.InvalidArgument(
 			"endpoint must be an absolute http(s) URL",
@@ -341,6 +340,17 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 	}
 
 	return validateKey(in, apiKey, create)
+}
+
+// setStorageDimensions assigns the vector size the schema stores.
+func setStorageDimensions(in *model.EmbeddingModel) {
+	if in.Type == model.ModelTypeEmbedding {
+		in.Dimensions = model.EmbeddingStorageDimensions
+
+		return
+	}
+
+	in.Dimensions = 0
 }
 
 func validateProvider(in *model.EmbeddingModel) error {
@@ -358,34 +368,6 @@ func validateProvider(in *model.EmbeddingModel) error {
 		return errors.InvalidArgument(
 			"is_self_hosted does not match the provider",
 			errors.WithID("kb.model.self_hosted_mismatch"),
-		)
-	}
-
-	return nil
-}
-
-func validateDimensions(in *model.EmbeddingModel) error {
-	if in.Type == model.ModelTypeEmbedding && in.Dimensions <= 0 {
-		return errors.InvalidArgument(
-			"dimensions are required for an embedding model",
-			errors.WithID("kb.model.dimensions_required"),
-		)
-	}
-
-	// Chunk vectors live in one fixed-size column, so a model of any other
-	// size is rejected here instead of failing later in the worker.
-	if in.Type == model.ModelTypeEmbedding && in.Dimensions != model.EmbeddingStorageDimensions {
-		return errors.InvalidArgument(
-			fmt.Sprintf("dimensions must be %d to match the embedding storage",
-				model.EmbeddingStorageDimensions),
-			errors.WithID("kb.model.dimensions_unsupported"),
-		)
-	}
-
-	if in.Type == model.ModelTypeReranker && in.Dimensions != 0 {
-		return errors.InvalidArgument(
-			"dimensions apply to embedding models only",
-			errors.WithID("kb.model.dimensions_not_applicable"),
 		)
 	}
 
