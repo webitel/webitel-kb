@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/ThreeDotsLabs/watermill v1.5.2
 	github.com/ThreeDotsLabs/watermill-amqp/v3 v3.1.0
+	github.com/ThreeDotsLabs/watermill-sql/v4 v4.1.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
@@ -16,6 +17,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mbobakov/grpc-consul-resolver v1.5.3
 	github.com/pressly/goose/v3 v3.27.3
+	github.com/rabbitmq/amqp091-go v1.13.0
 	github.com/spf13/pflag v1.0.10
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/webitel/crypto/cryptobox v0.1.0
@@ -23,6 +25,7 @@ require (
 	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260803090450-fac61ca3df42
 	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
+	github.com/webitel/webitel-go-kit/infra/pubsub/rabbitmq v0.0.0-20260826083159-429f167cb300
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/etag v0.2.0
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.1.1
@@ -43,6 +46,7 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
@@ -65,12 +69,13 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.23 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.11.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
+	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/webitel/crypto/env v0.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -97,7 +102,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260803090450-fac61ca3df42
+	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260826083159-429f167cb300
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

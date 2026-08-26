@@ -26,3 +26,10 @@ consul:
 pubsub:
   url: "amqp://webitel:webitel@127.0.0.1:5672/"
   driver: "amqp"
+
+relay:
+  poll_interval: 1s
+  publish_timeout: 5s
+  retention: 72h
+  cleanup_interval: 24h
+  cleanup_batch: 5000

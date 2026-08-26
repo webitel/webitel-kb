@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/pflag"
@@ -18,11 +19,21 @@ type Config struct {
 	Redis    appconfig.Redis    `mapstructure:"redis"`
 	Consul   appconfig.Consul   `mapstructure:"consul"`
 	Pubsub   appconfig.Pubsub   `mapstructure:"pubsub"`
+	Relay    RelayConfig        `mapstructure:"relay"`
 }
 
 type ServiceConfig struct {
 	Addr       string             `mapstructure:"addr"`
 	Connection appconfig.GRPCConn `mapstructure:"conn"`
+}
+
+// RelayConfig tunes the outbox relay.
+type RelayConfig struct {
+	PollInterval    time.Duration `mapstructure:"poll_interval"`
+	PublishTimeout  time.Duration `mapstructure:"publish_timeout"`
+	Retention       time.Duration `mapstructure:"retention"`
+	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
+	CleanupBatch    int           `mapstructure:"cleanup_batch"`
 }
 
 // LoadServerConfig loads the full configuration required by the gRPC server.
@@ -95,6 +106,11 @@ func LoadMigrateConfig() (*Config, error) {
 func registerServiceFlags() {
 	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
 	appconfig.RegisterGRPCConnFlags(pflag.CommandLine, "service.conn", true)
+	pflag.Duration("relay.poll_interval", time.Second, "outbox relay poll interval")
+	pflag.Duration("relay.publish_timeout", 5*time.Second, "outbox relay publish confirmation timeout")
+	pflag.Duration("relay.retention", 72*time.Hour, "how long a relayed outbox row is kept")
+	pflag.Duration("relay.cleanup_interval", 24*time.Hour, "how often relayed outbox rows are removed")
+	pflag.Int("relay.cleanup_batch", 5000, "how many outbox rows one cleanup statement removes")
 }
 
 func (c *Config) validate() error {
@@ -128,6 +144,30 @@ func (c *Config) validate() error {
 
 	if !strings.HasPrefix(c.Pubsub.URL, "amqp://") && !strings.HasPrefix(c.Pubsub.URL, "amqps://") {
 		return errors.New("config: pubsub.url must start with amqp:// or amqps://")
+	}
+
+	return c.Relay.validate()
+}
+
+func (c RelayConfig) validate() error {
+	if c.PollInterval <= 0 {
+		return errors.New("config: relay.poll_interval must be positive")
+	}
+
+	if c.PublishTimeout <= 0 {
+		return errors.New("config: relay.publish_timeout must be positive")
+	}
+
+	if c.Retention <= 0 {
+		return errors.New("config: relay.retention must be positive")
+	}
+
+	if c.CleanupInterval <= 0 {
+		return errors.New("config: relay.cleanup_interval must be positive")
+	}
+
+	if c.CleanupBatch < 1 || c.CleanupBatch > 100000 {
+		return errors.New("config: relay.cleanup_batch must be within [1, 100000]")
 	}
 
 	return nil
