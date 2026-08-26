@@ -167,7 +167,7 @@ func TestModelFromInput(t *testing.T) {
 
 	want := &model.EmbeddingModel{
 		Type: "embedding", Name: "bge local", Provider: "bge-m3",
-		IsSelfHosted: true, ModelRef: "BAAI/bge-m3", Dimensions: 1024,
+		IsSelfHosted: true, ModelRef: "BAAI/bge-m3",
 		Endpoint: "http://embedder:8080",
 	}
 
