@@ -28,6 +28,8 @@ pubsub:
   driver: "amqp"
 
 relay:
-  interval: 1s
-  batch: 100
+  poll_interval: 1s
   publish_timeout: 5s
+  retention: 72h
+  cleanup_interval: 24h
+  cleanup_batch: 5000

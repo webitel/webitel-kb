@@ -1,15 +1,12 @@
 // Package event defines the wire contract for messages the KB service emits
 // through the message broker. The producer builds and validates an envelope
-// here and stores its JSON in the outbox row; the relay hands the stored value
-// to the broker without parsing it back. The outbox column is jsonb, which
-// normalizes the representation (key order is not preserved), so the wire
-// contract is the JSON content, never its byte layout.
+// here and stores its JSON in the outbox row; the relay hands the stored bytes
+// to the broker without parsing them back.
 //
-// Ordering precondition: an outbox row must be inserted in the same database
-// transaction that updates the article row itself (the compare-and-set on its
-// version counter). The row lock taken by that update serializes concurrent
-// writers, which is what makes ascending outbox ids equal commit order — the
-// property the relay's per-article ordering relies on.
+// An outbox row must be inserted in the same database transaction as the
+// article change it describes, so the two commit together. Ordering does not
+// depend on that: the relay reads by (transaction_id, offset), which is commit
+// order rather than insert order.
 package event
 
 import (

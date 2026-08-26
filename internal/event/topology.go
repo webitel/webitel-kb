@@ -26,6 +26,11 @@ const (
 
 	// ReindexContentType is the content type of every published envelope.
 	ReindexContentType = "application/json"
+
+	// ReindexMessageIDHeader carries the outbox message id for tracing. It is
+	// a header rather than the AMQP message_id property because the shared
+	// publisher does not expose message properties.
+	ReindexMessageIDHeader = "x-message-id"
 )
 
 // ReindexQueueArgs returns the declare arguments of the indexing queue.

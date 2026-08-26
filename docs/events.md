@@ -8,7 +8,7 @@ RabbitMQ. Source of truth for names and formats: package `internal/event`.
 1. kb-api stores a new article version and, in the same transaction, inserts a
    row into `kb.outbox_events` with the complete envelope in `payload`.
 2. The relay (background component of kb-api) publishes `payload` as-is to the
-   `kb.reindex` exchange and marks the row published.
+   `kb.reindex` exchange and advances the offset of its consumer group.
 3. The worker consumes queue `kb.reindex`: chunking, embedding, atomic swap of
    the published version, `index_state` transitions.
 
@@ -41,8 +41,8 @@ Message body, JSON, UTF-8:
 Identifiers only, never document bodies; the worker reads content from the
 database by `version_id`. The article's `ver` number is not transmitted.
 
-Field order is NOT guaranteed (the outbox column is jsonb, which normalizes
-the representation). Parse JSON; never hash or compare body bytes.
+The outbox stores the envelope as bytes; parse JSON, field order is not part
+of the contract.
 
 ## 3. AMQP message properties
 
@@ -50,8 +50,8 @@ the representation). Parse JSON; never hash or compare body bytes.
 |---|---|
 | `delivery_mode` | 2 (persistent) |
 | `content_type` | `application/json` |
-| `message_id` | outbox row id, decimal string; stable across republishes; tracing only, NOT a dedup key |
 | routing key | decimal `article_id`, single word, no dots |
+| header `x-message-id` | outbox message uuid; stable across republishes; tracing only, NOT a dedup key |
 
 No other header is part of the contract.
 
@@ -74,7 +74,8 @@ only to the exchange; publishing to the default exchange with routing key
 `kb.reindex` bypasses the topic exchange and is an integration error.
 
 The relay publishes with `mandatory=true`: an unroutable message is a publish
-error and the outbox row stays unpublished.
+error, never a silent drop. It redeclares the topology on every reconnect, so a
+wiped or replaced broker recovers without a restart.
 
 Changing an exchange type or queue arguments in place is impossible: it is a
 delete+recreate ops step.
@@ -125,9 +126,13 @@ message_id dedup:
 
 ## 8. Ordering
 
-Guaranteed by "one active relay publishes in outbox id order" plus
+Guaranteed by "one active relay publishes in commit order" plus
 "one consumer with prefetch=1". Multiple worker instances are allowed for failover;
 only one consumes.
+
+Commit order, not insert order: the relay reads by `(transaction_id, offset)`.
+The outbox row must still be written in the same transaction as the article
+change, for atomicity, but ordering no longer depends on it.
 
 Seeding scale-out: adding consumers is allowed and deliberately breaks
 per-article FIFO. Safe: the monotonic swap guard decides correctness; a losing
@@ -151,4 +156,21 @@ Numeric codes are authoritative:
 | 1 | pending | kb-api on version save |
 | 2 | indexing | worker at job start |
 | 3 | indexed | worker after successful swap |
-| 4 | failed | worker before nack to DLQ |
+| 4 | failed | worker before nack to DLQ; relay when delivery is given up |
+
+The relay stamps code 4 before setting an undeliverable envelope aside and
+acknowledging it: without the stamp the article stays pending with nothing left
+to deliver it.
+
+## 11. Outbox retention
+
+The relay owns the outbox table.
+
+| Parameter | Meaning |
+|---|---|
+| `relay.retention` | minimum age of a deletable row |
+| `relay.cleanup_interval` | how often cleanup runs |
+| `relay.cleanup_batch` | rows per delete statement |
+
+Only rows at or below the acknowledged offset of the consumer group are
+deleted. A stalled relay costs disk, never delivery.
