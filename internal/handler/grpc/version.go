@@ -2,10 +2,21 @@ package grpc
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/handler/grpc/options"
+	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/service"
+)
+
+var errNotesTooLong = errors.InvalidArgument(
+	"the note is too long",
+	errors.WithID("kb.article.notes_too_long"),
+	errors.WithValue("limit", model.MaxVersionNotes),
 )
 
 // VersionsServer handles the Versions gRPC service: the immutable history of
@@ -65,13 +76,18 @@ func (s *VersionsServer) GetVersion(ctx context.Context, req *kb.GetVersionReque
 }
 
 func (s *VersionsServer) RestoreVersion(ctx context.Context, req *kb.RestoreVersionRequest) (*kb.ArticleVersion, error) {
+	notes := strings.TrimSpace(req.GetNotes())
+	if utf8.RuneCountInString(notes) > model.MaxVersionNotes {
+		return nil, errNotesTooLong
+	}
+
 	opts, err := options.NewUpdateOptions(ctx, options.WithUpdateID(req.GetArticleId()))
 	if err != nil {
 		return nil, err
 	}
 
 	restored, err := s.service.RestoreVersion(ctx, opts,
-		req.GetArticleId(), req.GetVersionNumber(), req.GetNotes())
+		req.GetArticleId(), req.GetVersionNumber(), notes)
 	if err != nil {
 		return nil, err
 	}

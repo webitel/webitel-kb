@@ -2,7 +2,9 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,9 +116,10 @@ func (f *articleStoreFake) AcquireSpaceMoveLock(context.Context, int64) error { 
 
 // articleVersionStoreFake plays back the version history.
 type articleVersionStoreFake struct {
-	items   []*model.ArticleVersion
-	created *model.ArticleVersion
-	size    int
+	items    []*model.ArticleVersion
+	created  *model.ArticleVersion
+	createIn *model.ArticleVersion
+	size     int
 }
 
 func (f *articleVersionStoreFake) List(
@@ -138,8 +141,10 @@ func (f *articleVersionStoreFake) Locate(
 }
 
 func (f *articleVersionStoreFake) Create(
-	context.Context, options.Creator, *model.ArticleVersion, string,
+	_ context.Context, _ options.Creator, in *model.ArticleVersion, _ string,
 ) (*model.ArticleVersion, error) {
+	f.createIn = in
+
 	return f.created, nil
 }
 
@@ -161,7 +166,7 @@ func (f *articleUoWFake) ArticleStore() store.ArticleStore               { retur
 func (f *articleUoWFake) ArticleVersionStore() store.ArticleVersionStore { return f.versions }
 
 func newArticleServers(uow *articleUoWFake) (*ArticlesServer, *VersionsServer, *TagsServer) {
-	svc := service.NewArticleService(uow)
+	svc := service.NewArticleService(uow, slog.New(slog.DiscardHandler))
 
 	return NewArticlesServer(svc), NewVersionsServer(svc), NewTagsServer(svc)
 }
@@ -299,8 +304,6 @@ func TestListArticlesFullPath(t *testing.T) {
 }
 
 func TestNarrowProjectionStillRendersTheEtag(t *testing.T) {
-	// A caller may ask for a narrow projection; the response still needs the
-	// etag, which is built from the identifier and the version.
 	articles := &articleStoreFake{items: []*model.Article{{ID: 7, Ver: 4, Subject: "VPN"}}}
 	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
 
@@ -315,10 +318,8 @@ func TestNarrowProjectionStillRendersTheEtag(t *testing.T) {
 		t.Fatal("the response carries no etag")
 	}
 
-	for _, want := range []string{"subject", "id", "ver"} {
-		if !slices.Contains(articles.fields, want) {
-			t.Fatalf("fields = %v, want %q", articles.fields, want)
-		}
+	if !slices.Contains(articles.fields, "subject") {
+		t.Fatalf("fields = %v, want the caller selection", articles.fields)
 	}
 }
 
@@ -508,5 +509,42 @@ func TestListVersionsDefaultsToTheDisplayLimit(t *testing.T) {
 
 	if versions.size != options.DefaultSearchSize {
 		t.Fatalf("size = %d, want the display limit", versions.size)
+	}
+}
+
+func TestRestoreVersionRefusesALongNote(t *testing.T) {
+	_, versions, _ := newArticleServers(&articleUoWFake{
+		articles: &articleStoreFake{},
+		versions: &articleVersionStoreFake{},
+	})
+
+	_, err := versions.RestoreVersion(articleContext(), &kb.RestoreVersionRequest{
+		ArticleId: 7, VersionNumber: 1,
+		Notes: strings.Repeat("a", model.MaxVersionNotes+1),
+	})
+
+	if errors.ID(err) != "kb.article.notes_too_long" {
+		t.Fatalf("error = %v, want the note limit", err)
+	}
+}
+
+func TestRestoreVersionTrimsTheNote(t *testing.T) {
+	versionsFake := &articleVersionStoreFake{
+		items:   []*model.ArticleVersion{{ID: 30, Subject: "old"}},
+		created: &model.ArticleVersion{ID: 40},
+	}
+	_, versions, _ := newArticleServers(&articleUoWFake{
+		articles: &articleStoreFake{written: &model.Article{ID: 7, Ver: 4}},
+		versions: versionsFake,
+	})
+
+	if _, err := versions.RestoreVersion(articleContext(), &kb.RestoreVersionRequest{
+		ArticleId: 7, VersionNumber: 1, Notes: "  a note  ",
+	}); err != nil {
+		t.Fatalf("RestoreVersion: %v", err)
+	}
+
+	if versionsFake.createIn.Notes != "a note" {
+		t.Fatalf("notes = %q, want them trimmed", versionsFake.createIn.Notes)
 	}
 }

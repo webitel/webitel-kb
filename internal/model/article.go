@@ -54,6 +54,29 @@ type Article struct {
 	UpdatedBy *Lookup
 }
 
+// Merge overlays the set fields of in over a copy of the article.
+func (a Article) Merge(in *Article) *Article {
+	merged := a
+
+	if in.Subject != "" {
+		merged.Subject = in.Subject
+	}
+
+	if in.Type != 0 {
+		merged.Type = in.Type
+	}
+
+	if in.State != 0 {
+		merged.State = in.State
+	}
+
+	if in.Tags != nil {
+		merged.Tags = in.Tags
+	}
+
+	return &merged
+}
+
 // ArticleFilter narrows article listings; zero values disable a criterion.
 type ArticleFilter struct {
 	SpaceID int64

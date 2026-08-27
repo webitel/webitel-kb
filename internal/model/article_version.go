@@ -8,6 +8,9 @@ import "time"
 // stored vectors are cheap to rebuild until then.
 const TextSearchDefault = "simple"
 
+// MaxVersionNotes bounds a restore note, in runes.
+const MaxVersionNotes = 50
+
 // ArticleVersion is an immutable snapshot of article content.
 type ArticleVersion struct {
 	ID        int64

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -11,27 +12,20 @@ import (
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
-	"github.com/webitel/webitel-kb/internal/store/util"
 	"github.com/webitel/webitel-kb/pkg/bodyconv"
 )
-
-// noteLimit bounds the restore note.
-const noteLimit = 50
 
 // ArticleService owns the article business rules: input validation, body
 // conversion, the versioned save flow and hierarchy validation with honest
 // errors.
 type ArticleService struct {
 	uow store.UnitOfWork
+	log *slog.Logger
 }
 
-func NewArticleService(uow store.UnitOfWork) *ArticleService {
-	return &ArticleService{uow: uow}
+func NewArticleService(uow store.UnitOfWork, log *slog.Logger) *ArticleService {
+	return &ArticleService{uow: uow, log: log}
 }
-
-// Every article response carries an etag built from the identifier and the
-// version, and the save flow needs the identifier to attach a version.
-var requiredArticleFields = []string{"id", "ver"}
 
 // mergeReadFields is what the locked read must carry for the merge: the store
 // rewrites every column, so an unread one would be written back empty.
@@ -39,73 +33,14 @@ var mergeReadFields = []string{
 	"id", "space", "parent_id", "subject", "tags", "type", "state", "ver",
 }
 
-// createOptions and updateOptions widen the caller's projection to what the
-// flow needs, leaving the rest untouched.
-type createOptions struct {
-	options.Creator
-
-	fields []string
-}
-
-func (o createOptions) GetFields() []string { return o.fields }
-
-type updateOptions struct {
-	options.Updator
-
-	fields []string
-}
-
-func (o updateOptions) GetFields() []string { return o.fields }
-
-type deleteOptions struct {
-	options.Deleter
-
-	fields []string
-}
-
-func (o deleteOptions) GetFields() []string { return o.fields }
-
-type searchOptions struct {
-	options.Searcher
-
-	fields []string
-}
-
-func (o searchOptions) GetFields() []string { return o.fields }
-
-// articleRead widens a read that returns articles: the response etag is built
-// from the identifier and the version.
-func articleRead(opts options.Searcher) options.Searcher {
-	return searchOptions{Searcher: opts, fields: withRequired(opts.GetFields())}
-}
-
-// withRequired appends the fields the flow needs to the caller's selection. An
-// empty selection is left alone: the store then applies its own defaults,
-// which already carry them.
-func withRequired(fields []string) []string {
-	asked := util.InlineFields(fields)
-	if len(asked) == 0 {
-		return nil
-	}
-
-	return util.DeduplicateFields(append(asked, requiredArticleFields...))
-}
-
-// articleBody is a converted editor document ready to become a version.
-type articleBody struct {
-	raw      []byte
-	markdown string
-	plain    string
-}
-
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
 ) ([]*model.Article, bool, error) {
-	return s.uow.ArticleStore().List(ctx, articleRead(opts), filter)
+	return s.uow.ArticleStore().List(ctx, opts, filter)
 }
 
 func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
-	return s.uow.ArticleStore().Locate(ctx, articleRead(opts))
+	return s.uow.ArticleStore().Locate(ctx, opts)
 }
 
 // Create inserts an article and, when a body came along, its first version in
@@ -120,7 +55,9 @@ func (s *ArticleService) Create(
 		)
 	}
 
-	if strings.TrimSpace(in.Subject) == "" {
+	normalizeInput(in)
+
+	if in.Subject == "" {
 		return nil, errors.InvalidArgument(
 			"a subject is required",
 			errors.WithID("kb.article.subject_required"),
@@ -131,48 +68,39 @@ func (s *ArticleService) Create(
 		return nil, err
 	}
 
-	in.Subject = strings.TrimSpace(in.Subject)
-	in.Tags = normalizeTags(in.Tags)
-
-	var body *articleBody
-
-	if len(rawBody) > 0 {
-		var err error
-
-		body, err = convertBody(rawBody)
-		if err != nil {
-			return nil, err
-		}
+	body, err := s.convertBody(ctx, rawBody)
+	if err != nil {
+		return nil, err
 	}
 
-	if in.ParentID != 0 {
-		if err := s.checkCreateDepth(ctx, opts, in.ParentID); err != nil {
-			return nil, err
-		}
-	}
+	session := opts.GetAuthOpts()
 
 	var created *model.Article
 
-	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		if in.ParentID != 0 {
+			if err := checkDepth(ctx, tx, session, in.ParentID, 0, "kb.article.create_depth"); err != nil {
+				return err
+			}
+		}
+
 		var err error
 
-		created, err = tx.ArticleStore().Create(ctx, createOptions{
-			Creator: opts, fields: withRequired(opts.GetFields()),
-		}, in)
+		created, err = tx.ArticleStore().Create(ctx, opts, in)
 		if err != nil {
 			return err
 		}
 
-		if body == nil {
+		if len(rawBody) == 0 {
 			return nil
 		}
 
 		_, err = tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
 			ArticleID:    created.ID,
 			Subject:      in.Subject,
-			BodyRichText: body.raw,
-			BodyMarkdown: body.markdown,
-			BodyPlain:    body.plain,
+			BodyRichText: rawBody,
+			BodyMarkdown: body.Markdown,
+			BodyPlain:    body.Plain,
 		}, model.TextSearchDefault)
 
 		return err
@@ -194,22 +122,18 @@ func (s *ArticleService) Update(
 		return nil, err
 	}
 
-	var body *articleBody
+	normalizeInput(in)
 
-	if len(rawBody) > 0 {
-		var err error
-
-		body, err = convertBody(rawBody)
-		if err != nil {
-			return nil, err
-		}
+	body, err := s.convertBody(ctx, rawBody)
+	if err != nil {
+		return nil, err
 	}
 
 	session := opts.GetAuthOpts()
 
 	var updated *model.Article
 
-	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
 			auth: session, ids: []int64{opts.GetID()}, fields: mergeReadFields,
 		})
@@ -221,25 +145,23 @@ func (s *ArticleService) Update(
 			return err
 		}
 
-		merged := mergeArticle(in, current)
+		merged := current.Merge(in)
 
-		updated, err = tx.ArticleStore().Update(ctx, updateOptions{
-			Updator: opts, fields: withRequired(opts.GetFields()),
-		}, merged, expectedVer)
+		updated, err = tx.ArticleStore().Update(ctx, opts, merged, expectedVer)
 		if err != nil {
 			return err
 		}
 
-		if body == nil {
+		if len(rawBody) == 0 {
 			return nil
 		}
 
 		_, err = tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
 			ArticleID:    opts.GetID(),
 			Subject:      merged.Subject,
-			BodyRichText: body.raw,
-			BodyMarkdown: body.markdown,
-			BodyPlain:    body.plain,
+			BodyRichText: rawBody,
+			BodyMarkdown: body.Markdown,
+			BodyPlain:    body.Plain,
 		}, model.TextSearchDefault)
 
 		return err
@@ -254,9 +176,7 @@ func (s *ArticleService) Update(
 func (s *ArticleService) Delete(
 	ctx context.Context, opts options.Deleter, expectedVer int32,
 ) (*model.Article, error) {
-	return s.uow.ArticleStore().Delete(ctx, deleteOptions{
-		Deleter: opts, fields: withRequired(opts.GetFields()),
-	}, expectedVer)
+	return s.uow.ArticleStore().Delete(ctx, opts, expectedVer)
 }
 
 // Move reparents an article. The whole flow runs in one transaction and moves
@@ -299,9 +219,7 @@ func (s *ArticleService) Move(
 			}
 		}
 
-		moved, err = tx.ArticleStore().Move(ctx, updateOptions{
-			Updator: opts, fields: withRequired(opts.GetFields()),
-		}, newParentID, expectedVer)
+		moved, err = tx.ArticleStore().Move(ctx, opts, newParentID, expectedVer)
 
 		return err
 	})
@@ -315,7 +233,7 @@ func (s *ArticleService) Move(
 func (s *ArticleService) Ancestors(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.Article, error) {
-	return s.uow.ArticleStore().Ancestors(ctx, articleRead(opts), articleID)
+	return s.uow.ArticleStore().Ancestors(ctx, opts, articleID)
 }
 
 func (s *ArticleService) Tree(
@@ -360,11 +278,6 @@ func (s *ArticleService) GetVersion(
 func (s *ArticleService) RestoreVersion(
 	ctx context.Context, opts options.Updator, articleID int64, number int32, notes string,
 ) (*model.ArticleVersion, error) {
-	notes = strings.TrimSpace(notes)
-	if len([]rune(notes)) > noteLimit {
-		notes = string([]rune(notes)[:noteLimit])
-	}
-
 	session := opts.GetAuthOpts()
 
 	var restored *model.ArticleVersion
@@ -397,12 +310,8 @@ func (s *ArticleService) RestoreVersion(
 			return err
 		}
 
-		merged := *current
-		merged.Subject = source.Subject
-
-		_, err = tx.ArticleStore().Update(ctx, updateOptions{
-			Updator: opts, fields: requiredArticleFields,
-		}, &merged, current.Ver)
+		_, err = tx.ArticleStore().Update(ctx, opts,
+			current.Merge(&model.Article{Subject: source.Subject}), current.Ver)
 
 		return err
 	})
@@ -413,20 +322,23 @@ func (s *ArticleService) RestoreVersion(
 	return restored, nil
 }
 
-// checkCreateDepth turns the depth ceiling into an honest error before the
-// schema constraint would report it as a generic conflict.
-func (s *ArticleService) checkCreateDepth(ctx context.Context, opts options.Creator, parentID int64) error {
-	parent, err := s.uow.ArticleStore().Locate(ctx, readOptions{
-		auth: opts.GetAuthOpts(), ids: []int64{parentID}, fields: []string{"id", "depth"},
+// checkDepth refuses a placement past the depth ceiling; height is how far the
+// placed subtree reaches below its own root.
+func checkDepth(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
+	parentID int64, height int32, errID string,
+) error {
+	parent, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
+		auth: session, ids: []int64{parentID}, fields: []string{"id", "depth"},
 	})
 	if err != nil {
 		return err
 	}
 
-	if parent.Depth+1 > model.MaxArticleDepth {
+	if parent.Depth+1+height > model.MaxArticleDepth {
 		return errors.InvalidArgument(
 			"maximum hierarchy depth is 5",
-			errors.WithID("kb.article.create_depth"),
+			errors.WithID(errID),
 		)
 	}
 
@@ -454,21 +366,7 @@ func validateMoveTarget(
 		}
 	}
 
-	target, err := tx.ArticleStore().Locate(ctx, readOptions{
-		auth: session, ids: []int64{newParentID}, fields: []string{"id", "depth"},
-	})
-	if err != nil {
-		return err
-	}
-
-	if target.Depth+1+height > model.MaxArticleDepth {
-		return errors.InvalidArgument(
-			"maximum hierarchy depth is 5",
-			errors.WithID("kb.article.move_depth"),
-		)
-	}
-
-	return nil
+	return checkDepth(ctx, tx, session, newParentID, height, "kb.article.move_depth")
 }
 
 // validateArticleCodes accepts the known codes and the unset zero; anything
@@ -511,28 +409,10 @@ func rejectHierarchyInput(in, current *model.Article) error {
 	return nil
 }
 
-// mergeArticle overlays the set input fields on the stored article: the store
-// writes every column unconditionally, so unset input must not erase state.
-func mergeArticle(in, current *model.Article) *model.Article {
-	merged := *current
-
-	if subject := strings.TrimSpace(in.Subject); subject != "" {
-		merged.Subject = subject
-	}
-
-	if in.Type != 0 {
-		merged.Type = in.Type
-	}
-
-	if in.State != 0 {
-		merged.State = in.State
-	}
-
-	if in.Tags != nil {
-		merged.Tags = normalizeTags(in.Tags)
-	}
-
-	return &merged
+// normalizeInput cleans the caller's input before it is stored or merged.
+func normalizeInput(in *model.Article) {
+	in.Subject = strings.TrimSpace(in.Subject)
+	in.Tags = normalizeTags(in.Tags)
 }
 
 // normalizeTags trims, drops empties and deduplicates, keeping the order.
@@ -558,13 +438,16 @@ func normalizeTags(tags []string) []string {
 	return out
 }
 
-// convertBody turns a non-empty editor document into its stored
-// representations. NUL is checked on the decoded output: the wire encoding
-// escapes it, so raw bytes never show it.
-func convertBody(raw []byte) (*articleBody, error) {
+// convertBody turns an editor document into its stored representations and
+// logs unknown nodes.
+func (s *ArticleService) convertBody(ctx context.Context, raw []byte) (bodyconv.Result, error) {
+	if len(raw) == 0 {
+		return bodyconv.Result{}, nil
+	}
+
 	result, err := bodyconv.Convert(raw)
 	if err != nil {
-		return nil, errors.InvalidArgument(
+		return bodyconv.Result{}, errors.InvalidArgument(
 			"the body is not a valid editor document",
 			errors.WithID("kb.article.body_invalid"),
 			errors.WithCause(err),
@@ -573,10 +456,15 @@ func convertBody(raw []byte) (*articleBody, error) {
 
 	if strings.Contains(result.Plain, "\x00") || strings.Contains(result.Markdown, "\x00") ||
 		containsNulEscape(raw) {
-		return nil, errBodyInvalid
+		return bodyconv.Result{}, errBodyInvalid
 	}
 
-	return &articleBody{raw: raw, markdown: result.Markdown, plain: result.Plain}, nil
+	if len(result.Unknown) > 0 {
+		s.log.WarnContext(ctx, "article body carries unknown editor nodes",
+			slog.Any("nodes", result.Unknown))
+	}
+
+	return result, nil
 }
 
 // nulEscape is how JSON spells a NUL, which jsonb refuses to store.

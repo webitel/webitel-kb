@@ -259,3 +259,43 @@ func TestArticleLockForUpdate(t *testing.T) {
 }
 
 func ptrTo[T any](v T) *T { return &v }
+
+func TestArticleProjectionAlwaysCarriesTheIdentity(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"subject"}))
+
+	for _, want := range []string{"m.subject AS subject", "m.id AS id", "m.ver AS ver"} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("SQL %q does not contain %q", sql, want)
+		}
+	}
+}
+
+func TestArticleIdentityIsNotDuplicated(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields([]string{"id", "ver", "subject"}))
+
+	if got := strings.Count(sql, "m.id AS id"); got != 1 {
+		t.Fatalf("SQL %q selects the identifier %d times", sql, got)
+	}
+
+	if got := strings.Count(sql, "m.ver AS ver"); got != 1 {
+		t.Fatalf("SQL %q selects the version %d times", sql, got)
+	}
+}
+
+func TestArticleEmptySelectionKeepsTheDefaults(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields(nil))
+
+	if !strings.Contains(sql, "m.subject AS subject") {
+		t.Fatalf("SQL %q is not the default projection", sql)
+	}
+}
+
+func TestArticleWithFieldsLeavesTheCallerSliceAlone(t *testing.T) {
+	asked := []string{"subject"}
+
+	mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithFields(asked))
+
+	if len(asked) != 1 || asked[0] != "subject" {
+		t.Fatalf("caller selection = %v, want it untouched", asked)
+	}
+}

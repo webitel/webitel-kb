@@ -1,5 +1,9 @@
 package queryobject
 
+import (
+	"github.com/webitel/webitel-kb/internal/store/util"
+)
+
 // ArticleFrom is the base relation of the article query object.
 const ArticleFrom = "kb.article m"
 
@@ -9,6 +13,9 @@ const (
 	articleJoinCreatedBy
 	articleJoinUpdatedBy
 )
+
+// articleIdentityFields are the columns every article projection carries.
+var articleIdentityFields = []string{"id", "ver"}
 
 // ArticleQuery builds SELECTs over knowledge-base articles.
 type ArticleQuery struct {
@@ -24,6 +31,20 @@ func NewArticleQuery(from string) *ArticleQuery {
 	q.baseQueryObject = newBaseQueryObject(from, q)
 
 	return q
+}
+
+// WithFields selects the caller's fields plus the identity the etag is built
+// from. An empty selection keeps the defaults.
+func (q *ArticleQuery) WithFields(fields []string) *ArticleQuery {
+	if len(fields) == 0 {
+		return q
+	}
+
+	asked := make([]string, 0, len(fields)+len(articleIdentityFields))
+	asked = append(asked, fields...)
+	asked = append(asked, articleIdentityFields...)
+
+	return q.baseQueryObject.WithFields(util.DeduplicateFields(asked))
 }
 
 func (q *ArticleQuery) DefaultFields() []string {

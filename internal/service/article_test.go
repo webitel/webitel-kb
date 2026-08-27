@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -83,11 +85,16 @@ func (f *fakeArticleStore) LocateForUpdate(_ context.Context, opts options.Searc
 	f.locateFields = append(f.locateFields, opts.GetFields())
 	f.step("locate-for-update")
 
-	if f.current == nil {
+	ids := opts.GetIDs()
+	if f.current != nil && (len(ids) != 1 || ids[0] == f.current.ID) {
+		return f.current, nil
+	}
+
+	if f.located == nil {
 		return nil, errors.NotFound("entity does not exist or access is denied")
 	}
 
-	return f.current, nil
+	return f.located, nil
 }
 
 func (f *fakeArticleStore) Create(_ context.Context, opts options.Creator, in *model.Article) (*model.Article, error) {
@@ -214,6 +221,12 @@ func (u *articleUow) ArticleStore() store.ArticleStore               { return u.
 func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.versions }
 
 func newArticleFixture() (*ArticleService, *articleUow) {
+	uow := newArticleUow()
+
+	return NewArticleService(uow, slog.New(slog.DiscardHandler)), uow
+}
+
+func newArticleUow() *articleUow {
 	articles := &fakeArticleStore{
 		current: &model.Article{
 			ID: 7, SpaceID: 3, ParentID: 2, Depth: 2, Ver: 4,
@@ -236,8 +249,10 @@ func newArticleFixture() (*ArticleService, *articleUow) {
 		},
 	}
 
-	return NewArticleService(uow), uow
+	return uow
 }
+
+const restoreNotes = "restored from version #1"
 
 const validDoc = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}`
 
@@ -363,6 +378,23 @@ func TestArticleCreateDepthPreCheck(t *testing.T) {
 
 	if uow.articles.createCalls != 0 {
 		t.Fatal("the write must not run after the pre-check refused")
+	}
+}
+
+func TestArticleCreateLocksTheParent(t *testing.T) {
+	svc, uow := newArticleFixture()
+
+	if _, err := svc.Create(context.Background(), creatorOpts(),
+		&model.Article{SpaceID: 3, Subject: "a", ParentID: 2}, nil); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if order := strings.Join(uow.articles.callOrder, ","); order != "locate-for-update,create-article" {
+		t.Fatalf("flow order = %s", order)
+	}
+
+	if uow.transactions != 1 {
+		t.Fatalf("transactions = %d, want one", uow.transactions)
 	}
 }
 
@@ -532,7 +564,7 @@ func TestArticleMoveFlow(t *testing.T) {
 	// read, all inside one transaction: concurrent moves then serialize on a
 	// consistent snapshot instead of deadlocking on inverted lock order.
 	order := strings.Join(uow.articles.callOrder, ",")
-	if order != "locate,space-lock,locate-for-update,subtree,locate,move" {
+	if order != "locate,space-lock,locate-for-update,subtree,locate-for-update,move" {
 		t.Fatalf("flow order = %s", order)
 	}
 
@@ -619,8 +651,7 @@ func TestSuggestTagsGuards(t *testing.T) {
 func TestRestoreVersionFlow(t *testing.T) {
 	svc, uow := newArticleFixture()
 
-	restored, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1,
-		"  Restored from version #1 with a very long tail that exceeds the fifty character limit  ")
+	restored, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, restoreNotes)
 	if err != nil {
 		t.Fatalf("RestoreVersion: %v", err)
 	}
@@ -634,8 +665,8 @@ func TestRestoreVersionFlow(t *testing.T) {
 		t.Fatalf("version = %+v", v)
 	}
 
-	if got := len([]rune(v.Notes)); got > 50 {
-		t.Fatalf("notes length = %d, want at most 50", got)
+	if v.Notes != restoreNotes {
+		t.Fatalf("notes = %q, want what the caller sent", v.Notes)
 	}
 
 	// The article subject follows the restored version, guarded by the stored
@@ -661,74 +692,6 @@ func TestRestoreVersionMissingSource(t *testing.T) {
 
 	if uow.versions.createCalls != 0 || uow.articles.updateCalls != 0 {
 		t.Fatal("nothing may be written without a source")
-	}
-}
-
-func TestArticleWritesCarryTheFieldsTheFlowNeeds(t *testing.T) {
-	narrowCreate := &writeOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"subject"}}
-	narrowWrite := &writeOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"subject"}, id: 7}
-
-	tests := []struct {
-		name string
-		call func(svc *ArticleService) error
-	}{
-		{name: "create", call: func(svc *ArticleService) error {
-			_, err := svc.Create(context.Background(), narrowCreate,
-				&model.Article{SpaceID: 3, Subject: "a"}, nil)
-
-			return err
-		}},
-		{name: "update", call: func(svc *ArticleService) error {
-			_, err := svc.Update(context.Background(), narrowWrite, &model.Article{}, nil, 4)
-
-			return err
-		}},
-		{name: "move", call: func(svc *ArticleService) error {
-			_, err := svc.Move(context.Background(), narrowWrite, 0, 4)
-
-			return err
-		}},
-		{name: "delete", call: func(svc *ArticleService) error {
-			_, err := svc.Delete(context.Background(), narrowWrite, 4)
-
-			return err
-		}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc, uow := newArticleFixture()
-
-			if err := tt.call(svc); err != nil {
-				t.Fatalf("%s: %v", tt.name, err)
-			}
-
-			if len(uow.articles.writeFields) != 1 {
-				t.Fatalf("write calls = %d", len(uow.articles.writeFields))
-			}
-
-			got := uow.articles.writeFields[0]
-			for _, want := range []string{"subject", "id", "ver"} {
-				if !slices.Contains(got, want) {
-					t.Fatalf("fields = %v, want %q kept", got, want)
-				}
-			}
-		})
-	}
-}
-
-func TestArticleEmptySelectionLeavesTheDefaults(t *testing.T) {
-	// Asking for nothing means the store's own default projection; forcing a
-	// short list here would strip the response down to it.
-	svc, uow := newArticleFixture()
-
-	if _, err := svc.Create(context.Background(), creatorOpts(),
-		&model.Article{SpaceID: 3, Subject: "a"}, nil); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	if got := uow.articles.writeFields[0]; len(got) != 0 {
-		t.Fatalf("fields = %v, want the store defaults", got)
 	}
 }
 
@@ -790,5 +753,50 @@ func TestArticleCreateTrimsTheSubject(t *testing.T) {
 
 	if uow.articles.createIn.Subject != "VPN" {
 		t.Fatalf("subject = %q, want it trimmed like the merge path", uow.articles.createIn.Subject)
+	}
+}
+
+func TestArticleBodyLogsUnknownNodes(t *testing.T) {
+	const docWithTable = `{"type":"doc","content":[{"type":"table","content":` +
+		`[{"type":"text","text":"hi"}]}]}`
+
+	var logged bytes.Buffer
+
+	uow := newArticleUow()
+	svc := NewArticleService(uow, slog.New(slog.NewTextHandler(&logged, nil)))
+
+	if _, err := svc.Create(context.Background(), creatorOpts(),
+		&model.Article{SpaceID: 3, Subject: "a"}, []byte(docWithTable)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if out := logged.String(); !strings.Contains(out, "unknown") || !strings.Contains(out, "table") {
+		t.Fatalf("log = %q, want the unknown node types", out)
+	}
+
+	logged.Reset()
+
+	if _, err := svc.Update(context.Background(), updaterOpts(),
+		&model.Article{}, []byte(docWithTable), 4); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if out := logged.String(); !strings.Contains(out, "table") {
+		t.Fatalf("update log = %q, want the unknown node types", out)
+	}
+}
+
+func TestArticleBodyWithKnownNodesLogsNothing(t *testing.T) {
+	var logged bytes.Buffer
+
+	svc := NewArticleService(newArticleUow(), slog.New(slog.NewTextHandler(&logged, nil)))
+
+	if _, err := svc.Create(context.Background(), creatorOpts(),
+		&model.Article{SpaceID: 3, Subject: "a"}, []byte(validDoc)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if logged.Len() != 0 {
+		t.Fatalf("log = %q, want silence", logged.String())
 	}
 }
