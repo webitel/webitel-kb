@@ -371,7 +371,7 @@ func (s *articleStore) Update(
 ) (*model.Article, error) {
 	session := opts.GetAuthOpts()
 
-	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
+	update := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Update("kb.article m").
 		Set("subject", in.Subject).
 		Set("tags", nonNilSlice(in.Tags)).
@@ -379,7 +379,14 @@ func (s *articleStore) Update(
 		Set("state", in.State).
 		Set("updated_at", squirrel.Expr("now()")).
 		Set("updated_by", nullIfZero(session.GetUserID())).
-		Set("ver", squirrel.Expr("m.ver + 1")).
+		Set("ver", squirrel.Expr("m.ver + 1"))
+
+	// The pipeline owns the column; the producer resets it on new content.
+	if in.IndexState != 0 {
+		update = update.Set("index_state", in.IndexState)
+	}
+
+	sql, args, err := update.
 		Where("m.id = ?", opts.GetID()).
 		Where("m.ver = ?", expectedVer).
 		Where("m.deleted_at IS NULL").

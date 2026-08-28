@@ -94,3 +94,13 @@ func TestSpaceCTEReadBack(t *testing.T) {
 		t.Fatalf("SQL %q does not select from the CTE", sql)
 	}
 }
+
+func TestSpaceProjectionAlwaysCarriesTheIdentity(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewSpaceQuery(SpaceFrom).WithFields([]string{"name"}))
+
+	for _, want := range []string{"m.name AS name", "m.id AS id"} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("SQL %q does not contain %q", sql, want)
+		}
+	}
+}

@@ -5,10 +5,12 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/auth"
+	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -95,15 +97,18 @@ func (s *ArticleService) Create(
 			return nil
 		}
 
-		_, err = tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
+		version, err := tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
 			ArticleID:    created.ID,
 			Subject:      in.Subject,
 			BodyRichText: rawBody,
 			BodyMarkdown: body.Markdown,
 			BodyPlain:    body.Plain,
 		}, model.TextSearchDefault)
+		if err != nil {
+			return err
+		}
 
-		return err
+		return requestReindex(ctx, tx, session, created.ID, version.ID, in.SpaceID)
 	})
 	if err != nil {
 		return nil, err
@@ -147,6 +152,11 @@ func (s *ArticleService) Update(
 
 		merged := current.Merge(in)
 
+		// New content invalidates what the pipeline indexed.
+		if len(rawBody) != 0 {
+			merged.IndexState = model.IndexStatePending
+		}
+
 		updated, err = tx.ArticleStore().Update(ctx, opts, merged, expectedVer)
 		if err != nil {
 			return err
@@ -156,15 +166,18 @@ func (s *ArticleService) Update(
 			return nil
 		}
 
-		_, err = tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
+		version, err := tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
 			ArticleID:    opts.GetID(),
 			Subject:      merged.Subject,
 			BodyRichText: rawBody,
 			BodyMarkdown: body.Markdown,
 			BodyPlain:    body.Plain,
 		}, model.TextSearchDefault)
+		if err != nil {
+			return err
+		}
 
-		return err
+		return requestReindex(ctx, tx, session, opts.GetID(), version.ID, current.SpaceID)
 	})
 	if err != nil {
 		return nil, err
@@ -310,16 +323,29 @@ func (s *ArticleService) RestoreVersion(
 			return err
 		}
 
-		_, err = tx.ArticleStore().Update(ctx, opts,
-			current.Merge(&model.Article{Subject: source.Subject}), current.Ver)
+		aligned := current.Merge(&model.Article{Subject: source.Subject})
+		aligned.IndexState = model.IndexStatePending
 
-		return err
+		if _, err := tx.ArticleStore().Update(ctx, opts, aligned, current.Ver); err != nil {
+			return err
+		}
+
+		return requestReindex(ctx, tx, session, articleID, restored.ID, current.SpaceID)
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return restored, nil
+}
+
+func requestReindex(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
+	articleID, versionID, spaceID int64,
+) error {
+	return tx.OutboxStore().PublishReindex(ctx, event.NewArticleReindex(
+		time.Now(), articleID, versionID, spaceID, session.GetDomainID(),
+	))
 }
 
 // checkDepth refuses a placement past the depth ceiling; height is how far the

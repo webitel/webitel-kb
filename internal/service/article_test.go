@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"log/slog"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -201,10 +203,28 @@ func (f *fakeVersionStore) Create(_ context.Context, _ options.Creator, in *mode
 	return f.created, nil
 }
 
-// articleUow hands both fakes to transactional and direct callers.
+// fakeOutbox records the reindex events the save flow publishes.
+type fakeOutbox struct {
+	events []event.ArticleReindex
+	err    error
+	order  *fakeArticleStore
+}
+
+func (f *fakeOutbox) PublishReindex(_ context.Context, e event.ArticleReindex) error {
+	f.events = append(f.events, e)
+
+	if f.order != nil {
+		f.order.step("publish-reindex")
+	}
+
+	return f.err
+}
+
+// articleUow hands the fakes to transactional and direct callers.
 type articleUow struct {
 	articles *fakeArticleStore
 	versions *fakeVersionStore
+	outbox   *fakeOutbox
 
 	transactions int
 }
@@ -219,6 +239,7 @@ func (u *articleUow) EmbeddingModelStore() store.EmbeddingModelStore { return ni
 func (u *articleUow) SpaceStore() store.SpaceStore                   { return nil }
 func (u *articleUow) ArticleStore() store.ArticleStore               { return u.articles }
 func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.versions }
+func (u *articleUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 
 func newArticleFixture() (*ArticleService, *articleUow) {
 	uow := newArticleUow()
@@ -247,6 +268,7 @@ func newArticleUow() *articleUow {
 			},
 			order: articles,
 		},
+		outbox: &fakeOutbox{order: articles},
 	}
 
 	return uow
@@ -494,9 +516,121 @@ func TestArticleUpdateWithBodyAppendsVersion(t *testing.T) {
 		t.Fatalf("version = %+v", uow.versions.createIn)
 	}
 
+	// The event is stored last: an article write that fails takes the version
+	// and the event down with it.
 	order := strings.Join(uow.articles.callOrder, ",")
-	if order != "locate-for-update,update-article,create-version" {
+	if order != "locate-for-update,update-article,create-version,publish-reindex" {
 		t.Fatalf("flow order = %s", order)
+	}
+}
+
+func TestArticleCreateRequestsReindex(t *testing.T) {
+	svc, uow := newArticleFixture()
+
+	if _, err := svc.Create(context.Background(), creatorOpts(),
+		&model.Article{SpaceID: 3, Subject: "a"}, []byte(validDoc)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if len(uow.outbox.events) != 1 {
+		t.Fatalf("events = %d, want one", len(uow.outbox.events))
+	}
+
+	got := uow.outbox.events[0]
+	want := event.NewArticleReindex(got.OccurredAt, 7, 40, 3, 5)
+
+	if got != want {
+		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+
+	if got.OccurredAt.IsZero() {
+		t.Fatal("the envelope needs a timestamp")
+	}
+
+	if uow.articles.createIn.IndexState != 0 {
+		t.Fatalf("create index state = %d, want none", uow.articles.createIn.IndexState)
+	}
+}
+
+func TestArticleSaveWithoutBodyRequestsNothing(t *testing.T) {
+	svc, uow := newArticleFixture()
+
+	if _, err := svc.Create(context.Background(), creatorOpts(),
+		&model.Article{SpaceID: 3, Subject: "a"}, nil); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if _, err := svc.Update(context.Background(), updaterOpts(),
+		&model.Article{Subject: "new"}, nil, 4); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if len(uow.outbox.events) != 0 {
+		t.Fatalf("events = %d, want none", len(uow.outbox.events))
+	}
+
+	// Metadata alone leaves the indexed content valid.
+	if uow.articles.updateIn.IndexState != 0 {
+		t.Fatalf("update index state = %d, want none", uow.articles.updateIn.IndexState)
+	}
+}
+
+func TestArticleUpdateWithBodyRequestsReindex(t *testing.T) {
+	svc, uow := newArticleFixture()
+
+	updated, err := svc.Update(context.Background(), updaterOpts(),
+		&model.Article{Subject: "new"}, []byte(validDoc), 4)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if uow.articles.updateIn.IndexState != model.IndexStatePending {
+		t.Fatalf("update index state = %d, want pending", uow.articles.updateIn.IndexState)
+	}
+
+	if updated == nil {
+		t.Fatal("Update returned no article")
+	}
+
+	if len(uow.outbox.events) != 1 {
+		t.Fatalf("events = %d, want one", len(uow.outbox.events))
+	}
+
+	// The space comes from the locked read of the stored article.
+	got := uow.outbox.events[0]
+	if want := event.NewArticleReindex(got.OccurredAt, 7, 40, 3, 5); got != want {
+		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+}
+
+func TestRestoreVersionRequestsReindex(t *testing.T) {
+	svc, uow := newArticleFixture()
+
+	if _, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, restoreNotes); err != nil {
+		t.Fatalf("RestoreVersion: %v", err)
+	}
+
+	if uow.articles.updateIn.IndexState != model.IndexStatePending {
+		t.Fatalf("update index state = %d, want pending", uow.articles.updateIn.IndexState)
+	}
+
+	if len(uow.outbox.events) != 1 {
+		t.Fatalf("events = %d, want one", len(uow.outbox.events))
+	}
+
+	// The restored version is the new content, not the one it was taken from.
+	if got := uow.outbox.events[0]; got.VersionID != 40 || got.ArticleID != 7 || got.SpaceID != 3 {
+		t.Fatalf("event = %+v", got)
+	}
+}
+
+func TestArticleSaveFailsWhenTheEventCannotBeStored(t *testing.T) {
+	svc, uow := newArticleFixture()
+	uow.outbox.err = stderrors.New("outbox down")
+
+	if _, err := svc.Update(context.Background(), updaterOpts(),
+		&model.Article{Subject: "new"}, []byte(validDoc), 4); err == nil {
+		t.Fatal("a failed event must fail the save")
 	}
 }
 

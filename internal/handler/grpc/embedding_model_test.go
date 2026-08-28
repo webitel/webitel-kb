@@ -94,6 +94,7 @@ func (f *modelUoWFake) EmbeddingModelStore() store.EmbeddingModelStore { return 
 func (f *modelUoWFake) SpaceStore() store.SpaceStore                   { return nil }
 func (f *modelUoWFake) ArticleStore() store.ArticleStore               { return nil }
 func (f *modelUoWFake) ArticleVersionStore() store.ArticleVersionStore { return nil }
+func (f *modelUoWFake) OutboxStore() store.OutboxStore                 { return nil }
 
 func TestModelToProto(t *testing.T) {
 	now := time.Now()

@@ -29,6 +29,9 @@ func (q *EmbeddingModelQuery) DefaultFields() []string {
 	}
 }
 
+// IdentityFields is empty: no model flow addresses a row by its read-back.
+func (q *EmbeddingModelQuery) IdentityFields() []string { return nil }
+
 func (q *EmbeddingModelQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{

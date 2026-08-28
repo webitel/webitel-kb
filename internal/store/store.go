@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 
+	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 )
@@ -30,6 +31,15 @@ type UnitOfWork interface {
 
 	// ArticleVersionStore accesses the version history of articles.
 	ArticleVersionStore() ArticleVersionStore
+
+	// OutboxStore accesses the transactional outbox.
+	OutboxStore() OutboxStore
+}
+
+// OutboxStore records events for the relay to deliver.
+type OutboxStore interface {
+	// PublishReindex stores a reindex envelope.
+	PublishReindex(ctx context.Context, e event.ArticleReindex) error
 }
 
 // ArticleStore persists knowledge-base articles. Every read and write is

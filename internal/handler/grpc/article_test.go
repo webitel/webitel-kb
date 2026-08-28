@@ -16,6 +16,7 @@ import (
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/auth"
 	kbetag "github.com/webitel/webitel-kb/internal/etag"
+	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/service"
@@ -148,10 +149,22 @@ func (f *articleVersionStoreFake) Create(
 	return f.created, nil
 }
 
+// outboxFake accepts the reindex events the save flow publishes.
+type outboxFake struct {
+	events []event.ArticleReindex
+}
+
+func (f *outboxFake) PublishReindex(_ context.Context, e event.ArticleReindex) error {
+	f.events = append(f.events, e)
+
+	return nil
+}
+
 // articleUoWFake hands out the article fakes.
 type articleUoWFake struct {
 	articles *articleStoreFake
 	versions *articleVersionStoreFake
+	outbox   outboxFake
 }
 
 func (f *articleUoWFake) WithinTransaction(
@@ -164,6 +177,7 @@ func (f *articleUoWFake) EmbeddingModelStore() store.EmbeddingModelStore { retur
 func (f *articleUoWFake) SpaceStore() store.SpaceStore                   { return nil }
 func (f *articleUoWFake) ArticleStore() store.ArticleStore               { return f.articles }
 func (f *articleUoWFake) ArticleVersionStore() store.ArticleVersionStore { return f.versions }
+func (f *articleUoWFake) OutboxStore() store.OutboxStore                 { return &f.outbox }
 
 func newArticleServers(uow *articleUoWFake) (*ArticlesServer, *VersionsServer, *TagsServer) {
 	svc := service.NewArticleService(uow, slog.New(slog.DiscardHandler))

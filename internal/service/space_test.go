@@ -193,6 +193,7 @@ func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return u.mod
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return u.spaces }
 func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
+func (u *fakeUow) OutboxStore() store.OutboxStore                 { return nil }
 
 func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 	return &model.EmbeddingModel{ID: id, Type: modelType, ValidatedAt: time.Now()}

@@ -62,6 +62,11 @@ func (u *unitOfWork) ArticleVersionStore() store.ArticleVersionStore {
 	return &articleVersionStore{db: u.querier}
 }
 
+// OutboxStore returns the outbox store bound to the current querier.
+func (u *unitOfWork) OutboxStore() store.OutboxStore {
+	return &outboxStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

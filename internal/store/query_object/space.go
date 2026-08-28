@@ -39,6 +39,9 @@ func (q *SpaceQuery) DefaultFields() []string {
 	}
 }
 
+// IdentityFields is the id the space write flow reads back to bind teams.
+func (q *SpaceQuery) IdentityFields() []string { return []string{"id"} }
+
 func (q *SpaceQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{

@@ -119,6 +119,7 @@ func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return fakeM
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return fakeSpaces{u} }
 func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
+func (u *fakeUow) OutboxStore() store.OutboxStore                 { return nil }
 
 type fakeSpaces struct{ u *fakeUow }
 
