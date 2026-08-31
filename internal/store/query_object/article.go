@@ -1,9 +1,5 @@
 package queryobject
 
-import (
-	"github.com/webitel/webitel-kb/internal/store/util"
-)
-
 // ArticleFrom is the base relation of the article query object.
 const ArticleFrom = "kb.article m"
 
@@ -13,9 +9,6 @@ const (
 	articleJoinCreatedBy
 	articleJoinUpdatedBy
 )
-
-// articleIdentityFields are the columns every article projection carries.
-var articleIdentityFields = []string{"id", "ver"}
 
 // ArticleQuery builds SELECTs over knowledge-base articles.
 type ArticleQuery struct {
@@ -33,20 +26,6 @@ func NewArticleQuery(from string) *ArticleQuery {
 	return q
 }
 
-// WithFields selects the caller's fields plus the identity the etag is built
-// from. An empty selection keeps the defaults.
-func (q *ArticleQuery) WithFields(fields []string) *ArticleQuery {
-	if len(fields) == 0 {
-		return q
-	}
-
-	asked := make([]string, 0, len(fields)+len(articleIdentityFields))
-	asked = append(asked, fields...)
-	asked = append(asked, articleIdentityFields...)
-
-	return q.baseQueryObject.WithFields(util.DeduplicateFields(asked))
-}
-
 func (q *ArticleQuery) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "space", "parent_id", "depth", "type", "subject",
@@ -54,6 +33,9 @@ func (q *ArticleQuery) DefaultFields() []string {
 		"created_at", "updated_at", "created_by", "updated_by",
 	}
 }
+
+// IdentityFields are the columns the article etag is built from.
+func (q *ArticleQuery) IdentityFields() []string { return []string{"id", "ver"} }
 
 func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {

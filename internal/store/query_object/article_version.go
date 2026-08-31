@@ -32,6 +32,9 @@ func (q *ArticleVersionQuery) DefaultFields() []string {
 	}
 }
 
+// IdentityFields is the id the save flow addresses a stored version by.
+func (q *ArticleVersionQuery) IdentityFields() []string { return []string{"id"} }
+
 func (q *ArticleVersionQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{

@@ -148,6 +148,23 @@ func TestArticleUpdateRendersGuardedCAS(t *testing.T) {
 	}
 }
 
+func TestArticleUpdateWritesTheCarriedIndexState(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
+	s := &articleStore{db: f}
+
+	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 1}
+	in := &model.Article{Subject: "renamed", IndexState: model.IndexStatePending}
+
+	if _, err := s.Update(context.Background(), opts, in, 3); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	setList := f.gotSQL[strings.Index(f.gotSQL, "SET "):strings.Index(f.gotSQL, " WHERE")]
+	if !strings.Contains(setList, "index_state = $") {
+		t.Fatalf("SET list %q does not write the index state", setList)
+	}
+}
+
 func TestArticleUpdateVersionConflict(t *testing.T) {
 	// The guarded write matches nothing while the row exists: version conflict.
 	f := &fakeQuerier{row: fakeRow{vals: []any{int32(4)}}}

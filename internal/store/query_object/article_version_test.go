@@ -97,3 +97,13 @@ func TestArticleVersionCTEReadBack(t *testing.T) {
 		t.Fatalf("SQL %q does not select from the CTE", sql)
 	}
 }
+
+func TestVersionProjectionAlwaysCarriesTheIdentity(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewArticleVersionQuery(ArticleVersionFrom).WithFields([]string{"subject"}))
+
+	for _, want := range []string{"m.subject AS subject", "m.id AS id"} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("SQL %q does not contain %q", sql, want)
+		}
+	}
+}

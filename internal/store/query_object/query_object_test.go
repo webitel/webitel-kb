@@ -18,6 +18,9 @@ type testQueryObject struct {
 
 	// defaultsWithOwner switches DefaultFields to include the join-backed field.
 	defaultsWithOwner bool
+
+	// identity is what every projection of this entity must carry.
+	identity []string
 }
 
 func newTestQueryObject() *testQueryObject {
@@ -34,6 +37,8 @@ func (q *testQueryObject) DefaultFields() []string {
 
 	return []string{"id", "name"}
 }
+
+func (q *testQueryObject) IdentityFields() []string { return q.identity }
 
 func (q *testQueryObject) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
@@ -313,5 +318,47 @@ func TestFieldsMetadataMemoized(t *testing.T) {
 
 	if _, ok := second["probe"]; !ok {
 		t.Fatal("FieldsMetadata rebuilt the map; must be memoized")
+	}
+}
+
+func TestFieldsCarryTheEntityIdentity(t *testing.T) {
+	q := newTestQueryObject()
+	q.identity = []string{"id"}
+
+	sql := mustSQL(t, q.WithFields([]string{"name"}))
+
+	if !strings.Contains(sql, "t.name AS name") || !strings.Contains(sql, "t.id AS id") {
+		t.Fatalf("SQL %q does not carry the identity", sql)
+	}
+}
+
+func TestIdentityIsNotSelectedTwice(t *testing.T) {
+	q := newTestQueryObject()
+	q.identity = []string{"id"}
+
+	sql := mustSQL(t, q.WithFields([]string{"id", "name"}))
+
+	if strings.Count(sql, "t.id AS id") != 1 {
+		t.Fatalf("SQL %q repeats the identity", sql)
+	}
+}
+
+func TestWithoutIdentityTheSelectionStands(t *testing.T) {
+	sql := mustSQL(t, newTestQueryObject().WithFields([]string{"name"}))
+
+	if strings.Contains(sql, "t.id AS id") {
+		t.Fatalf("SQL %q adds a column the entity did not declare", sql)
+	}
+}
+
+func TestWithFieldsLeavesTheCallerSliceAlone(t *testing.T) {
+	q := newTestQueryObject()
+	q.identity = []string{"id"}
+	asked := []string{"name"}
+
+	mustSQL(t, q.WithFields(asked))
+
+	if len(asked) != 1 || asked[0] != "name" {
+		t.Fatalf("caller selection = %v, want it untouched", asked)
 	}
 }

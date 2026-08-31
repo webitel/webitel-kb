@@ -6,8 +6,11 @@ package queryobject
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/Masterminds/squirrel"
+
+	"github.com/webitel/webitel-kb/internal/store/util"
 )
 
 // QueryObject is a built query ready to render to SQL.
@@ -29,6 +32,11 @@ type Entity interface {
 	// idempotent: record the requirement (bitmask OR), never append a JOIN
 	// clause directly here.
 	EnsureJoins(requiredJoin int)
+
+	// IdentityFields returns the columns a projection carries whatever the
+	// caller asked for, so a flow can address the row it just read or wrote.
+	// Nil when the entity has none.
+	IdentityFields() []string
 }
 
 // fieldMetadata describes one selectable field.
@@ -61,17 +69,19 @@ func newBaseQueryObject[T Entity](from string, ent T) *baseQueryObject[T] {
 	}
 }
 
-// WithFields selects the requested fields. Unknown names are dropped silently;
-// the joins of accepted fields are activated.
+// WithFields selects the requested fields plus the entity identity. Unknown
+// names are dropped silently; the joins of accepted fields are activated. An
+// empty selection keeps the default fields.
 func (q *baseQueryObject[T]) WithFields(fields []string) T {
 	if len(fields) == 0 {
 		return q.entity
 	}
 
 	meta := q.entity.FieldsMetadata()
+	asked := util.DeduplicateFields(append(slices.Clone(fields), q.entity.IdentityFields()...))
 
-	valid := make([]string, 0, len(fields))
-	for _, field := range fields {
+	valid := make([]string, 0, len(asked))
+	for _, field := range asked {
 		fm, ok := meta[field]
 		if !ok {
 			continue

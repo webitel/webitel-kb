@@ -12,6 +12,11 @@ RabbitMQ. Source of truth for names and formats: package `internal/event`.
 3. The worker consumes queue `kb.reindex`: chunking, embedding, atomic swap of
    the published version, `index_state` transitions.
 
+Only a new version produces an event. Editing metadata alone (tags, state,
+subject without a body, a move) leaves the indexed content valid and emits
+nothing. A soft-deleted article emits nothing either: retrieval filters it out
+by the article row.
+
 ## 2. Envelope `article.reindex`
 
 Message body, JSON, UTF-8:

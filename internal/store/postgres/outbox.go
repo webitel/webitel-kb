@@ -11,23 +11,35 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/webitel/webitel-go-kit/pkg/errors"
+
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/outbox"
+	"github.com/webitel/webitel-kb/internal/store"
 )
 
-// PublishOutbox stores one envelope in the outbox using the caller's
-// transaction, so the event and the change that produced it commit together.
-// The row carries the broker routing key in its metadata; the relay never
-// decodes the payload. There is no context: the write rides the transaction.
-func (s *Store) PublishOutbox(tx pgx.Tx, e event.ArticleReindex) error {
-	if err := e.Validate(); err != nil {
-		return err
-	}
+// outboxStore writes the transactional outbox on the caller's querier.
+type outboxStore struct {
+	db Querier
+}
 
+var _ store.OutboxStore = (*outboxStore)(nil)
+
+// PublishReindex stores one envelope in the caller's transaction. The row
+// carries the broker routing key; the relay never decodes the payload.
+func (o *outboxStore) PublishReindex(ctx context.Context, e event.ArticleReindex) error {
 	payload, err := e.Marshal()
 	if err != nil {
-		return fmt.Errorf("postgres: marshal outbox event: %w", err)
+		return fmt.Errorf("postgres: outbox event: %w", err)
+	}
+
+	tx, ok := o.db.(pgx.Tx)
+	if !ok {
+		return errors.Internal(
+			"an outbox event needs the transaction of the change it describes",
+			errors.WithID("kb.outbox.no_transaction"),
+		)
 	}
 
 	publisher, err := watermillsql.NewPublisher(
@@ -40,6 +52,7 @@ func (s *Store) PublishOutbox(tx pgx.Tx, e event.ArticleReindex) error {
 	}
 
 	msg := message.NewMessage(watermill.NewUUID(), payload)
+	msg.SetContext(ctx)
 	msg.Metadata.Set(outbox.MetadataRoutingKey, event.ReindexRoutingKey(e.ArticleID))
 	msg.Metadata.Set(outbox.MetadataType, e.Type)
 	msg.Metadata.Set(outbox.MetadataSchema, strconv.Itoa(e.Schema))
