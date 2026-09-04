@@ -6,14 +6,14 @@ import (
 
 	"google.golang.org/grpc/peer"
 
-	kbindexer "github.com/webitel/webitel-kb/api/kb/indexer"
+	servicepb "github.com/webitel/webitel-kb/api/kb/service"
 	"github.com/webitel/webitel-kb/internal/service"
 )
 
 // IndexingServer handles the Indexing gRPC service: the API the indexer worker
 // calls. Registered only where a service token guards it, never bound to HTTP.
 type IndexingServer struct {
-	kbindexer.UnimplementedIndexingServer
+	servicepb.UnimplementedIndexingServer
 
 	service *service.IndexingService
 	log     *slog.Logger
@@ -24,8 +24,8 @@ func NewIndexingServer(service *service.IndexingService, log *slog.Logger) *Inde
 }
 
 func (s *IndexingServer) ResolveSpaceEmbedding(
-	ctx context.Context, req *kbindexer.ResolveSpaceEmbeddingRequest,
-) (*kbindexer.SpaceEmbedding, error) {
+	ctx context.Context, req *servicepb.ResolveSpaceEmbeddingRequest,
+) (*servicepb.SpaceEmbedding, error) {
 	found, err := s.service.ResolveSpaceEmbedding(ctx, req.GetSpaceId())
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (s *IndexingServer) ResolveSpaceEmbedding(
 		)
 	}
 
-	return &kbindexer.SpaceEmbedding{
+	return &servicepb.SpaceEmbedding{
 		VectorSearchEnabled: found.VectorSearchEnabled,
 		ModelId:             found.ModelID,
 		Provider:            found.Provider,

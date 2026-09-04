@@ -11,17 +11,17 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/api/kb"
-	kbindexer "github.com/webitel/webitel-kb/api/kb/indexer"
+	servicepb "github.com/webitel/webitel-kb/api/kb/service"
 	"github.com/webitel/webitel-kb/internal/auth"
 )
 
 const (
 	testToken    = "0123456789abcdef0123456789abcdef"
-	indexerCall  = "/webitel.kb.indexer.Indexing/ResolveSpaceEmbedding"
+	indexerCall  = "/webitel.kb.service.Indexing/ResolveSpaceEmbedding"
 	publicCall   = "/webitel.kb.Spaces/ListSpaces"
 	unknownCall  = "/webitel.kb.Ghost/Vanish"
 	infraCall    = "/grpc.health.v1.Health/Check"
-	otherService = "/webitel.kb.indexerish.Indexing/Call"
+	otherService = "/webitel.kb.serviceish.Indexing/Call"
 )
 
 func tokenContext(values ...string) context.Context {
@@ -206,7 +206,7 @@ var _ auth.Manager = (*fakeManager)(nil)
 
 func TestInternalPrefixCoversTheGeneratedService(t *testing.T) {
 	// Renaming the proto package would leave the guard owning nothing.
-	full := "/" + kbindexer.Indexing_ServiceDesc.ServiceName + "/ResolveSpaceEmbedding"
+	full := "/" + servicepb.Indexing_ServiceDesc.ServiceName + "/ResolveSpaceEmbedding"
 
 	if !NewServiceTokenGuard(testToken).Owns(full) {
 		t.Fatalf("guard does not own %q (prefix %q)", full, internalMethodPrefix)

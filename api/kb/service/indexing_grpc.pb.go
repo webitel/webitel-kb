@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v7.35.0
-// source: indexer/indexer.proto
+// source: service/indexing.proto
 
-package kbindexer
+package servicepb
 
 import (
 	context "context"
@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Indexing_ResolveSpaceEmbedding_FullMethodName = "/webitel.kb.indexer.Indexing/ResolveSpaceEmbedding"
+	Indexing_ResolveSpaceEmbedding_FullMethodName = "/webitel.kb.service.Indexing/ResolveSpaceEmbedding"
 )
 
 // IndexingClient is the client API for Indexing service.
@@ -116,7 +116,7 @@ func _Indexing_ResolveSpaceEmbedding_Handler(srv interface{}, ctx context.Contex
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Indexing_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webitel.kb.indexer.Indexing",
+	ServiceName: "webitel.kb.service.Indexing",
 	HandlerType: (*IndexingServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -125,5 +125,5 @@ var Indexing_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "indexer/indexer.proto",
+	Metadata: "service/indexing.proto",
 }

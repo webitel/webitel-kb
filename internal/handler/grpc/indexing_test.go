@@ -11,7 +11,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
-	kbindexer "github.com/webitel/webitel-kb/api/kb/indexer"
+	servicepb "github.com/webitel/webitel-kb/api/kb/service"
 	"github.com/webitel/webitel-kb/config"
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	"github.com/webitel/webitel-kb/internal/auth"
@@ -48,13 +48,13 @@ func TestResolveSpaceEmbeddingMapsTheModel(t *testing.T) {
 
 	got, err := server.ResolveSpaceEmbedding(
 		context.Background(),
-		&kbindexer.ResolveSpaceEmbeddingRequest{SpaceId: 7},
+		&servicepb.ResolveSpaceEmbeddingRequest{SpaceId: 7},
 	)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 
-	want := &kbindexer.SpaceEmbedding{
+	want := &servicepb.SpaceEmbedding{
 		VectorSearchEnabled: true,
 		ModelId:             9, Provider: "gemini", ModelRef: "gemini-embedding-001",
 		Dimensions: 768, Endpoint: "https://embed.local", ApiKey: "secret", Validated: true,
@@ -72,7 +72,7 @@ func TestResolveSpaceEmbeddingMapsTheModel(t *testing.T) {
 func TestResolveSpaceEmbeddingRejectsAMissingSpaceID(t *testing.T) {
 	server := indexingServer(nil, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
 
-	_, err := server.ResolveSpaceEmbedding(context.Background(), &kbindexer.ResolveSpaceEmbeddingRequest{})
+	_, err := server.ResolveSpaceEmbedding(context.Background(), &servicepb.ResolveSpaceEmbeddingRequest{})
 	if got := errors.Code(err); got != codes.InvalidArgument {
 		t.Fatalf("error code = %v, want invalid argument (err: %v)", got, err)
 	}
@@ -90,7 +90,7 @@ func TestResolveSpaceEmbeddingKeepsTheCredentialOutOfTheLog(t *testing.T) {
 
 	if _, err := server.ResolveSpaceEmbedding(
 		context.Background(),
-		&kbindexer.ResolveSpaceEmbeddingRequest{SpaceId: 7},
+		&servicepb.ResolveSpaceEmbeddingRequest{SpaceId: 7},
 	); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -114,7 +114,7 @@ func (authNoOne) AuthorizeFromContext(context.Context, string, auth.AccessMode) 
 }
 
 func TestInternalAPIIsServedOnlyWhenGuarded(t *testing.T) {
-	const service = "webitel.kb.indexer.Indexing"
+	const service = "webitel.kb.service.Indexing"
 
 	tests := []struct {
 		name  string
@@ -166,7 +166,7 @@ func TestResolveSpaceEmbeddingReportsASpaceWithoutVectorSearch(t *testing.T) {
 
 	got, err := server.ResolveSpaceEmbedding(
 		context.Background(),
-		&kbindexer.ResolveSpaceEmbeddingRequest{SpaceId: 7},
+		&servicepb.ResolveSpaceEmbeddingRequest{SpaceId: 7},
 	)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)

@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        v7.35.0
-// source: indexer/indexer.proto
+// source: service/indexing.proto
 
-package kbindexer
+package servicepb
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -30,7 +30,7 @@ type ResolveSpaceEmbeddingRequest struct {
 
 func (x *ResolveSpaceEmbeddingRequest) Reset() {
 	*x = ResolveSpaceEmbeddingRequest{}
-	mi := &file_indexer_indexer_proto_msgTypes[0]
+	mi := &file_service_indexing_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +42,7 @@ func (x *ResolveSpaceEmbeddingRequest) String() string {
 func (*ResolveSpaceEmbeddingRequest) ProtoMessage() {}
 
 func (x *ResolveSpaceEmbeddingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexer_indexer_proto_msgTypes[0]
+	mi := &file_service_indexing_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +55,7 @@ func (x *ResolveSpaceEmbeddingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveSpaceEmbeddingRequest.ProtoReflect.Descriptor instead.
 func (*ResolveSpaceEmbeddingRequest) Descriptor() ([]byte, []int) {
-	return file_indexer_indexer_proto_rawDescGZIP(), []int{0}
+	return file_service_indexing_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ResolveSpaceEmbeddingRequest) GetSpaceId() int64 {
@@ -87,7 +87,7 @@ type SpaceEmbedding struct {
 
 func (x *SpaceEmbedding) Reset() {
 	*x = SpaceEmbedding{}
-	mi := &file_indexer_indexer_proto_msgTypes[1]
+	mi := &file_service_indexing_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -99,7 +99,7 @@ func (x *SpaceEmbedding) String() string {
 func (*SpaceEmbedding) ProtoMessage() {}
 
 func (x *SpaceEmbedding) ProtoReflect() protoreflect.Message {
-	mi := &file_indexer_indexer_proto_msgTypes[1]
+	mi := &file_service_indexing_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -112,7 +112,7 @@ func (x *SpaceEmbedding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpaceEmbedding.ProtoReflect.Descriptor instead.
 func (*SpaceEmbedding) Descriptor() ([]byte, []int) {
-	return file_indexer_indexer_proto_rawDescGZIP(), []int{1}
+	return file_service_indexing_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *SpaceEmbedding) GetVectorSearchEnabled() bool {
@@ -171,11 +171,11 @@ func (x *SpaceEmbedding) GetValidated() bool {
 	return false
 }
 
-var File_indexer_indexer_proto protoreflect.FileDescriptor
+var File_service_indexing_proto protoreflect.FileDescriptor
 
-const file_indexer_indexer_proto_rawDesc = "" +
+const file_service_indexing_proto_rawDesc = "" +
 	"\n" +
-	"\x15indexer/indexer.proto\x12\x12webitel.kb.indexer\"9\n" +
+	"\x16service/indexing.proto\x12\x12webitel.kb.service\"9\n" +
 	"\x1cResolveSpaceEmbeddingRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\"\x8b\x02\n" +
 	"\x0eSpaceEmbedding\x122\n" +
@@ -190,28 +190,28 @@ const file_indexer_indexer_proto_rawDesc = "" +
 	"\aapi_key\x18\a \x01(\tR\x06apiKey\x12\x1c\n" +
 	"\tvalidated\x18\b \x01(\bR\tvalidated2y\n" +
 	"\bIndexing\x12m\n" +
-	"\x15ResolveSpaceEmbedding\x120.webitel.kb.indexer.ResolveSpaceEmbeddingRequest\x1a\".webitel.kb.indexer.SpaceEmbeddingB8Z6github.com/webitel/webitel-kb/api/kb/indexer;kbindexerb\x06proto3"
+	"\x15ResolveSpaceEmbedding\x120.webitel.kb.service.ResolveSpaceEmbeddingRequest\x1a\".webitel.kb.service.SpaceEmbeddingB8Z6github.com/webitel/webitel-kb/api/kb/service;servicepbb\x06proto3"
 
 var (
-	file_indexer_indexer_proto_rawDescOnce sync.Once
-	file_indexer_indexer_proto_rawDescData []byte
+	file_service_indexing_proto_rawDescOnce sync.Once
+	file_service_indexing_proto_rawDescData []byte
 )
 
-func file_indexer_indexer_proto_rawDescGZIP() []byte {
-	file_indexer_indexer_proto_rawDescOnce.Do(func() {
-		file_indexer_indexer_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_indexer_indexer_proto_rawDesc), len(file_indexer_indexer_proto_rawDesc)))
+func file_service_indexing_proto_rawDescGZIP() []byte {
+	file_service_indexing_proto_rawDescOnce.Do(func() {
+		file_service_indexing_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_service_indexing_proto_rawDesc), len(file_service_indexing_proto_rawDesc)))
 	})
-	return file_indexer_indexer_proto_rawDescData
+	return file_service_indexing_proto_rawDescData
 }
 
-var file_indexer_indexer_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_indexer_indexer_proto_goTypes = []any{
-	(*ResolveSpaceEmbeddingRequest)(nil), // 0: webitel.kb.indexer.ResolveSpaceEmbeddingRequest
-	(*SpaceEmbedding)(nil),               // 1: webitel.kb.indexer.SpaceEmbedding
+var file_service_indexing_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_service_indexing_proto_goTypes = []any{
+	(*ResolveSpaceEmbeddingRequest)(nil), // 0: webitel.kb.service.ResolveSpaceEmbeddingRequest
+	(*SpaceEmbedding)(nil),               // 1: webitel.kb.service.SpaceEmbedding
 }
-var file_indexer_indexer_proto_depIdxs = []int32{
-	0, // 0: webitel.kb.indexer.Indexing.ResolveSpaceEmbedding:input_type -> webitel.kb.indexer.ResolveSpaceEmbeddingRequest
-	1, // 1: webitel.kb.indexer.Indexing.ResolveSpaceEmbedding:output_type -> webitel.kb.indexer.SpaceEmbedding
+var file_service_indexing_proto_depIdxs = []int32{
+	0, // 0: webitel.kb.service.Indexing.ResolveSpaceEmbedding:input_type -> webitel.kb.service.ResolveSpaceEmbeddingRequest
+	1, // 1: webitel.kb.service.Indexing.ResolveSpaceEmbedding:output_type -> webitel.kb.service.SpaceEmbedding
 	1, // [1:2] is the sub-list for method output_type
 	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -219,26 +219,26 @@ var file_indexer_indexer_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_indexer_indexer_proto_init() }
-func file_indexer_indexer_proto_init() {
-	if File_indexer_indexer_proto != nil {
+func init() { file_service_indexing_proto_init() }
+func file_service_indexing_proto_init() {
+	if File_service_indexing_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_indexer_indexer_proto_rawDesc), len(file_indexer_indexer_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_service_indexing_proto_rawDesc), len(file_service_indexing_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_indexer_indexer_proto_goTypes,
-		DependencyIndexes: file_indexer_indexer_proto_depIdxs,
-		MessageInfos:      file_indexer_indexer_proto_msgTypes,
+		GoTypes:           file_service_indexing_proto_goTypes,
+		DependencyIndexes: file_service_indexing_proto_depIdxs,
+		MessageInfos:      file_service_indexing_proto_msgTypes,
 	}.Build()
-	File_indexer_indexer_proto = out.File
-	file_indexer_indexer_proto_goTypes = nil
-	file_indexer_indexer_proto_depIdxs = nil
+	File_service_indexing_proto = out.File
+	file_service_indexing_proto_goTypes = nil
+	file_service_indexing_proto_depIdxs = nil
 }

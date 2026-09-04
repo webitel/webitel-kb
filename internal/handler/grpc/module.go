@@ -6,7 +6,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-kb/api/kb"
-	kbindexer "github.com/webitel/webitel-kb/api/kb/indexer"
+	servicepb "github.com/webitel/webitel-kb/api/kb/service"
 	"github.com/webitel/webitel-kb/config"
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 )
@@ -54,6 +54,6 @@ func RegisterService(
 		return
 	}
 
-	kbindexer.RegisterIndexingServer(server, indexing)
+	servicepb.RegisterIndexingServer(server, indexing)
 	log.Info("internal indexing api is enabled")
 }

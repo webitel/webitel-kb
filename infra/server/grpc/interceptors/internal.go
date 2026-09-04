@@ -13,7 +13,7 @@ import (
 
 const (
 	// internalMethodPrefix is the full-method prefix of the service-to-service API.
-	internalMethodPrefix = "/webitel.kb.indexer."
+	internalMethodPrefix = "/webitel.kb.service."
 
 	// ServiceTokenHeader carries the caller's service token.
 	ServiceTokenHeader = "x-webitel-service-token"
