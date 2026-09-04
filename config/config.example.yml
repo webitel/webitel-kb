@@ -2,6 +2,9 @@
 
 service:
   addr: "127.0.0.1:22106"      # TODO: confirm webitel-kb's assigned port
+  internal:
+    # Service token of the indexer API; empty disables it, minimum 32 characters.
+    token: ""
   conn:
     verify_certs: false
 
