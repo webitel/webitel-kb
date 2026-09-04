@@ -284,6 +284,41 @@ func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (
 	return has, nil
 }
 
+// resolveEmbeddingSQL reads a space with its embedding model. Outer join: a
+// space without a model still answers.
+const resolveEmbeddingSQL = `SELECT
+	s.vector_search_enabled,
+	coalesce(s.embedding_model_id, 0) AS model_id,
+	coalesce(m.provider, '')          AS provider,
+	coalesce(m.model_ref, '')         AS model_ref,
+	coalesce(m.dimensions, 0)         AS dimensions,
+	coalesce(m.endpoint, '')          AS endpoint,
+	m.config,
+	m.validated_at IS NOT NULL        AS validated
+	FROM kb.space s
+	LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id
+	WHERE s.id = $1`
+
+func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
+	var found model.SpaceEmbedding
+
+	err := s.db.QueryRow(ctx, resolveEmbeddingSQL, spaceID).Scan(
+		&found.VectorSearchEnabled,
+		&found.ModelID,
+		&found.Provider,
+		&found.ModelRef,
+		&found.Dimensions,
+		&found.Endpoint,
+		&found.Config,
+		&found.Validated,
+	)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return &found, nil
+}
+
 // writeReturning reads the written row back via cteReadBack, rendering the
 // read through the entity query object over the CTE named m.
 func (s *spaceStore) writeReturning(

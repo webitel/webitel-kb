@@ -148,6 +148,10 @@ type SpaceStore interface {
 	// space — the same condition the schema enforces on delete, checked here
 	// so the caller can fail with a domain error instead of a raw constraint.
 	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
+
+	// ResolveEmbedding returns the embedding model of a space, credential
+	// included.
+	ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error)
 }
 
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see

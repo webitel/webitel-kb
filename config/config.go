@@ -24,8 +24,18 @@ type Config struct {
 
 type ServiceConfig struct {
 	Addr       string             `mapstructure:"addr"`
+	Internal   InternalAPIConfig  `mapstructure:"internal"`
 	Connection appconfig.GRPCConn `mapstructure:"conn"`
 }
+
+// InternalAPIConfig gates the service-to-service API for the indexer worker.
+type InternalAPIConfig struct {
+	// Token every internal caller must present. Empty disables the API.
+	Token string `mapstructure:"token"`
+}
+
+// minServiceTokenLen is the shortest accepted service token.
+const minServiceTokenLen = 32
 
 // RelayConfig tunes the outbox relay.
 type RelayConfig struct {
@@ -105,6 +115,7 @@ func LoadMigrateConfig() (*Config, error) {
 
 func registerServiceFlags() {
 	pflag.String("service.addr", "localhost:8080", "gRPC listen address")
+	pflag.String("service.internal.token", "", "service token of the internal indexer API; prefer SERVICE_INTERNAL_TOKEN over the flag (empty disables the API)")
 	appconfig.RegisterGRPCConnFlags(pflag.CommandLine, "service.conn", true)
 	pflag.Duration("relay.poll_interval", time.Second, "outbox relay poll interval")
 	pflag.Duration("relay.publish_timeout", 5*time.Second, "outbox relay publish confirmation timeout")
@@ -120,6 +131,10 @@ func (c *Config) validate() error {
 
 	if err := appconfig.ValidateGRPCConn("service.conn", c.Service.Connection); err != nil {
 		return err
+	}
+
+	if token := c.Service.Internal.Token; token != "" && len(token) < minServiceTokenLen {
+		return errors.New("config: service.internal.token must be at least 32 characters")
 	}
 
 	if c.Log.Level == "" {

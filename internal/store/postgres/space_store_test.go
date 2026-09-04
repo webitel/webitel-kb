@@ -1,11 +1,13 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -469,4 +471,47 @@ func TestMapSpaceBranches(t *testing.T) {
 			t.Fatalf("malformed aggregate mapped to %+v", got.Teams)
 		}
 	})
+}
+
+func TestSpaceResolveEmbedding(t *testing.T) {
+	f := &fakeQuerier{row: fakeRow{vals: []any{
+		true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc:key"), true,
+	}}}
+	s := &spaceStore{db: f}
+
+	found, err := s.ResolveEmbedding(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	if found.ModelID != 9 || found.Provider != "gemini" || found.Dimensions != 768 || !found.Validated {
+		t.Fatalf("resolved = %+v", found)
+	}
+
+	if !bytes.Equal(found.Config, []byte("enc:key")) {
+		t.Fatalf("config = %q, want the stored blob", found.Config)
+	}
+
+	if len(f.gotArgs) != 1 || f.gotArgs[0] != int64(7) {
+		t.Fatalf("args = %v, want the space id alone", f.gotArgs)
+	}
+
+	// Answered across domains on purpose.
+	if strings.Contains(f.gotSQL, "domain_id") {
+		t.Errorf("statement scopes by domain: %s", f.gotSQL)
+	}
+
+	// A space without a model still answers.
+	if !strings.Contains(f.gotSQL, "LEFT JOIN kb.embedding_model") {
+		t.Errorf("statement does not outer join the model: %s", f.gotSQL)
+	}
+}
+
+func TestSpaceResolveEmbeddingMissingSpace(t *testing.T) {
+	s := &spaceStore{db: &fakeQuerier{row: fakeRow{err: pgx.ErrNoRows}}}
+
+	_, err := s.ResolveEmbedding(context.Background(), 7)
+	if errors.Code(err) != codes.NotFound {
+		t.Fatalf("error code = %v, want not found (err: %v)", errors.Code(err), err)
+	}
 }
