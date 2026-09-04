@@ -97,9 +97,9 @@ type Server struct {
 }
 
 type Config struct {
-	TLS         *tls.Config
-	Logger      *slog.Logger
-	AuthManager auth.Manager
+	TLS           *tls.Config
+	Logger        *slog.Logger
+	AuthManager   auth.Manager
 	InternalGuard interceptors.InternalGuard
 }
 
