@@ -42,6 +42,7 @@ func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Confi
 		c.TLS = tls.Server.Clone()
 		c.Logger = logger
 		c.AuthManager = authManager
+		c.InternalGuard = internalGuard(conf)
 
 		return nil
 	})
@@ -75,6 +76,15 @@ func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Confi
 	return srv, nil
 }
 
+// internalGuard builds the guard; without a token the API is not served.
+func internalGuard(conf *config.Config) interceptors.InternalGuard {
+	if token := conf.Service.Internal.Token; token != "" {
+		return interceptors.NewServiceTokenGuard(token)
+	}
+
+	return interceptors.DisabledGuard{}
+}
+
 type Server struct {
 	*grpc.Server
 
@@ -87,9 +97,10 @@ type Server struct {
 }
 
 type Config struct {
-	TLS         *tls.Config
-	Logger      *slog.Logger
-	AuthManager auth.Manager
+	TLS           *tls.Config
+	Logger        *slog.Logger
+	AuthManager   auth.Manager
+	InternalGuard interceptors.InternalGuard
 }
 
 type Option func(*Config) error
@@ -128,14 +139,19 @@ func New(addr string, opts ...Option) (*Server, error) {
 		return nil, errors.New("grpc server: auth manager is required")
 	}
 
+	if conf.InternalGuard == nil {
+		conf.InternalGuard = interceptors.DisabledGuard{}
+	}
+
 	s := grpc.NewServer(
 		grpc.Creds(grpcTLS),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			intrcp.UnaryServerErrorInterceptor(),
-			interceptors.NewUnaryAuthInterceptor(conf.AuthManager),
+			interceptors.NewUnaryAuthInterceptor(conf.AuthManager, conf.InternalGuard),
 			validatemiddleware.UnaryServerInterceptor(validator),
 		),
+		grpc.ChainStreamInterceptor(interceptors.NewStreamGuard()),
 	)
 
 	healthSrv := health.NewServer()

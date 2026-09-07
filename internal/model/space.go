@@ -34,3 +34,21 @@ type Space struct {
 	CreatedBy *Lookup
 	UpdatedBy *Lookup
 }
+
+// SpaceEmbedding is the embedding model a space is indexed with, for the indexer.
+type SpaceEmbedding struct {
+	// VectorSearchEnabled is false when the space is not embedded; the rest is then unset.
+	VectorSearchEnabled bool
+	// ModelID is 0 when the space has no model.
+	ModelID    int64
+	Provider   string
+	ModelRef   string
+	Dimensions int32
+	Endpoint   string
+	// Config is the stored credential, encrypted.
+	Config []byte
+	// APIKey is the opened credential; empty for self-hosted providers. Secret.
+	APIKey string
+	// Validated reports the registration test call; not enforced.
+	Validated bool
+}

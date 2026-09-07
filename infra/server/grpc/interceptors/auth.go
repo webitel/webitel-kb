@@ -24,9 +24,18 @@ var reg = regexp.MustCompile(`^(.*\.)`)
 // The object class and required access mode are resolved from the generated
 // kb.WebitelAPI map. A KB method absent from the map is
 // denied rather than served unauthenticated; non-KB infra methods (health
-// checks, reflection) pass through without authorization.
-func NewUnaryAuthInterceptor(manager auth.Manager) grpc.UnaryServerInterceptor {
+// checks, reflection) pass through without authorization. Methods the guard
+// owns are authorized by it instead.
+func NewUnaryAuthInterceptor(manager auth.Manager, guard InternalGuard) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if guard.Owns(info.FullMethod) {
+			if err := guard.Authorize(ctx); err != nil {
+				return nil, err
+			}
+
+			return handler(ctx, req)
+		}
+
 		objClass, licenses, action, ok := objClassWithAction(info.FullMethod)
 		if !ok {
 			// Fail closed for unrecognized KB methods; pass through infra methods.
@@ -38,6 +47,14 @@ func NewUnaryAuthInterceptor(manager auth.Manager) grpc.UnaryServerInterceptor {
 			}
 
 			return handler(ctx, req)
+		}
+
+		// A method without an object class has nothing to authorize against.
+		if objClass == "" {
+			return nil, errors.Forbidden(
+				"method is not exposed for authorization",
+				errors.WithID("auth.interceptor.unknown_method"),
+			)
 		}
 
 		session, err := manager.AuthorizeFromContext(ctx, objClass, action)
@@ -67,12 +84,15 @@ func NewUnaryAuthInterceptor(manager auth.Manager) grpc.UnaryServerInterceptor {
 	}
 }
 
+// webitelAPI is the generated service map; a variable so tests can replace it.
+var webitelAPI = kb.WebitelAPI
+
 // objClassWithAction resolves the object class, additional licenses and access
 // mode of a gRPC method from the generated kb.WebitelAPI map.
 func objClassWithAction(fullMethod string) (string, []string, auth.AccessMode, bool) {
 	serviceName, methodName := splitFullMethodName(fullMethod)
 
-	service, ok := kb.WebitelAPI[serviceName]
+	service, ok := webitelAPI[serviceName]
 	if !ok {
 		return "", nil, auth.NONE, false
 	}

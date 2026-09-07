@@ -56,6 +56,10 @@ func (o *writeOpts) GetID() int64             { return o.id }
 // (pre-write) space and the read-back result are distinct objects, so a test
 // can tell which one a flow returned.
 type fakeSpaceStore struct {
+	resolved   *model.SpaceEmbedding
+	resolveErr error
+	resolvedID int64
+
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
 	readBack    *model.Space // plain Locate result (the post-write read-back)
@@ -129,6 +133,12 @@ func (f *fakeSpaceStore) ReplaceTeams(_ context.Context, spaceID, domainID, user
 
 func (f *fakeSpaceStore) HasArticles(context.Context, int64, int64) (bool, error) {
 	return f.hasArticles, nil
+}
+
+func (f *fakeSpaceStore) ResolveEmbedding(_ context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
+	f.resolvedID = spaceID
+
+	return f.resolved, f.resolveErr
 }
 
 // gateModelStore serves the validated-model gate.

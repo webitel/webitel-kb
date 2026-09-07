@@ -119,7 +119,7 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 				return "ok", nil
 			}
 
-			interceptor := NewUnaryAuthInterceptor(tt.manager)
+			interceptor := NewUnaryAuthInterceptor(tt.manager, DisabledGuard{})
 			_, err := interceptor(
 				context.Background(),
 				nil,
