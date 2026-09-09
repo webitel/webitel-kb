@@ -95,6 +95,7 @@ func (f *modelUoWFake) SpaceStore() store.SpaceStore                   { return 
 func (f *modelUoWFake) ArticleStore() store.ArticleStore               { return nil }
 func (f *modelUoWFake) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (f *modelUoWFake) OutboxStore() store.OutboxStore                 { return nil }
+func (f *modelUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
 
 func TestModelToProto(t *testing.T) {
 	now := time.Now()

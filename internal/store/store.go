@@ -32,6 +32,9 @@ type UnitOfWork interface {
 	// ArticleVersionStore accesses the version history of articles.
 	ArticleVersionStore() ArticleVersionStore
 
+	// RetrievalStore accesses articles the way the retrieval endpoints read them.
+	RetrievalStore() RetrievalStore
+
 	// OutboxStore accesses the transactional outbox.
 	OutboxStore() OutboxStore
 }
@@ -95,6 +98,18 @@ type ArticleStore interface {
 	// transaction ends, so concurrent moves cannot weave a cycle their
 	// snapshots would not see.
 	AcquireSpaceMoveLock(ctx context.Context, spaceID int64) error
+}
+
+// RetrievalStore reads articles for the retrieval endpoints.
+type RetrievalStore interface {
+	// Search returns a ranked page of summaries and whether a next page exists.
+	Search(ctx context.Context, opts options.Searcher, filter model.SearchFilter) ([]*model.ArticleSummary, bool, error)
+
+	// Resolve returns the summaries of the ids opts carry, in order.
+	Resolve(ctx context.Context, opts options.Searcher, spaceIDs []int64) ([]*model.ArticleSummary, error)
+
+	// Menu returns the articles below a parent, down to depthLimit levels.
+	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32) ([]*model.ArticleSummary, error)
 }
 
 // ArticleVersionStore persists the immutable version history of articles.

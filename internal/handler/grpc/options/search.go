@@ -134,6 +134,15 @@ func WithSearch(searcher Searcher) SearchOption {
 	}
 }
 
+// WithSearchTerm applies a free-text search term named by the request itself.
+func WithSearchTerm(term string) SearchOption {
+	return func(s *SearchOptions) error {
+		s.search = term
+
+		return nil
+	}
+}
+
 // WithIDs applies an id filter. The slice is copied: callers pass fields of the
 // incoming request message, and the store must be free to sort or dedupe the
 // ids without mutating that message.
