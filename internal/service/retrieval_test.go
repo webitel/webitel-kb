@@ -87,7 +87,7 @@ func (o *readOpts) GetSize() int             { return o.size }
 func (o *readOpts) GetSort() string          { return "" }
 func (o *readOpts) GetIDs() []int64          { return o.ids }
 
-func newRetrievalService() (*RetrievalService, *retrievalStoreFake) {
+func retrievalServiceWithFake() (*RetrievalService, *retrievalStoreFake) {
 	fake := &retrievalStoreFake{}
 
 	return NewRetrievalService(&retrievalUow{retrieval: fake}), fake
@@ -96,7 +96,7 @@ func newRetrievalService() (*RetrievalService, *retrievalStoreFake) {
 func TestRetrievalSearchAnswersABlankQueryItself(t *testing.T) {
 	// A blank query matches nothing by construction.
 	for _, term := range []string{"", "   ", "\t\n"} {
-		svc, fake := newRetrievalService()
+		svc, fake := retrievalServiceWithFake()
 
 		items, next, err := svc.Search(
 			context.Background(),
@@ -114,7 +114,7 @@ func TestRetrievalSearchAnswersABlankQueryItself(t *testing.T) {
 }
 
 func TestRetrievalSearchPassesTheCriteria(t *testing.T) {
-	svc, fake := newRetrievalService()
+	svc, fake := retrievalServiceWithFake()
 	fake.items = []*model.ArticleSummary{{ID: 1}}
 	fake.next = true
 
@@ -152,7 +152,7 @@ func TestRetrievalResolve(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, fake := newRetrievalService()
+			svc, fake := retrievalServiceWithFake()
 
 			items, err := svc.Resolve(
 				context.Background(),
@@ -184,7 +184,7 @@ func TestRetrievalResolve(t *testing.T) {
 }
 
 func TestRetrievalMenuRequiresASpace(t *testing.T) {
-	svc, fake := newRetrievalService()
+	svc, fake := retrievalServiceWithFake()
 
 	if _, err := svc.Menu(context.Background(), &readOpts{auth: fakeAuther{domainID: 5}}, 0, 0, 1); errors.Code(err) != codes.InvalidArgument {
 		t.Fatalf("error = %v, want InvalidArgument", err)
@@ -209,7 +209,7 @@ func TestRetrievalMenuDepth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, fake := newRetrievalService()
+			svc, fake := retrievalServiceWithFake()
 
 			if _, err := svc.Menu(
 				context.Background(),

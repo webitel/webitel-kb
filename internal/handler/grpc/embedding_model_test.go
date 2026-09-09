@@ -183,7 +183,8 @@ func TestListModelsFullPath(t *testing.T) {
 		{ID: 6, Type: "reranker", Name: "bge reranker"},
 	}}
 	server := NewEmbeddingModelsServer(
-		service.NewEmbeddingModelService(&modelUoWFake{models: fakeStore}, nil, nil))
+		service.NewEmbeddingModelService(&modelUoWFake{models: fakeStore}, nil, nil),
+	)
 	ctx := auth.WithSession(context.Background(), modelSession{})
 
 	resp, err := server.ListModels(ctx, &kb.ListModelsRequest{Type: "reranker", Q: "bge"})
