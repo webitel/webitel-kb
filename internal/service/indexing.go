@@ -48,30 +48,9 @@ func (s *IndexingService) ResolveSpaceEmbedding(ctx context.Context, spaceID int
 		)
 	}
 
-	if _, cloud := cloudProviders[found.Provider]; cloud {
-		// Say so here, rather than let the worker retry an authentication failure.
-		if len(found.Config) == 0 {
-			return nil, errors.Aborted(
-				"model has no stored credential",
-				errors.WithID("kb.model.credential_missing"),
-			)
-		}
-	} else {
-		// Self-hosted providers take no key.
-		found.Config = nil
+	if err := openModelCredential(ctx, s.enc, found); err != nil {
+		return nil, err
 	}
-
-	key, err := s.enc.Decrypt(ctx, found.Config)
-	if err != nil {
-		return nil, errors.Internal(
-			"unable to open the model credential",
-			errors.WithID("kb.model.credential"),
-			errors.WithCause(err),
-		)
-	}
-
-	found.Config = nil
-	found.APIKey = string(key)
 
 	return found, nil
 }

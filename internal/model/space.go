@@ -37,6 +37,7 @@ type Space struct {
 
 // SpaceEmbedding is the embedding model a space is indexed with, for the indexer.
 type SpaceEmbedding struct {
+	SpaceID int64
 	// VectorSearchEnabled is false when the space is not embedded; the rest is then unset.
 	VectorSearchEnabled bool
 	// ModelID is 0 when the space has no model.

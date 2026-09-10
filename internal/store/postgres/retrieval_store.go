@@ -30,6 +30,9 @@ const menuWalkCTE = `WITH RECURSIVE menu AS (
 // maxMenuItems bounds a menu the contract cannot paginate.
 const maxMenuItems = 100
 
+// queryRescore is how many vector candidates diskann re-checks exactly.
+const queryRescore = 200
+
 type retrievalStore struct {
 	db Querier
 }
@@ -104,6 +107,56 @@ func (s *retrievalStore) Search(
 	items, next := util.ResolvePaging(opts.GetSize(), items)
 
 	return items, next, nil
+}
+
+// chunkRecord is the scan target of a fused hit.
+type chunkRecord struct {
+	ID         int64   `db:"id"`
+	ArticleID  int64   `db:"article_id"`
+	VersionID  int64   `db:"version_id"`
+	ChunkIndex int32   `db:"chunk_index"`
+	Subject    string  `db:"subject"`
+	Content    string  `db:"content"`
+	Score      float64 `db:"score"`
+}
+
+func mapChunk(record *chunkRecord) *model.ChunkHit {
+	return &model.ChunkHit{
+		ID:         record.ID,
+		ArticleID:  record.ArticleID,
+		VersionID:  record.VersionID,
+		ChunkIndex: record.ChunkIndex,
+		Subject:    record.Subject,
+		Content:    record.Content,
+		Score:      record.Score,
+	}
+}
+
+func (s *retrievalStore) SemanticSearch(
+	ctx context.Context, opts options.Searcher, q model.HybridQuery,
+) ([]*model.ChunkHit, error) {
+	if _, err := s.db.Exec(ctx, fmt.Sprintf("SET LOCAL diskann.query_rescore = %d", queryRescore)); err != nil {
+		return nil, ParseError(err)
+	}
+
+	sql, args, err := queryobject.NewHybridHits(q).
+		WithScope(opts.GetAuthOpts().GetDomainID()).
+		ToSQL()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	items, err := collectRows(rows, mapChunk)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return items, nil
 }
 
 func (s *retrievalStore) Resolve(

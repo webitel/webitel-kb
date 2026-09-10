@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/api/kb"
+	"github.com/webitel/webitel-kb/infra/embedding"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -33,6 +35,18 @@ type retrievalStoreFake struct {
 
 	items []*model.ArticleSummary
 	next  bool
+
+	hybrid model.HybridQuery
+	hits   []*model.ChunkHit
+	hitErr error
+}
+
+func (f *retrievalStoreFake) SemanticSearch(
+	_ context.Context, _ options.Searcher, q model.HybridQuery,
+) ([]*model.ChunkHit, error) {
+	f.hybrid = q
+
+	return f.hits, f.hitErr
 }
 
 func (f *retrievalStoreFake) Search(
@@ -61,7 +75,7 @@ func (f *retrievalStoreFake) Menu(
 	return f.items, nil
 }
 
-// retrievalUoWFake hands out the retrieval fake.
+// retrievalUoWFake hands out the retrieval fake; spaces carry no vectors, a transaction is a pass-through.
 type retrievalUoWFake struct {
 	store.UnitOfWork
 
@@ -69,11 +83,17 @@ type retrievalUoWFake struct {
 }
 
 func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore { return f.retrieval }
+func (f *retrievalUoWFake) SpaceStore() store.SpaceStore         { return fakeSpaces{&fakeUow{}} }
+
+func (f *retrievalUoWFake) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
+	return fn(ctx, f)
+}
 
 func retrievalServerWithFake() (*RetrievalServer, *retrievalStoreFake) {
 	fake := &retrievalStoreFake{}
+	svc := service.NewRetrievalService(&retrievalUoWFake{retrieval: fake}, sealer{}, embedding.NewRegistry())
 
-	return NewRetrievalServer(service.NewRetrievalService(&retrievalUoWFake{retrieval: fake})), fake
+	return NewRetrievalServer(svc), fake
 }
 
 func TestRetrievalSearchMapsTheRequest(t *testing.T) {
@@ -265,4 +285,53 @@ func TestRetrievalRequiresASession(t *testing.T) {
 
 func retrievalContext() context.Context {
 	return auth.WithSession(context.Background(), modelSession{})
+}
+
+func TestSemanticSearchFullPath(t *testing.T) {
+	server, fake := retrievalServerWithFake()
+	fake.hits = []*model.ChunkHit{
+		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 2, Subject: "VPN", Content: "how to connect", Score: 0.03},
+	}
+
+	resp, err := server.SemanticSearch(retrievalContext(), &kb.SemanticSearchRequest{
+		Query: "vpn", SpaceIds: []int64{3}, TopK: 5, IncludeCitations: true, Tags: []string{"net"}, TagMatch: kb.TagMatch_TAG_MATCH_ALL,
+	})
+	if err != nil {
+		t.Fatalf("SemanticSearch: %v", err)
+	}
+
+	want := model.HybridQuery{
+		Term:    "vpn",
+		Filter:  model.SearchFilter{SpaceIDs: []int64{3}, Tags: []string{"net"}, TagsMatchAll: true},
+		Vectors: []model.ModelVector{},
+		TopK:    5,
+	}
+	if !reflect.DeepEqual(fake.hybrid, want) {
+		t.Fatalf("hybrid = %+v, want %+v", fake.hybrid, want)
+	}
+
+	chunks := resp.GetChunks()
+	if len(chunks) != 1 || chunks[0].GetArticleId() != 10 || chunks[0].GetVersionId() != 4 || chunks[0].GetChunkIndex() != 2 ||
+		chunks[0].GetContent() != "how to connect" || chunks[0].GetScore() != 0.03 {
+		t.Fatalf("chunks = %+v", chunks)
+	}
+
+	citations := resp.GetCitations()
+	if len(citations) != 1 || citations[0].GetArticleId() != 10 || citations[0].GetTitle() != "VPN" ||
+		citations[0].GetSnippet() != "how to connect" || citations[0].GetUrl() != "" {
+		t.Fatalf("citations = %+v", citations)
+	}
+}
+
+func TestSemanticSearchEmptyIsEmptyNotNil(t *testing.T) {
+	server, _ := retrievalServerWithFake()
+
+	resp, err := server.SemanticSearch(retrievalContext(), &kb.SemanticSearchRequest{Query: "vpn", SpaceIds: []int64{3}})
+	if err != nil {
+		t.Fatalf("SemanticSearch: %v", err)
+	}
+
+	if resp.GetChunks() == nil || resp.GetCitations() == nil || len(resp.GetChunks()) != 0 || len(resp.GetCitations()) != 0 {
+		t.Fatalf("response = %+v, want empty non-nil slices", resp)
+	}
 }

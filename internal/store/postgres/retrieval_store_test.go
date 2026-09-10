@@ -200,3 +200,38 @@ func summaryRows(n int) *fakeRows {
 
 	return &fakeRows{cols: []string{"id"}, vals: vals}
 }
+
+func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &retrievalStore{db: f}
+
+	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}}
+	q := model.HybridQuery{
+		Term:    "vpn",
+		Filter:  model.SearchFilter{SpaceIDs: []int64{7}},
+		Vectors: []model.ModelVector{{ModelID: 9, SpaceIDs: []int64{7}, Vector: []float32{0.5}}},
+		TopK:    10,
+	}
+
+	if _, err := s.SemanticSearch(context.Background(), opts, q); err != nil {
+		t.Fatalf("SemanticSearch: %v", err)
+	}
+
+	if len(f.sqls) != 2 || f.sqls[0] != "SET LOCAL diskann.query_rescore = 200" {
+		t.Fatalf("statements = %q, want the rescore setting then the query", f.sqls)
+	}
+
+	for _, want := range []string{
+		"WITH lex AS (",
+		", vec AS (",
+		"s.domain_id = $",
+		"m.state = $",
+		"e.model_id = $",
+		"LIMIT 10)",
+		"ORDER BY h.score DESC, c.id",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL does not contain %q", want)
+		}
+	}
+}

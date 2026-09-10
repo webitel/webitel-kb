@@ -73,6 +73,57 @@ func (s *RetrievalServer) Menu(ctx context.Context, req *kb.MenuRequest) (*kb.Me
 	return &kb.MenuResponse{Items: summariesToProto(items)}, nil
 }
 
+func (s *RetrievalServer) SemanticSearch(ctx context.Context, req *kb.SemanticSearchRequest) (*kb.SemanticSearchResponse, error) {
+	// The result size is the top k itself, never a page.
+	opts, err := options.NewSearchOptions(ctx, options.WithUnlimitedSize())
+	if err != nil {
+		return nil, err
+	}
+
+	hits, citations, err := s.service.SemanticSearch(ctx, opts, model.SemanticQuery{
+		Query:            req.GetQuery(),
+		SpaceIDs:         req.GetSpaceIds(),
+		Tags:             req.GetTags(),
+		TagsMatchAll:     req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
+		TopK:             int(req.GetTopK()),
+		IncludeCitations: req.GetIncludeCitations(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &kb.SemanticSearchResponse{Chunks: chunksToProto(hits), Citations: citationsToProto(citations)}, nil
+}
+
+func chunksToProto(items []*model.ChunkHit) []*kb.Chunk {
+	out := make([]*kb.Chunk, 0, len(items))
+	for _, item := range items {
+		out = append(out, &kb.Chunk{
+			ArticleId:  item.ArticleID,
+			VersionId:  item.VersionID,
+			ChunkIndex: item.ChunkIndex,
+			Content:    item.Content,
+			Score:      item.Score,
+		})
+	}
+
+	return out
+}
+
+func citationsToProto(items []*model.Citation) []*kb.Citation {
+	out := make([]*kb.Citation, 0, len(items))
+	for _, item := range items {
+		out = append(out, &kb.Citation{
+			ArticleId: item.ArticleID,
+			Title:     item.Title,
+			Snippet:   item.Snippet,
+			Url:       item.URL,
+		})
+	}
+
+	return out
+}
+
 func summaryToProto(in *model.ArticleSummary) *kb.ArticleSummary {
 	return &kb.ArticleSummary{
 		Id:        in.ID,

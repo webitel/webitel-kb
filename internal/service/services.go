@@ -13,7 +13,7 @@ var Module = fx.Module("service",
 		NewSpaceService,
 		NewArticleService,
 		NewIndexingService,
-		NewRetrievalService,
+		provideRetrievalService,
 		provideEmbeddingModelService,
 	),
 )
@@ -24,4 +24,11 @@ func provideEmbeddingModelService(
 	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry,
 ) *EmbeddingModelService {
 	return NewEmbeddingModelService(uow, encryptor, registry)
+}
+
+// provideRetrievalService binds the concrete registry to the service's resolver seam.
+func provideRetrievalService(
+	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry,
+) *RetrievalService {
+	return NewRetrievalService(uow, encryptor, registry)
 }

@@ -110,6 +110,9 @@ type RetrievalStore interface {
 
 	// Menu returns the articles below a parent, down to depthLimit levels.
 	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32) ([]*model.ArticleSummary, error)
+
+	// SemanticSearch returns the fused ranking of chunks; runs inside a transaction.
+	SemanticSearch(ctx context.Context, opts options.Searcher, q model.HybridQuery) ([]*model.ChunkHit, error)
 }
 
 // ArticleVersionStore persists the immutable version history of articles.
@@ -167,6 +170,10 @@ type SpaceStore interface {
 	// ResolveEmbedding returns the embedding model of a space, credential
 	// included.
 	ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error)
+
+	// ResolveEmbeddings returns the embedding model of each of a domain's
+	// spaces, credential included; unknown ids are simply absent.
+	ResolveEmbeddings(ctx context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceEmbedding, error)
 }
 
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see
