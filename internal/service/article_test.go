@@ -240,6 +240,7 @@ func (u *articleUow) SpaceStore() store.SpaceStore                   { return ni
 func (u *articleUow) ArticleStore() store.ArticleStore               { return u.articles }
 func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.versions }
 func (u *articleUow) OutboxStore() store.OutboxStore                 { return u.outbox }
+func (u *articleUow) RetrievalStore() store.RetrievalStore           { return nil }
 
 func newArticleFixture() (*ArticleService, *articleUow) {
 	uow := newArticleUow()

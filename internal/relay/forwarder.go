@@ -185,7 +185,8 @@ func (f *Forwarder) newRouter() (*message.Router, error) {
 
 	poison, err := middleware.PoisonQueueWithFilter(
 		f.publisherFor(event.ReindexDLX), event.ReindexDLQ,
-		func(err error) bool { return !errors.Is(err, errNotMarked) })
+		func(err error) bool { return !errors.Is(err, errNotMarked) },
+	)
 	if err != nil {
 		return nil, fmt.Errorf("relay: poison queue: %w", err)
 	}

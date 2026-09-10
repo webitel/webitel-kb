@@ -13,6 +13,7 @@ var Module = fx.Module("service",
 		NewSpaceService,
 		NewArticleService,
 		NewIndexingService,
+		NewRetrievalService,
 		provideEmbeddingModelService,
 	),
 )

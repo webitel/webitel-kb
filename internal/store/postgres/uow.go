@@ -62,6 +62,11 @@ func (u *unitOfWork) ArticleVersionStore() store.ArticleVersionStore {
 	return &articleVersionStore{db: u.querier}
 }
 
+// RetrievalStore returns the retrieval store bound to the current querier.
+func (u *unitOfWork) RetrievalStore() store.RetrievalStore {
+	return &retrievalStore{db: u.querier}
+}
+
 // OutboxStore returns the outbox store bound to the current querier.
 func (u *unitOfWork) OutboxStore() store.OutboxStore {
 	return &outboxStore{db: u.querier}

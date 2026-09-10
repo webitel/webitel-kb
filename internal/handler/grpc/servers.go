@@ -11,11 +11,3 @@ type AttachmentsServer struct {
 func NewAttachmentsServer() *AttachmentsServer {
 	return &AttachmentsServer{}
 }
-
-type RetrievalServer struct {
-	kb.UnimplementedRetrievalServer
-}
-
-func NewRetrievalServer() *RetrievalServer {
-	return &RetrievalServer{}
-}

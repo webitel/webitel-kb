@@ -95,6 +95,7 @@ func (f *modelUoWFake) SpaceStore() store.SpaceStore                   { return 
 func (f *modelUoWFake) ArticleStore() store.ArticleStore               { return nil }
 func (f *modelUoWFake) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (f *modelUoWFake) OutboxStore() store.OutboxStore                 { return nil }
+func (f *modelUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
 
 func TestModelToProto(t *testing.T) {
 	now := time.Now()
@@ -182,7 +183,8 @@ func TestListModelsFullPath(t *testing.T) {
 		{ID: 6, Type: "reranker", Name: "bge reranker"},
 	}}
 	server := NewEmbeddingModelsServer(
-		service.NewEmbeddingModelService(&modelUoWFake{models: fakeStore}, nil, nil))
+		service.NewEmbeddingModelService(&modelUoWFake{models: fakeStore}, nil, nil),
+	)
 	ctx := auth.WithSession(context.Background(), modelSession{})
 
 	resp, err := server.ListModels(ctx, &kb.ListModelsRequest{Type: "reranker", Q: "bge"})
