@@ -56,10 +56,10 @@ func (f *retrievalStoreFake) Search(
 }
 
 func (f *retrievalStoreFake) Resolve(
-	_ context.Context, opts options.Searcher, spaceIDs []int64,
+	_ context.Context, _ options.Searcher, ids, spaceIDs []int64,
 ) ([]*model.ArticleSummary, error) {
 	f.calls++
-	f.ids = opts.GetIDs()
+	f.ids = ids
 	f.spaces = spaceIDs
 
 	return f.items, nil

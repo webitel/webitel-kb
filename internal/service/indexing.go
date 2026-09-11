@@ -48,9 +48,13 @@ func (s *IndexingService) ResolveSpaceEmbedding(ctx context.Context, spaceID int
 		)
 	}
 
-	if err := openModelCredential(ctx, s.enc, found); err != nil {
+	key, err := openModelCredential(ctx, s.enc, found.Provider, found.Config)
+	if err != nil {
 		return nil, err
 	}
+
+	found.Config = nil
+	found.APIKey = key
 
 	return found, nil
 }

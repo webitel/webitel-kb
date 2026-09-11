@@ -53,3 +53,16 @@ type SpaceEmbedding struct {
 	// Validated reports the registration test call; not enforced.
 	Validated bool
 }
+
+// SpaceReranker is the cross-encoder a space reranks with.
+type SpaceReranker struct {
+	SpaceID int64
+	// Enabled is false when the space does not rerank; the rest is then unset.
+	Enabled  bool
+	ModelID  int64
+	Provider string
+	ModelRef string
+	Endpoint string
+	// Config is the stored credential, encrypted; empty for self-hosted providers.
+	Config []byte
+}

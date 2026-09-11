@@ -160,12 +160,17 @@ func (s *retrievalStore) SemanticSearch(
 }
 
 func (s *retrievalStore) Resolve(
-	ctx context.Context, opts options.Searcher, spaceIDs []int64,
+	ctx context.Context, opts options.Searcher, ids, spaceIDs []int64,
 ) ([]*model.ArticleSummary, error) {
+	// An empty id list resolves to nothing, never to the whole scope.
+	if len(ids) == 0 {
+		return make([]*model.ArticleSummary, 0), nil
+	}
+
 	sql, args, err := queryobject.NewSummaryQuery(queryobject.SummaryFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithRetrievable().
-		WithIDs(opts.GetIDs()).
+		WithIDs(ids).
 		WithSpaces(spaceIDs).
 		WithExcerpt().
 		ToSQL()

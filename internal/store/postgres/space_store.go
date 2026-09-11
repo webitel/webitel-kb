@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -303,9 +304,38 @@ const resolveEmbeddingSelect = `SELECT
 const resolveEmbeddingSQL = resolveEmbeddingSelect + `
 	WHERE s.id = $1`
 
-// resolveEmbeddingsSQL is the read of a domain's spaces.
+// resolveEmbeddingsSQL is the read of some of a domain's spaces.
 const resolveEmbeddingsSQL = resolveEmbeddingSelect + `
 	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
+	ORDER BY s.id`
+
+// resolveDomainEmbeddingsSQL is the read of every space of a domain.
+const resolveDomainEmbeddingsSQL = resolveEmbeddingSelect + `
+	WHERE s.domain_id = $1 AND s.deleted_at IS NULL
+	ORDER BY s.id`
+
+// resolveRerankersSQL reads spaces with their reranker. Outer join: a space
+// without a reranker still answers.
+const resolveRerankersSQL = `SELECT
+	s.id                                                 AS space_id,
+	s.rerank_enabled AND s.reranker_model_id IS NOT NULL AS enabled,
+	coalesce(s.reranker_model_id, 0)                     AS model_id,
+	coalesce(m.provider, '')                             AS provider,
+	coalesce(m.model_ref, '')                            AS model_ref,
+	coalesce(m.endpoint, '')                             AS endpoint,
+	m.config
+	FROM kb.space s
+	LEFT JOIN kb.embedding_model m ON m.id = s.reranker_model_id
+	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
+	ORDER BY s.id`
+
+// teamSpacesSQL reads the binding of a team within a domain. The outer joins
+// keep one null row for a team that exists but is bound to nothing.
+const teamSpacesSQL = `SELECT s.id
+	FROM call_center.cc_team t
+	LEFT JOIN kb.team_space ts ON ts.team_id = t.id
+	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL
+	WHERE t.id = $1 AND t.dc = $2
 	ORDER BY s.id`
 
 func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
@@ -332,10 +362,21 @@ func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*mode
 func (s *spaceStore) ResolveEmbeddings(
 	ctx context.Context, domainID int64, spaceIDs []int64,
 ) ([]*model.SpaceEmbedding, error) {
-	rows, err := s.db.Query(ctx, resolveEmbeddingsSQL, domainID, spaceIDs)
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if len(spaceIDs) == 0 {
+		rows, err = s.db.Query(ctx, resolveDomainEmbeddingsSQL, domainID)
+	} else {
+		rows, err = s.db.Query(ctx, resolveEmbeddingsSQL, domainID, spaceIDs)
+	}
+
 	if err != nil {
 		return nil, ParseError(err)
 	}
+
 	defer rows.Close()
 
 	found := make([]*model.SpaceEmbedding, 0)
@@ -365,6 +406,73 @@ func (s *spaceStore) ResolveEmbeddings(
 	}
 
 	return found, nil
+}
+
+func (s *spaceStore) ResolveRerankers(
+	ctx context.Context, domainID int64, spaceIDs []int64,
+) ([]*model.SpaceReranker, error) {
+	rows, err := s.db.Query(ctx, resolveRerankersSQL, domainID, spaceIDs)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+	defer rows.Close()
+
+	found := make([]*model.SpaceReranker, 0)
+
+	for rows.Next() {
+		var item model.SpaceReranker
+
+		if err := rows.Scan(
+			&item.SpaceID,
+			&item.Enabled,
+			&item.ModelID,
+			&item.Provider,
+			&item.ModelRef,
+			&item.Endpoint,
+			&item.Config,
+		); err != nil {
+			return nil, ParseError(err)
+		}
+
+		found = append(found, &item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, ParseError(err)
+	}
+
+	return found, nil
+}
+
+func (s *spaceStore) TeamSpaces(ctx context.Context, domainID, teamID int64) ([]int64, bool, error) {
+	rows, err := s.db.Query(ctx, teamSpacesSQL, teamID, domainID)
+	if err != nil {
+		return nil, false, ParseError(err)
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	found := false
+
+	for rows.Next() {
+		var id *int64
+
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, ParseError(err)
+		}
+
+		found = true
+
+		if id != nil {
+			ids = append(ids, *id)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, false, ParseError(err)
+	}
+
+	return ids, found, nil
 }
 
 // writeReturning reads the written row back via cteReadBack, rendering the
