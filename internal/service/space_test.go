@@ -60,6 +60,10 @@ type fakeSpaceStore struct {
 	resolveErr error
 	resolvedID int64
 
+	resolvedMany   []*model.SpaceEmbedding
+	resolvedDomain int64
+	resolvedIDs    []int64
+
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
 	readBack    *model.Space // plain Locate result (the post-write read-back)
@@ -139,6 +143,12 @@ func (f *fakeSpaceStore) ResolveEmbedding(_ context.Context, spaceID int64) (*mo
 	f.resolvedID = spaceID
 
 	return f.resolved, f.resolveErr
+}
+
+func (f *fakeSpaceStore) ResolveEmbeddings(_ context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceEmbedding, error) {
+	f.resolvedDomain, f.resolvedIDs = domainID, spaceIDs
+
+	return f.resolvedMany, f.resolveErr
 }
 
 // gateModelStore serves the validated-model gate.

@@ -30,6 +30,19 @@ type retrievalStoreFake struct {
 
 	items []*model.ArticleSummary
 	next  bool
+
+	hybrid model.HybridQuery
+	hits   []*model.ChunkHit
+	hitErr error
+}
+
+func (f *retrievalStoreFake) SemanticSearch(
+	_ context.Context, _ options.Searcher, q model.HybridQuery,
+) ([]*model.ChunkHit, error) {
+	f.calls++
+	f.hybrid = q
+
+	return f.hits, f.hitErr
 }
 
 func (f *retrievalStoreFake) Search(
@@ -61,14 +74,23 @@ func (f *retrievalStoreFake) Menu(
 	return f.items, nil
 }
 
-// retrievalUow hands out the retrieval fake.
+// retrievalUow hands out the retrieval and space fakes; a transaction is a pass-through.
 type retrievalUow struct {
 	store.UnitOfWork
 
 	retrieval *retrievalStoreFake
+	spaces    *fakeSpaceStore
+	txCalls   int
 }
 
 func (u *retrievalUow) RetrievalStore() store.RetrievalStore { return u.retrieval }
+func (u *retrievalUow) SpaceStore() store.SpaceStore         { return u.spaces }
+
+func (u *retrievalUow) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
+	u.txCalls++
+
+	return fn(ctx, u)
+}
 
 // readOpts is the read-request options of a retrieval call.
 type readOpts struct {
@@ -88,9 +110,9 @@ func (o *readOpts) GetSort() string          { return "" }
 func (o *readOpts) GetIDs() []int64          { return o.ids }
 
 func retrievalServiceWithFake() (*RetrievalService, *retrievalStoreFake) {
-	fake := &retrievalStoreFake{}
+	svc, uow, _ := semanticServiceWithFakes()
 
-	return NewRetrievalService(&retrievalUow{retrieval: fake}), fake
+	return svc, uow.retrieval
 }
 
 func TestRetrievalSearchAnswersABlankQueryItself(t *testing.T) {

@@ -475,7 +475,7 @@ func TestMapSpaceBranches(t *testing.T) {
 
 func TestSpaceResolveEmbedding(t *testing.T) {
 	f := &fakeQuerier{row: fakeRow{vals: []any{
-		true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc:key"), true,
+		int64(7), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc:key"), true,
 	}}}
 	s := &spaceStore{db: f}
 
@@ -513,5 +513,39 @@ func TestSpaceResolveEmbeddingMissingSpace(t *testing.T) {
 	_, err := s.ResolveEmbedding(context.Background(), 7)
 	if errors.Code(err) != codes.NotFound {
 		t.Fatalf("error code = %v, want not found (err: %v)", errors.Code(err), err)
+	}
+}
+
+func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"space_id", "vector_search_enabled", "model_id", "provider", "model_ref", "dimensions", "endpoint", "config", "validated"},
+		vals: [][]any{
+			{int64(1), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc"), true},
+			{int64(2), false, int64(0), "", "", int32(0), "", nil, false},
+		},
+	}}
+	s := &spaceStore{db: f}
+
+	got, err := s.ResolveEmbeddings(context.Background(), 5, []int64{2, 1, 77})
+	if err != nil {
+		t.Fatalf("ResolveEmbeddings: %v", err)
+	}
+
+	for _, want := range []string{
+		"FROM kb.space s",
+		"LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id",
+		"s.domain_id = $1",
+		"s.id = ANY($2)",
+		"s.deleted_at IS NULL",
+		"ORDER BY s.id",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL does not contain %q", want)
+		}
+	}
+
+	if len(got) != 2 || got[0].SpaceID != 1 || got[0].ModelID != 9 || got[0].APIKey != "" ||
+		got[1].SpaceID != 2 || got[1].VectorSearchEnabled {
+		t.Fatalf("resolved = %+v, %+v", got[0], got[1])
 	}
 }

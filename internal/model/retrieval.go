@@ -28,3 +28,50 @@ type SearchFilter struct {
 	Tags         []string
 	TagsMatchAll bool
 }
+
+// SemanticQuery is a hybrid search request as the service takes it.
+type SemanticQuery struct {
+	Query        string
+	SpaceIDs     []int64
+	Tags         []string
+	TagsMatchAll bool
+	// TopK is how many chunks to return; 0 asks for the default.
+	TopK             int
+	IncludeCitations bool
+}
+
+// ModelVector is the query embedded under one model, with the spaces that model serves.
+type ModelVector struct {
+	ModelID  int64
+	SpaceIDs []int64
+	Vector   []float32
+}
+
+// HybridQuery is what the store fuses: the lexical term and one vector per model.
+type HybridQuery struct {
+	Term    string
+	Filter  SearchFilter
+	Vectors []ModelVector
+	TopK    int
+}
+
+// ChunkHit is one fused result.
+type ChunkHit struct {
+	ID         int64
+	ArticleID  int64
+	VersionID  int64
+	ChunkIndex int32
+	Subject    string
+	Content    string
+	// Score is the reciprocal rank fusion score.
+	Score float64
+}
+
+// Citation points a consumer at the article a hit came from.
+type Citation struct {
+	ArticleID int64
+	Title     string
+	Snippet   string
+	// URL is empty until the article route is settled.
+	URL string
+}

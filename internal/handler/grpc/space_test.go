@@ -161,6 +161,10 @@ func (f fakeSpaces) ResolveEmbedding(context.Context, int64) (*model.SpaceEmbedd
 	return f.u.embedding, nil
 }
 
+func (f fakeSpaces) ResolveEmbeddings(context.Context, int64, []int64) ([]*model.SpaceEmbedding, error) {
+	return nil, nil
+}
+
 type fakeModels struct{ u *fakeUow }
 
 func (f fakeModels) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {

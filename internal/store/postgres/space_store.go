@@ -284,9 +284,10 @@ func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (
 	return has, nil
 }
 
-// resolveEmbeddingSQL reads a space with its embedding model. Outer join: a
+// resolveEmbeddingSelect reads spaces with their embedding model. Outer join: a
 // space without a model still answers.
-const resolveEmbeddingSQL = `SELECT
+const resolveEmbeddingSelect = `SELECT
+	s.id                              AS space_id,
 	s.vector_search_enabled,
 	coalesce(s.embedding_model_id, 0) AS model_id,
 	coalesce(m.provider, '')          AS provider,
@@ -296,13 +297,22 @@ const resolveEmbeddingSQL = `SELECT
 	m.config,
 	m.validated_at IS NOT NULL        AS validated
 	FROM kb.space s
-	LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id
+	LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id`
+
+// resolveEmbeddingSQL is the read of one space by id.
+const resolveEmbeddingSQL = resolveEmbeddingSelect + `
 	WHERE s.id = $1`
+
+// resolveEmbeddingsSQL is the read of a domain's spaces.
+const resolveEmbeddingsSQL = resolveEmbeddingSelect + `
+	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
+	ORDER BY s.id`
 
 func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
 	var found model.SpaceEmbedding
 
 	err := s.db.QueryRow(ctx, resolveEmbeddingSQL, spaceID).Scan(
+		&found.SpaceID,
 		&found.VectorSearchEnabled,
 		&found.ModelID,
 		&found.Provider,
@@ -317,6 +327,44 @@ func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*mode
 	}
 
 	return &found, nil
+}
+
+func (s *spaceStore) ResolveEmbeddings(
+	ctx context.Context, domainID int64, spaceIDs []int64,
+) ([]*model.SpaceEmbedding, error) {
+	rows, err := s.db.Query(ctx, resolveEmbeddingsSQL, domainID, spaceIDs)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+	defer rows.Close()
+
+	found := make([]*model.SpaceEmbedding, 0)
+
+	for rows.Next() {
+		var item model.SpaceEmbedding
+
+		if err := rows.Scan(
+			&item.SpaceID,
+			&item.VectorSearchEnabled,
+			&item.ModelID,
+			&item.Provider,
+			&item.ModelRef,
+			&item.Dimensions,
+			&item.Endpoint,
+			&item.Config,
+			&item.Validated,
+		); err != nil {
+			return nil, ParseError(err)
+		}
+
+		found = append(found, &item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, ParseError(err)
+	}
+
+	return found, nil
 }
 
 // writeReturning reads the written row back via cteReadBack, rendering the
