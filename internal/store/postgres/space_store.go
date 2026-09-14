@@ -408,6 +408,29 @@ func (s *spaceStore) ResolveEmbeddings(
 	return found, nil
 }
 
+// rerankerRecord is the scan target of a space reranker.
+type rerankerRecord struct {
+	SpaceID  int64  `db:"space_id"`
+	Enabled  bool   `db:"enabled"`
+	ModelID  int64  `db:"model_id"`
+	Provider string `db:"provider"`
+	ModelRef string `db:"model_ref"`
+	Endpoint string `db:"endpoint"`
+	Config   []byte `db:"config"`
+}
+
+func mapReranker(record *rerankerRecord) *model.SpaceReranker {
+	return &model.SpaceReranker{
+		SpaceID:  record.SpaceID,
+		Enabled:  record.Enabled,
+		ModelID:  record.ModelID,
+		Provider: record.Provider,
+		ModelRef: record.ModelRef,
+		Endpoint: record.Endpoint,
+		Config:   record.Config,
+	}
+}
+
 func (s *spaceStore) ResolveRerankers(
 	ctx context.Context, domainID int64, spaceIDs []int64,
 ) ([]*model.SpaceReranker, error) {
@@ -415,33 +438,13 @@ func (s *spaceStore) ResolveRerankers(
 	if err != nil {
 		return nil, ParseError(err)
 	}
-	defer rows.Close()
 
-	found := make([]*model.SpaceReranker, 0)
-
-	for rows.Next() {
-		var item model.SpaceReranker
-
-		if err := rows.Scan(
-			&item.SpaceID,
-			&item.Enabled,
-			&item.ModelID,
-			&item.Provider,
-			&item.ModelRef,
-			&item.Endpoint,
-			&item.Config,
-		); err != nil {
-			return nil, ParseError(err)
-		}
-
-		found = append(found, &item)
-	}
-
-	if err := rows.Err(); err != nil {
+	items, err := collectRows(rows, mapReranker)
+	if err != nil {
 		return nil, ParseError(err)
 	}
 
-	return found, nil
+	return items, nil
 }
 
 func (s *spaceStore) TeamSpaces(ctx context.Context, domainID, teamID int64) ([]int64, bool, error) {
@@ -449,30 +452,21 @@ func (s *spaceStore) TeamSpaces(ctx context.Context, domainID, teamID int64) ([]
 	if err != nil {
 		return nil, false, ParseError(err)
 	}
-	defer rows.Close()
 
-	ids := make([]int64, 0)
-	found := false
+	bound, err := pgx.CollectRows(rows, pgx.RowTo[*int64])
+	if err != nil {
+		return nil, false, ParseError(err)
+	}
 
-	for rows.Next() {
-		var id *int64
+	ids := make([]int64, 0, len(bound))
 
-		if err := rows.Scan(&id); err != nil {
-			return nil, false, ParseError(err)
-		}
-
-		found = true
-
+	for _, id := range bound {
 		if id != nil {
 			ids = append(ids, *id)
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, false, ParseError(err)
-	}
-
-	return ids, found, nil
+	return ids, len(bound) > 0, nil
 }
 
 // writeReturning reads the written row back via cteReadBack, rendering the
