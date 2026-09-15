@@ -38,10 +38,10 @@ func (q *AttachmentQuery) IdentityFields() []string { return []string{"id"} }
 func (q *AttachmentQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{
-			"id":   {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
-			"name": {sqlExpr: "COALESCE(m.view_name, m.name)", aliasedExpr: "COALESCE(m.view_name, m.name) AS name", sortable: true},
-			"size": {sqlExpr: "m.size", aliasedExpr: "m.size AS size", sortable: true},
-			"mime": {sqlExpr: "m.mime_type", aliasedExpr: "m.mime_type AS mime"},
+			"id":         {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
+			"name":       {sqlExpr: "COALESCE(m.view_name, m.name)", aliasedExpr: "COALESCE(m.view_name, m.name) AS name", sortable: true},
+			"size":       {sqlExpr: "m.size", aliasedExpr: "m.size AS size", sortable: true},
+			"mime":       {sqlExpr: "m.mime_type", aliasedExpr: "m.mime_type AS mime"},
 			"created_at": {sqlExpr: "m.uploaded_at", aliasedExpr: "m.uploaded_at AS created_at", sortable: true},
 			"created_by": {
 				sqlExpr:      "COALESCE(cb.name, cb.username)",
