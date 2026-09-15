@@ -37,6 +37,22 @@ type UnitOfWork interface {
 
 	// OutboxStore accesses the transactional outbox.
 	OutboxStore() OutboxStore
+
+	// AttachmentStore accesses the Storage files attached to articles.
+	AttachmentStore() AttachmentStore
+}
+
+// AttachmentStore reads and removes the files attached to articles in place,
+// in the Storage table. Every operation is scoped to the caller's domain and
+// to one article.
+type AttachmentStore interface {
+	// List returns a page of the files of the article and whether a next page
+	// exists.
+	List(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.Attachment, bool, error)
+
+	// Delete removes the file the options identify from the article and
+	// returns it; a file of another article, domain or channel is not found.
+	Delete(ctx context.Context, opts options.Deleter, articleID int64) (*model.Attachment, error)
 }
 
 // OutboxStore records events for the relay to deliver.

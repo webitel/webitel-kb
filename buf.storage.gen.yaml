@@ -1,0 +1,40 @@
+# Storage client stubs: the file service the attachments facade signs download
+# links with, plus the engine messages it depends on. Run from the repo root:
+#   buf generate --template buf.storage.gen.yaml
+version: v2
+
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      module: buf.build/webitel/storage
+      value: github.com/webitel/webitel-kb/api/storage
+    - file_option: go_package_prefix
+      module: buf.build/webitel/engine
+      value: github.com/webitel/webitel-kb/api/storage/engine
+
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: .
+    opt:
+      - paths=import
+      - module=github.com/webitel/webitel-kb
+
+  - remote: buf.build/grpc/go
+    out: .
+    opt:
+      - paths=import
+      - module=github.com/webitel/webitel-kb
+
+inputs:
+  - git_repo: "https://github.com/webitel/protos"
+    branch: "main"
+    subdir: storage
+    paths:
+      - file.proto
+
+  - git_repo: "https://github.com/webitel/protos"
+    branch: "main"
+    subdir: engine
+    paths:
+      - const.proto
