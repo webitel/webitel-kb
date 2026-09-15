@@ -84,7 +84,8 @@ type retrievalUoWFake struct {
 	spaces    []*model.SpaceEmbedding
 }
 
-func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore { return f.retrieval }
+func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore   { return f.retrieval }
+func (f *retrievalUoWFake) AttachmentStore() store.AttachmentStore { return nil }
 func (f *retrievalUoWFake) SpaceStore() store.SpaceStore {
 	return fakeSpaces{&fakeUow{embeddings: f.spaces}}
 }

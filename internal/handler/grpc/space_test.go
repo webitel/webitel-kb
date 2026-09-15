@@ -123,6 +123,7 @@ func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *fakeUow) OutboxStore() store.OutboxStore                 { return nil }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
+func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
 
 type fakeSpaces struct{ u *fakeUow }
 

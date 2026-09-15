@@ -14,6 +14,7 @@ var Module = fx.Module("service",
 	fx.Provide(
 		NewSpaceService,
 		NewArticleService,
+		NewAttachmentService,
 		NewIndexingService,
 		provideRetrievalService,
 		provideEmbeddingModelService,

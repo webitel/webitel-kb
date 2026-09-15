@@ -25,6 +25,7 @@ func NewApp(cfg *config.Config) *fx.App {
 			ProvideAuthManager,
 			ProvideEncryptor,
 			ProvideEmbeddingRegistry,
+			ProvideStorageLinks,
 		),
 		fx.Invoke(func(discovery.DiscoveryProvider) error { return nil }),
 		fx.Invoke(func(crypto.Encryptor) {}),
