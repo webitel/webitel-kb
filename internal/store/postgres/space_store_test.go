@@ -3,6 +3,7 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -549,3 +550,125 @@ func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
 		t.Fatalf("resolved = %+v, %+v", got[0], got[1])
 	}
 }
+
+func TestSpaceResolveEmbeddingsWithoutIDsReadsTheWholeDomain(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"space_id", "vector_search_enabled", "model_id", "provider", "model_ref", "dimensions", "endpoint", "config", "validated"},
+	}}
+	s := &spaceStore{db: f}
+
+	if _, err := s.ResolveEmbeddings(context.Background(), 5, nil); err != nil {
+		t.Fatalf("ResolveEmbeddings: %v", err)
+	}
+
+	if strings.Contains(f.gotSQL, "ANY(") || !strings.Contains(f.gotSQL, "s.domain_id = $1") || !strings.Contains(f.gotSQL, "s.deleted_at IS NULL") {
+		t.Fatalf("SQL = %s", f.gotSQL)
+	}
+
+	if !reflect.DeepEqual(f.gotArgs, []any{int64(5)}) {
+		t.Fatalf("args = %v, want the domain only", f.gotArgs)
+	}
+}
+
+func TestSpaceResolveRerankersReadsTheDomainSpaces(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{
+		cols: []string{"space_id", "enabled", "model_id", "provider", "model_ref", "endpoint", "config"},
+		vals: [][]any{
+			{int64(1), true, int64(30), "bge-reranker", "bge", "http://rerank", nil},
+			{int64(2), false, int64(0), "", "", "", nil},
+		},
+	}}
+	s := &spaceStore{db: f}
+
+	got, err := s.ResolveRerankers(context.Background(), 5, []int64{2, 1})
+	if err != nil {
+		t.Fatalf("ResolveRerankers: %v", err)
+	}
+
+	for _, want := range []string{
+		"s.rerank_enabled AND s.reranker_model_id IS NOT NULL AS enabled",
+		"LEFT JOIN kb.embedding_model m ON m.id = s.reranker_model_id",
+		"s.domain_id = $1",
+		"s.id = ANY($2)",
+		"s.deleted_at IS NULL",
+		"ORDER BY s.id",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL does not contain %q", want)
+		}
+	}
+
+	if !reflect.DeepEqual(f.gotArgs, []any{int64(5), []int64{2, 1}}) {
+		t.Fatalf("args = %v", f.gotArgs)
+	}
+
+	want := []*model.SpaceReranker{
+		{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank"},
+		{SpaceID: 2},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolved = %+v, want %+v", got, want)
+	}
+}
+
+func TestSpaceTeamSpaces(t *testing.T) {
+	tests := []struct {
+		name      string
+		vals      [][]any
+		wantIDs   []int64
+		wantFound bool
+	}{
+		{
+			name:      "a bound team",
+			vals:      [][]any{{spaceRef(4)}, {spaceRef(9)}},
+			wantIDs:   []int64{4, 9},
+			wantFound: true,
+		},
+		{
+			name:      "a team bound to nothing still answers",
+			vals:      [][]any{{nil}},
+			wantIDs:   []int64{},
+			wantFound: true,
+		},
+		{
+			name:    "an unknown team answers with no row",
+			vals:    [][]any{},
+			wantIDs: []int64{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: tt.vals}}
+			s := &spaceStore{db: f}
+
+			got, found, err := s.TeamSpaces(context.Background(), 5, 7)
+			if err != nil {
+				t.Fatalf("TeamSpaces: %v", err)
+			}
+
+			for _, want := range []string{
+				"FROM call_center.cc_team t",
+				"LEFT JOIN kb.team_space ts ON ts.team_id = t.id",
+				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL",
+				"t.id = $1 AND t.dc = $2",
+				"ORDER BY s.id",
+			} {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL does not contain %q", want)
+				}
+			}
+
+			if !reflect.DeepEqual(f.gotArgs, []any{int64(7), int64(5)}) {
+				t.Fatalf("args = %v, want the team then the domain", f.gotArgs)
+			}
+
+			if found != tt.wantFound || !reflect.DeepEqual(got, tt.wantIDs) {
+				t.Fatalf("ids = %v, found = %v, want %v and %v", got, found, tt.wantIDs, tt.wantFound)
+			}
+		})
+	}
+}
+
+// spaceRef is a nullable space id as the driver hands it over.
+func spaceRef(id int64) *int64 { return &id }

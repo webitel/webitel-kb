@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -59,9 +60,9 @@ func (f *retrievalStoreFake) Search(
 }
 
 func (f *retrievalStoreFake) Resolve(
-	_ context.Context, opts options.Searcher, spaceIDs []int64,
+	_ context.Context, opts options.Searcher, ids, spaceIDs []int64,
 ) ([]*model.ArticleSummary, error) {
-	f.ids, f.spaces = opts.GetIDs(), spaceIDs
+	f.ids, f.spaces = ids, spaceIDs
 	f.size = opts.GetSize()
 
 	return f.items, nil
@@ -80,10 +81,13 @@ type retrievalUoWFake struct {
 	store.UnitOfWork
 
 	retrieval *retrievalStoreFake
+	spaces    []*model.SpaceEmbedding
 }
 
 func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore { return f.retrieval }
-func (f *retrievalUoWFake) SpaceStore() store.SpaceStore         { return fakeSpaces{&fakeUow{}} }
+func (f *retrievalUoWFake) SpaceStore() store.SpaceStore {
+	return fakeSpaces{&fakeUow{embeddings: f.spaces}}
+}
 
 func (f *retrievalUoWFake) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
 	return fn(ctx, f)
@@ -91,7 +95,10 @@ func (f *retrievalUoWFake) WithinTransaction(ctx context.Context, fn func(contex
 
 func retrievalServerWithFake() (*RetrievalServer, *retrievalStoreFake) {
 	fake := &retrievalStoreFake{}
-	svc := service.NewRetrievalService(&retrievalUoWFake{retrieval: fake}, sealer{}, embedding.NewRegistry())
+	svc := service.NewRetrievalService(
+		&retrievalUoWFake{retrieval: fake, spaces: []*model.SpaceEmbedding{{SpaceID: 3}}},
+		sealer{}, embedding.NewRegistry(), slog.New(slog.DiscardHandler),
+	)
 
 	return NewRetrievalServer(svc), fake
 }
@@ -332,6 +339,65 @@ func TestSemanticSearchEmptyIsEmptyNotNil(t *testing.T) {
 	}
 
 	if resp.GetChunks() == nil || resp.GetCitations() == nil || len(resp.GetChunks()) != 0 || len(resp.GetCitations()) != 0 {
+		t.Fatalf("response = %+v, want empty non-nil slices", resp)
+	}
+}
+
+func TestSuggestFullPath(t *testing.T) {
+	server, fake := retrievalServerWithFake()
+	fake.hits = []*model.ChunkHit{
+		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 2, Subject: "VPN", Content: "how to connect", Score: 0.03},
+	}
+	fake.items = []*model.ArticleSummary{{ID: 10, SpaceID: 3, Subject: "VPN", Snippet: "leading"}}
+
+	tests := []struct {
+		name         string
+		req          *kb.SuggestRequest
+		wantArticles int
+		wantChunks   int
+	}{
+		{name: "articles", req: &kb.SuggestRequest{CustomerMessage: "vpn", SpaceIds: []int64{3}, TeamId: 7}, wantArticles: 1},
+		{name: "chunks", req: &kb.SuggestRequest{CustomerMessage: "vpn", SpaceIds: []int64{3}, ReturnChunks: true}, wantChunks: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := server.Suggest(retrievalContext(), tt.req)
+			if err != nil {
+				t.Fatalf("Suggest: %v", err)
+			}
+
+			want := model.HybridQuery{Term: "vpn", Filter: model.SearchFilter{SpaceIDs: []int64{3}}, Vectors: []model.ModelVector{}, TopK: 10}
+			if !reflect.DeepEqual(fake.hybrid, want) {
+				t.Fatalf("hybrid = %+v, want %+v", fake.hybrid, want)
+			}
+
+			if len(resp.GetArticles()) != tt.wantArticles || len(resp.GetChunks()) != tt.wantChunks {
+				t.Fatalf("articles = %d, chunks = %d", len(resp.GetArticles()), len(resp.GetChunks()))
+			}
+
+			if articles := resp.GetArticles(); len(articles) == 1 &&
+				(articles[0].GetId() != 10 || articles[0].GetSubject() != "VPN" || articles[0].GetSnippet() != "how to connect") {
+				t.Fatalf("articles = %+v", articles)
+			}
+
+			if chunks := resp.GetChunks(); len(chunks) == 1 &&
+				(chunks[0].GetArticleId() != 10 || chunks[0].GetVersionId() != 4 || chunks[0].GetChunkIndex() != 2 || chunks[0].GetContent() != "how to connect") {
+				t.Fatalf("chunks = %+v", chunks)
+			}
+		})
+	}
+}
+
+func TestSuggestEmptyIsEmptyNotNil(t *testing.T) {
+	server, _ := retrievalServerWithFake()
+
+	resp, err := server.Suggest(retrievalContext(), &kb.SuggestRequest{CustomerMessage: "vpn", SpaceIds: []int64{3}})
+	if err != nil {
+		t.Fatalf("Suggest: %v", err)
+	}
+
+	if resp.GetArticles() == nil || resp.GetChunks() == nil || len(resp.GetArticles()) != 0 || len(resp.GetChunks()) != 0 {
 		t.Fatalf("response = %+v, want empty non-nil slices", resp)
 	}
 }

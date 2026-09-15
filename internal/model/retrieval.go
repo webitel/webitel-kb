@@ -75,3 +75,18 @@ type Citation struct {
 	// URL is empty until the article route is settled.
 	URL string
 }
+
+// SuggestQuery is an operator assist request as the service takes it.
+type SuggestQuery struct {
+	Message  string
+	SpaceIDs []int64
+	// TeamID picks the spaces bound to the team when SpaceIDs is empty.
+	TeamID       int64
+	ReturnChunks bool
+}
+
+// Suggestion is the answer of a suggest: articles or chunks, never both.
+type Suggestion struct {
+	Articles []*ArticleSummary
+	Chunks   []*ChunkHit
+}

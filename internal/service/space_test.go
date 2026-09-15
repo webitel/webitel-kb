@@ -64,6 +64,14 @@ type fakeSpaceStore struct {
 	resolvedDomain int64
 	resolvedIDs    []int64
 
+	rerankers     []*model.SpaceReranker
+	rerankersErr  error
+	rerankerIDs   []int64
+	teamSpaces    []int64
+	teamSpacesErr error
+	teamUnknown   bool
+	teamAsked     int64
+
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
 	readBack    *model.Space // plain Locate result (the post-write read-back)
@@ -149,6 +157,18 @@ func (f *fakeSpaceStore) ResolveEmbeddings(_ context.Context, domainID int64, sp
 	f.resolvedDomain, f.resolvedIDs = domainID, spaceIDs
 
 	return f.resolvedMany, f.resolveErr
+}
+
+func (f *fakeSpaceStore) ResolveRerankers(_ context.Context, _ int64, spaceIDs []int64) ([]*model.SpaceReranker, error) {
+	f.rerankerIDs = spaceIDs
+
+	return f.rerankers, f.rerankersErr
+}
+
+func (f *fakeSpaceStore) TeamSpaces(_ context.Context, _, teamID int64) ([]int64, bool, error) {
+	f.teamAsked = teamID
+
+	return f.teamSpaces, !f.teamUnknown, f.teamSpacesErr
 }
 
 // gateModelStore serves the validated-model gate.

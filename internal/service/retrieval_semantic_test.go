@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,11 +17,15 @@ import (
 	queryobject "github.com/webitel/webitel-kb/internal/store/query_object"
 )
 
-// queryEmbedder records embed requests and plays back vectors by model ref.
+// queryEmbedder records embed and rerank requests and plays back canned answers.
 type queryEmbedder struct {
 	requests []embedding.EmbedRequest
 	vectors  map[string][]float32
 	err      error
+
+	reranks   []embedding.RerankRequest
+	scores    []float64
+	rerankErr error
 }
 
 func (p *queryEmbedder) Embed(_ context.Context, req embedding.EmbedRequest) (embedding.EmbedResult, error) {
@@ -33,8 +38,14 @@ func (p *queryEmbedder) Embed(_ context.Context, req embedding.EmbedRequest) (em
 	return embedding.EmbedResult{Vectors: [][]float32{p.vectors[req.ModelRef]}}, nil
 }
 
-func (p *queryEmbedder) Rerank(context.Context, embedding.RerankRequest) (embedding.RerankResult, error) {
-	return embedding.RerankResult{}, embedding.ErrUnsupported
+func (p *queryEmbedder) Rerank(_ context.Context, req embedding.RerankRequest) (embedding.RerankResult, error) {
+	p.reranks = append(p.reranks, req)
+
+	if p.rerankErr != nil {
+		return embedding.RerankResult{}, p.rerankErr
+	}
+
+	return embedding.RerankResult{Scores: p.scores}, nil
 }
 
 // queryResolver hands out one embedder for every provider key.
@@ -46,7 +57,7 @@ func semanticServiceWithFakes() (*RetrievalService, *retrievalUow, *queryEmbedde
 	embedder := &queryEmbedder{vectors: map[string][]float32{}}
 	uow := &retrievalUow{retrieval: &retrievalStoreFake{}, spaces: &fakeSpaceStore{}}
 
-	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}), uow, embedder
+	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}, discardLogger()), uow, embedder
 }
 
 func semanticOpts() options.Searcher {
@@ -254,3 +265,6 @@ func TestSemanticSearchCitations(t *testing.T) {
 		})
 	}
 }
+
+// discardLogger is the logger of a test: the service logs, nothing reads it.
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }

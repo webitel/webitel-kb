@@ -1,6 +1,8 @@
 package service
 
 import (
+	"log/slog"
+
 	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-kb/infra/crypto"
@@ -28,7 +30,7 @@ func provideEmbeddingModelService(
 
 // provideRetrievalService binds the concrete registry to the service's resolver seam.
 func provideRetrievalService(
-	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry,
+	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry, log *slog.Logger,
 ) *RetrievalService {
-	return NewRetrievalService(uow, encryptor, registry)
+	return NewRetrievalService(uow, encryptor, registry, log)
 }

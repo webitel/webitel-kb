@@ -105,8 +105,9 @@ type RetrievalStore interface {
 	// Search returns a ranked page of summaries and whether a next page exists.
 	Search(ctx context.Context, opts options.Searcher, filter model.SearchFilter) ([]*model.ArticleSummary, bool, error)
 
-	// Resolve returns the summaries of the ids opts carry, in order.
-	Resolve(ctx context.Context, opts options.Searcher, spaceIDs []int64) ([]*model.ArticleSummary, error)
+	// Resolve returns the summaries of the given articles, in the order asked;
+	// no ids resolve to no articles.
+	Resolve(ctx context.Context, opts options.Searcher, ids, spaceIDs []int64) ([]*model.ArticleSummary, error)
 
 	// Menu returns the articles below a parent, down to depthLimit levels.
 	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32) ([]*model.ArticleSummary, error)
@@ -172,8 +173,17 @@ type SpaceStore interface {
 	ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error)
 
 	// ResolveEmbeddings returns the embedding model of each of a domain's
-	// spaces, credential included; unknown ids are simply absent.
+	// spaces, credential included; unknown ids are simply absent. No ids
+	// means every space of the domain.
 	ResolveEmbeddings(ctx context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceEmbedding, error)
+
+	// ResolveRerankers returns the reranker of each of a domain's spaces,
+	// credential included; unknown ids are simply absent.
+	ResolveRerankers(ctx context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceReranker, error)
+
+	// TeamSpaces returns the ids of the domain's spaces bound to a team, and
+	// whether the team itself exists in the domain.
+	TeamSpaces(ctx context.Context, domainID, teamID int64) ([]int64, bool, error)
 }
 
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see

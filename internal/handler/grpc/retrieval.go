@@ -95,6 +95,26 @@ func (s *RetrievalServer) SemanticSearch(ctx context.Context, req *kb.SemanticSe
 	return &kb.SemanticSearchResponse{Chunks: chunksToProto(hits), Citations: citationsToProto(citations)}, nil
 }
 
+func (s *RetrievalServer) Suggest(ctx context.Context, req *kb.SuggestRequest) (*kb.SuggestResponse, error) {
+	// The result size is fixed, never a page.
+	opts, err := options.NewSearchOptions(ctx, options.WithUnlimitedSize())
+	if err != nil {
+		return nil, err
+	}
+
+	answer, err := s.service.Suggest(ctx, opts, model.SuggestQuery{
+		Message:      req.GetCustomerMessage(),
+		SpaceIDs:     req.GetSpaceIds(),
+		TeamID:       req.GetTeamId(),
+		ReturnChunks: req.GetReturnChunks(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &kb.SuggestResponse{Articles: summariesToProto(answer.Articles), Chunks: chunksToProto(answer.Chunks)}, nil
+}
+
 func chunksToProto(items []*model.ChunkHit) []*kb.Chunk {
 	out := make([]*kb.Chunk, 0, len(items))
 	for _, item := range items {

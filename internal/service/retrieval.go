@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	stderrors "errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -37,10 +38,13 @@ type RetrievalService struct {
 	uow       store.UnitOfWork
 	enc       crypto.Encryptor
 	providers ProviderResolver
+	log       *slog.Logger
 }
 
-func NewRetrievalService(uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver) *RetrievalService {
-	return &RetrievalService{uow: uow, enc: encryptor, providers: providers}
+func NewRetrievalService(
+	uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver, log *slog.Logger,
+) *RetrievalService {
+	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, log: log}
 }
 
 // Search runs full-text search over subjects and published bodies.
@@ -71,7 +75,7 @@ func (s *RetrievalService) Resolve(
 		)
 	}
 
-	return s.uow.RetrievalStore().Resolve(ctx, opts, spaceIDs)
+	return s.uow.RetrievalStore().Resolve(ctx, opts, ids, spaceIDs)
 }
 
 // Menu returns the articles below a parent.
@@ -120,18 +124,31 @@ func (s *RetrievalService) SemanticSearch(
 		return nil, nil, err
 	}
 
-	vectors, err := s.embedQuery(ctx, q.Query, spaces)
+	filter := model.SearchFilter{SpaceIDs: q.SpaceIDs, Tags: q.Tags, TagsMatchAll: q.TagsMatchAll}
+
+	hits, err := s.fuse(ctx, opts, q.Query, spaces, filter, topK(q.TopK))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	hybrid := model.HybridQuery{
-		Term:    q.Query,
-		Filter:  model.SearchFilter{SpaceIDs: q.SpaceIDs, Tags: q.Tags, TagsMatchAll: q.TagsMatchAll},
-		Vectors: vectors,
-		TopK:    topK(q.TopK),
+	citations := make([]*model.Citation, 0)
+	if q.IncludeCitations {
+		citations = citationsOf(hits)
 	}
 
+	return hits, citations, nil
+}
+
+// fuse embeds the query per model and runs the fused ranking of chunks.
+func (s *RetrievalService) fuse(
+	ctx context.Context, opts options.Searcher, query string, spaces []*model.SpaceEmbedding, filter model.SearchFilter, topK int,
+) ([]*model.ChunkHit, error) {
+	vectors, err := s.embedQuery(ctx, query, spaces)
+	if err != nil {
+		return nil, err
+	}
+
+	hybrid := model.HybridQuery{Term: query, Filter: filter, Vectors: vectors, TopK: topK}
 	hits := make([]*model.ChunkHit, 0)
 
 	// The rescore setting is local to the transaction the query runs in.
@@ -146,15 +163,10 @@ func (s *RetrievalService) SemanticSearch(
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	citations := make([]*model.Citation, 0)
-	if q.IncludeCitations {
-		citations = citationsOf(hits)
-	}
-
-	return hits, citations, nil
+	return hits, nil
 }
 
 // embedQuery embeds the text once per model the spaces are indexed with.
@@ -196,17 +208,14 @@ func (s *RetrievalService) embedQuery(
 
 // embedWith embeds the text under the model of a space.
 func (s *RetrievalService) embedWith(ctx context.Context, query string, space *model.SpaceEmbedding) ([]float32, error) {
-	if err := openModelCredential(ctx, s.enc, space); err != nil {
+	key, err := openModelCredential(ctx, s.enc, space.Provider, space.Config)
+	if err != nil {
 		return nil, err
 	}
 
-	provider, err := s.providers.ForModel(space.Provider)
+	provider, err := s.providerFor(space.Provider)
 	if err != nil {
-		return nil, errors.Internal(
-			"embedding provider is not supported",
-			errors.WithID("kb.model.provider_unsupported"),
-			errors.WithCause(err),
-		)
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, embedTimeout)
@@ -214,7 +223,7 @@ func (s *RetrievalService) embedWith(ctx context.Context, query string, space *m
 
 	result, err := provider.Embed(ctx, embedding.EmbedRequest{
 		ModelRef:   space.ModelRef,
-		APIKey:     space.APIKey,
+		APIKey:     key,
 		Endpoint:   space.Endpoint,
 		Dimensions: int(space.Dimensions),
 		Task:       embedding.TaskQuery,
@@ -232,6 +241,20 @@ func (s *RetrievalService) embedWith(ctx context.Context, query string, space *m
 	}
 
 	return result.Vectors[0], nil
+}
+
+// providerFor resolves the client of a provider key.
+func (s *RetrievalService) providerFor(key string) (embedding.Provider, error) {
+	provider, err := s.providers.ForModel(key)
+	if err != nil {
+		return nil, errors.Internal(
+			"embedding provider is not supported",
+			errors.WithID("kb.model.provider_unsupported"),
+			errors.WithCause(err),
+		)
+	}
+
+	return provider, nil
 }
 
 // embedError tells a refused credential from an unavailable provider.
@@ -267,15 +290,10 @@ func topK(asked int) int {
 
 // citationsOf keeps the first hit of every article, in fusion order.
 func citationsOf(hits []*model.ChunkHit) []*model.Citation {
-	citations := make([]*model.Citation, 0)
-	seen := make(map[int64]struct{})
+	leading := leadingHits(hits, len(hits))
+	citations := make([]*model.Citation, 0, len(leading))
 
-	for _, hit := range hits {
-		if _, dup := seen[hit.ArticleID]; dup {
-			continue
-		}
-
-		seen[hit.ArticleID] = struct{}{}
+	for _, hit := range leading {
 		citations = append(citations, &model.Citation{
 			ArticleID: hit.ArticleID,
 			Title:     hit.Subject,

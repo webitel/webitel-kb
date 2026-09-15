@@ -69,9 +69,9 @@ func TestRetrievalResolveKeepsTheAskedOrder(t *testing.T) {
 	f := &fakeQuerier{}
 	s := &retrievalStore{db: f}
 
-	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{9, 4}, size: -1, page: 1}
+	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: -1, page: 1}
 
-	if _, err := s.Resolve(context.Background(), opts, []int64{7}); err != nil {
+	if _, err := s.Resolve(context.Background(), opts, []int64{9, 4}, []int64{7}); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
@@ -172,7 +172,8 @@ func TestRetrievalScansTheSummary(t *testing.T) {
 
 	items, err := s.Resolve(
 		context.Background(),
-		&fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{11}, size: -1, page: 1},
+		&fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: -1, page: 1},
+		[]int64{11},
 		nil,
 	)
 	if err != nil {
@@ -233,5 +234,19 @@ func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL does not contain %q", want)
 		}
+	}
+}
+
+func TestRetrievalResolveWithoutIDsResolvesNothing(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &retrievalStore{db: f}
+
+	items, err := s.Resolve(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: -1, page: 1}, nil, []int64{7})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if items == nil || len(items) != 0 || f.gotSQL != "" {
+		t.Fatalf("items = %v, sql = %q, want an empty answer and no query", items, f.gotSQL)
 	}
 }

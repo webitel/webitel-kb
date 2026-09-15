@@ -110,6 +110,7 @@ type fakeUow struct {
 	space         *model.Space
 	embModel      *model.EmbeddingModel
 	embedding     *model.SpaceEmbedding
+	embeddings    []*model.SpaceEmbedding
 }
 
 func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -162,7 +163,15 @@ func (f fakeSpaces) ResolveEmbedding(context.Context, int64) (*model.SpaceEmbedd
 }
 
 func (f fakeSpaces) ResolveEmbeddings(context.Context, int64, []int64) ([]*model.SpaceEmbedding, error) {
+	return f.u.embeddings, nil
+}
+
+func (f fakeSpaces) ResolveRerankers(context.Context, int64, []int64) ([]*model.SpaceReranker, error) {
 	return nil, nil
+}
+
+func (f fakeSpaces) TeamSpaces(context.Context, int64, int64) ([]int64, bool, error) {
+	return nil, true, nil
 }
 
 type fakeModels struct{ u *fakeUow }
