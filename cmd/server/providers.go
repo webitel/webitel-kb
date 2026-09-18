@@ -20,7 +20,6 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
 
-	storagepb "github.com/webitel/webitel-kb/api/storage"
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/infra/embedding"
@@ -29,8 +28,7 @@ import (
 	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
 
-	// Register the consul:// gRPC resolver used by ProvideAuthManager and
-	// ProvideStorageLinks.
+	// Register the consul:// gRPC resolver used by ProvideAuthManager.
 	_ "github.com/mbobakov/grpc-consul-resolver"
 	// Register the consul provider in the discovery factory used by ProvideSD.
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
@@ -237,25 +235,21 @@ func ProvideAuthManager(cfg *config.Config, lc fx.Lifecycle) (auth.Manager, erro
 	return webitel_app.New(conn)
 }
 
-// ProvideStorageLinks connects to the Storage service through Consul; the
-// attachments facade signs download links with it.
-func ProvideStorageLinks(cfg *config.Config, lc fx.Lifecycle) (storage.Links, error) {
-	conn, err := grpc.NewClient(
-		fmt.Sprintf("consul://%s/%s?wait=14s", cfg.Consul.Addr, storage.ServiceName),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy": "round_robin"}`),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+// ProvideStorageFiles connects to the Storage service through service
+// discovery; article attachments live there.
+func ProvideStorageFiles(dp discovery.DiscoveryProvider, lc fx.Lifecycle) (storage.Files, error) {
+	client, err := storage.New(dp)
 	if err != nil {
 		return nil, err
 	}
 
 	lc.Append(fx.Hook{
 		OnStop: func(_ context.Context) error {
-			return conn.Close()
+			return client.Close()
 		},
 	})
 
-	return storage.New(storagepb.NewFileServiceClient(conn)), nil
+	return client, nil
 }
 
 func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {

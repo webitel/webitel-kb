@@ -5,29 +5,25 @@ import (
 	"testing"
 )
 
-func TestAttachmentScopesToDomainArticleAndChannel(t *testing.T) {
+func TestAttachmentScopesToArticleAndDomain(t *testing.T) {
 	sql, args := mustSQLArgs(t, NewAttachmentQuery(AttachmentFrom).
 		WithFields([]string{"id"}).
 		WithDomainScope(5).
-		WithArticle(7).
-		WithAttached())
+		WithArticle(7))
 
 	for _, want := range []string{
-		"FROM storage.files m",
-		"m.domain_id=$1",
-		"m.uuid=$2",
+		"FROM kb.attachment m",
 		"EXISTS(SELECT 1 FROM kb.article a JOIN kb.space s ON s.id=a.space_id",
-		"a.id=$3 AND s.domain_id=m.domain_id AND a.deleted_at IS NULL",
-		"m.channel=$4",
-		"m.removed IS NOT TRUE",
+		"a.id=m.article_id AND s.domain_id=$1 AND a.deleted_at IS NULL",
+		"m.article_id=$2",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)
 		}
 	}
 
-	if len(args) != 4 || args[0] != int64(5) || args[1] != "7" || args[2] != int64(7) || args[3] != AttachmentChannel {
-		t.Fatalf("args = %v, want [5 \"7\" 7 %q]", args, AttachmentChannel)
+	if len(args) != 2 || args[0] != int64(5) || args[1] != int64(7) {
+		t.Fatalf("args = %v, want [5 7]", args)
 	}
 }
 
@@ -39,21 +35,21 @@ func TestAttachmentFilters(t *testing.T) {
 		wantArgs []any
 	}{
 		{
-			name:     "search matches the display name literally",
+			name:     "search matches the name literally",
 			build:    func(q *AttachmentQuery) *AttachmentQuery { return q.WithSearch("50%_off") },
-			wantSQL:  "COALESCE(m.view_name,m.name)ILIKE $1",
+			wantSQL:  "m.name ILIKE $1",
 			wantArgs: []any{`%50\%\_off%`},
 		},
 		{
 			name:     "an empty search adds nothing",
 			build:    func(q *AttachmentQuery) *AttachmentQuery { return q.WithSearch("") },
-			wantSQL:  "FROM storage.files m",
+			wantSQL:  "FROM kb.attachment m",
 			wantArgs: nil,
 		},
 		{
 			name:     "ids narrow the page",
 			build:    func(q *AttachmentQuery) *AttachmentQuery { return q.WithIDs([]int64{3, 4}) },
-			wantSQL:  "m.id=ANY($1)",
+			wantSQL:  "m.file_id=ANY($1)",
 			wantArgs: []any{[]int64{3, 4}},
 		},
 	}
@@ -98,14 +94,13 @@ func TestAttachmentDefaultsCoverReadModel(t *testing.T) {
 	sql, _ := mustSQLArgs(t, q)
 
 	for _, want := range []string{
-		"m.id AS id",
-		"COALESCE(m.view_name,m.name)AS name",
+		"m.file_id AS id",
+		"m.name AS name",
 		"m.size AS size",
-		"m.mime_type AS mime",
-		"m.uploaded_at AS created_at",
+		"m.mime AS mime",
+		"m.created_at AS created_at",
 		"cb.id AS created_by_id,COALESCE(cb.name,cb.username)AS created_by_name",
-		"m.channel AS source",
-		"LEFT JOIN directory.wbt_user cb ON cb.id=m.uploaded_by",
+		"LEFT JOIN directory.wbt_user cb ON cb.id=m.created_by",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)
@@ -123,11 +118,11 @@ func TestAttachmentSortableFields(t *testing.T) {
 		sort string
 		want string
 	}{
-		{name: "newest first", sort: "-created_at", want: "ORDER BY m.uploaded_at DESC"},
-		{name: "by display name", sort: "+name", want: "ORDER BY COALESCE(m.view_name,m.name)ASC"},
+		{name: "newest first", sort: "-created_at", want: "ORDER BY m.created_at DESC"},
+		{name: "by name", sort: "+name", want: "ORDER BY m.name ASC"},
 		{name: "by size", sort: "-size", want: "ORDER BY m.size DESC"},
-		{name: "by uploader through the join", sort: "+created_by", want: "ORDER BY COALESCE(cb.name,cb.username)ASC"},
-		{name: "the mime type is not sortable", sort: "+mime", want: "FROM storage.files m LIMIT"},
+		{name: "by author through the join", sort: "+created_by", want: "ORDER BY COALESCE(cb.name,cb.username)ASC"},
+		{name: "the mime type is not sortable", sort: "+mime", want: "FROM kb.attachment m LIMIT"},
 	}
 
 	for _, tt := range tests {
@@ -144,13 +139,13 @@ func TestAttachmentSortableFields(t *testing.T) {
 	}
 }
 
-func TestAttachmentJoinsTheUploaderOnce(t *testing.T) {
+func TestAttachmentJoinsTheAuthorOnce(t *testing.T) {
 	sql, _ := mustSQLArgs(t, NewAttachmentQuery(AttachmentFrom).
 		WithFields([]string{"id", "created_by"}).
 		WithSort("+created_by"))
 
 	if strings.Count(sql, "LEFT JOIN directory.wbt_user") != 1 {
-		t.Fatalf("SQL %q joins the uploader more than once", sql)
+		t.Fatalf("SQL %q joins the author more than once", sql)
 	}
 }
 
@@ -169,7 +164,7 @@ func TestAttachmentCTEReadBack(t *testing.T) {
 func TestAttachmentProjectionAlwaysCarriesTheIdentity(t *testing.T) {
 	sql, _ := mustSQLArgs(t, NewAttachmentQuery(AttachmentFrom).WithFields([]string{"name"}))
 
-	for _, want := range []string{"AS name", "m.id AS id"} {
+	for _, want := range []string{"AS name", "m.file_id AS id"} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)
 		}

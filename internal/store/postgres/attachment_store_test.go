@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/webitel-kb/internal/model"
 )
 
 func TestAttachmentListRendersScopedQuery(t *testing.T) {
@@ -25,15 +26,12 @@ func TestAttachmentListRendersScopedQuery(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"FROM storage.files m",
-		"m.domain_id=$1",
-		"m.uuid=$2",
-		"a.id=$3 AND s.domain_id=m.domain_id AND a.deleted_at IS NULL",
-		"m.channel=$4",
-		"m.removed IS NOT TRUE",
-		"COALESCE(m.view_name,m.name)ILIKE $5",
-		"m.id=ANY($6)",
-		"ORDER BY m.uploaded_at DESC,m.id ASC",
+		"FROM kb.attachment m",
+		"a.id=m.article_id AND s.domain_id=$1 AND a.deleted_at IS NULL",
+		"m.article_id=$2",
+		"m.name ILIKE $3",
+		"m.file_id=ANY($4)",
+		"ORDER BY m.created_at DESC,m.file_id ASC",
 		"LIMIT 11",
 		"OFFSET 10",
 	} {
@@ -42,8 +40,8 @@ func TestAttachmentListRendersScopedQuery(t *testing.T) {
 		}
 	}
 
-	if f.gotArgs[0] != int64(5) || f.gotArgs[1] != "7" || f.gotArgs[2] != int64(7) || f.gotArgs[3] != "knowledgebase" {
-		t.Errorf("args = %v, want the domain, the article as text and as id, and the channel", f.gotArgs)
+	if f.gotArgs[0] != int64(5) || f.gotArgs[1] != int64(7) {
+		t.Errorf("args = %v, want the domain and the article", f.gotArgs)
 	}
 }
 
@@ -57,7 +55,7 @@ func TestAttachmentListKeepsTiebreaker(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	if !strings.Contains(f.gotSQL, "ORDER BY COALESCE(m.view_name,m.name)ASC,m.id ASC") {
+	if !strings.Contains(f.gotSQL, "ORDER BY m.name ASC,m.file_id ASC") {
 		t.Fatalf("SQL %q does not fall back to the id", f.gotSQL)
 	}
 }
@@ -80,10 +78,10 @@ func TestAttachmentListScanMapsRecord(t *testing.T) {
 	now := time.Now()
 
 	f := &fakeQuerier{rows: &fakeRows{
-		cols: []string{"id", "name", "size", "mime", "created_at", "created_by_id", "created_by_name", "source"},
+		cols: []string{"id", "name", "size", "mime", "created_at", "created_by_id", "created_by_name"},
 		vals: [][]any{
-			{int64(4), "guide.pdf", int64(2048), ptrTo("application/pdf"), ptrTo(now), ptrTo(int64(9)), ptrTo("Admin"), ptrTo("knowledgebase")},
-			{int64(5), "raw.bin", int64(1), nil, nil, nil, nil, nil},
+			{int64(4), "guide.pdf", int64(2048), ptrTo("application/pdf"), ptrTo(now), ptrTo(int64(9)), ptrTo("Admin")},
+			{int64(5), "raw.bin", int64(1), nil, nil, nil, nil},
 		},
 	}}
 	s := &attachmentStore{db: f}
@@ -98,7 +96,7 @@ func TestAttachmentListScanMapsRecord(t *testing.T) {
 	}
 
 	full := items[0]
-	if full.ID != 4 || full.Name != "guide.pdf" || full.Size != 2048 || full.Mime != "application/pdf" || full.Source != "knowledgebase" {
+	if full.ID != 4 || full.Name != "guide.pdf" || full.Size != 2048 || full.Mime != "application/pdf" {
 		t.Fatalf("attachment = %+v", full)
 	}
 
@@ -107,12 +105,60 @@ func TestAttachmentListScanMapsRecord(t *testing.T) {
 	}
 
 	bare := items[1]
-	if bare.Mime != "" || !bare.CreatedAt.IsZero() || bare.CreatedBy != nil || bare.Source != "" || bare.URL != "" {
+	if bare.Mime != "" || !bare.CreatedAt.IsZero() || bare.CreatedBy != nil || bare.URL != "" {
 		t.Fatalf("nullable columns leaked into %+v", bare)
 	}
 }
 
-func TestAttachmentDeleteFlagsTheRowOfTheArticle(t *testing.T) {
+func TestAttachmentAttachBindsTheFileToTheArticle(t *testing.T) {
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(4)}}}}
+	s := &attachmentStore{db: f}
+
+	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
+	in := &model.Attachment{ID: 4, Name: "guide.pdf", Mime: "application/pdf", Size: 2048}
+
+	attached, err := s.Attach(context.Background(), opts, 7, in)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+
+	if attached.ID != 4 {
+		t.Fatalf("attached = %+v", attached)
+	}
+
+	for _, want := range []string{
+		"WITH m AS (INSERT INTO kb.attachment (article_id, file_id, name, mime, size, created_by)",
+		"FROM kb.article a JOIN kb.space s ON s.id = a.space_id",
+		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL",
+		"ON CONFLICT (article_id, file_id) DO UPDATE",
+		"RETURNING *) SELECT m.file_id AS id FROM m",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	mime, _ := f.gotArgs[4].(*string)
+	user, _ := f.gotArgs[6].(*int64)
+
+	if f.gotArgs[0] != int64(7) || f.gotArgs[1] != int64(5) || f.gotArgs[2] != int64(4) ||
+		f.gotArgs[3] != "guide.pdf" || mime == nil || *mime != "application/pdf" ||
+		f.gotArgs[5] != int64(2048) || user == nil || *user != int64(9) {
+		t.Errorf("args = %v, want the article, the domain, the file and its metadata", f.gotArgs)
+	}
+}
+
+func TestAttachmentAttachToAnotherDomainIsNotFound(t *testing.T) {
+	s := &attachmentStore{db: &fakeQuerier{rows: &fakeRows{cols: []string{"id"}}}}
+
+	_, err := s.Attach(context.Background(), &fakeWriteOpts{auth: fakeAuther{domainID: 5}}, 7, &model.Attachment{ID: 4})
+
+	if errors.Code(err) != codes.NotFound {
+		t.Fatalf("error = %v, want not found", err)
+	}
+}
+
+func TestAttachmentDeleteUnbindsTheRowOfTheArticle(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(4)}}}}
 	s := &attachmentStore{db: f}
 
@@ -128,18 +174,18 @@ func TestAttachmentDeleteFlagsTheRowOfTheArticle(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"WITH m AS (UPDATE storage.files f SET removed = true",
-		"WHERE f.id = $1 AND f.domain_id = $2 AND f.uuid = $3 AND f.channel = $4 AND f.removed IS NOT TRUE",
-		"AND EXISTS (SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id",
-		"WHERE a.id = $5 AND s.domain_id = f.domain_id AND a.deleted_at IS NULL)",
-		"RETURNING f.*) SELECT m.id AS id FROM m",
+		"WITH m AS (DELETE FROM kb.attachment m",
+		"USING kb.article a JOIN kb.space s ON s.id = a.space_id",
+		"WHERE m.article_id = $1 AND m.file_id = $2",
+		"AND a.id = m.article_id AND s.domain_id = $3 AND a.deleted_at IS NULL",
+		"RETURNING m.*) SELECT m.file_id AS id FROM m",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}
 
-	want := []any{int64(4), int64(5), "7", "knowledgebase", int64(7)}
+	want := []any{int64(7), int64(4), int64(5)}
 	for i, arg := range want {
 		if f.gotArgs[i] != arg {
 			t.Errorf("args[%d] = %v, want %v", i, f.gotArgs[i], arg)
@@ -147,10 +193,32 @@ func TestAttachmentDeleteFlagsTheRowOfTheArticle(t *testing.T) {
 	}
 }
 
+func TestAttachmentBoundAsksForAnyBinding(t *testing.T) {
+	f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
+	s := &attachmentStore{db: f}
+
+	bound, err := s.Bound(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("Bound: %v", err)
+	}
+
+	if !bound {
+		t.Fatal("bound = false, want the binding reported")
+	}
+
+	if !strings.Contains(f.gotSQL, "SELECT EXISTS (SELECT 1 FROM kb.attachment WHERE file_id = $1)") {
+		t.Fatalf("SQL = %q", f.gotSQL)
+	}
+
+	if len(f.gotArgs) != 1 || f.gotArgs[0] != int64(4) {
+		t.Fatalf("args = %v, want the file", f.gotArgs)
+	}
+}
+
 func TestAttachmentDeleteOfAnotherFileIsNotFound(t *testing.T) {
-	// A file of another article, domain or channel, or one already removed,
-	// matches nothing: the read-back is empty.
-	s := &attachmentStore{db: &fakeQuerier{err: pgx.ErrNoRows}}
+	// A file of another article or domain matches nothing: the read-back is
+	// empty.
+	s := &attachmentStore{db: &fakeQuerier{rows: &fakeRows{cols: []string{"id"}}}}
 
 	_, err := s.Delete(context.Background(), &fakeWriteOpts{auth: fakeAuther{domainID: 5}, id: 4}, 7)
 

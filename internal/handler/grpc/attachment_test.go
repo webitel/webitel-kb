@@ -12,6 +12,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/api/kb"
+	"github.com/webitel/webitel-kb/infra/storage"
 	"github.com/webitel/webitel-kb/internal/auth"
 	kbetag "github.com/webitel/webitel-kb/internal/etag"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -31,8 +32,10 @@ type attachmentStoreFake struct {
 	page      int
 	deleteID  int64
 
-	items   []*model.Attachment
-	deleted *model.Attachment
+	attachID int64
+	items    []*model.Attachment
+	attached *model.Attachment
+	deleted  *model.Attachment
 }
 
 func (f *attachmentStoreFake) List(
@@ -45,12 +48,25 @@ func (f *attachmentStoreFake) List(
 	return f.items, true, nil
 }
 
+func (f *attachmentStoreFake) Attach(
+	_ context.Context, _ options.Creator, articleID int64, in *model.Attachment,
+) (*model.Attachment, error) {
+	f.articleID, f.attachID = articleID, in.ID
+	f.attached = in
+
+	return in, nil
+}
+
 func (f *attachmentStoreFake) Delete(
 	_ context.Context, opts options.Deleter, articleID int64,
 ) (*model.Attachment, error) {
 	f.articleID, f.deleteID = articleID, opts.GetID()
 
 	return f.deleted, nil
+}
+
+func (f *attachmentStoreFake) Bound(_ context.Context, _ int64) (bool, error) {
+	return false, nil
 }
 
 // attachmentUoWFake hands out the attachment fake only.
@@ -72,24 +88,46 @@ func (f *attachmentUoWFake) OutboxStore() store.OutboxStore                 { re
 func (f *attachmentUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
 func (f *attachmentUoWFake) AttachmentStore() store.AttachmentStore         { return f.files }
 
-// linksFake signs every file it is given with a predictable link.
-type linksFake struct {
-	calls int
+// filesFake stands in for Storage: it signs every file with a predictable link
+// and knows the metadata of the files it was given.
+type filesFake struct {
+	calls   int
+	removed []int64
+	known   map[int64]*storage.File
 }
 
-func (f *linksFake) Download(_ context.Context, _ int64, ids []int64) (map[int64]string, error) {
+func (f *filesFake) Links(_ context.Context, _ int64, ids []int64) (map[int64]string, error) {
 	f.calls++
 
 	links := make(map[int64]string, len(ids))
 	for _, id := range ids {
-		links[id] = "https://kb.example/any/file/" + strconv.FormatInt(id, 10)
+		links[id] = fileLink(id)
 	}
 
 	return links, nil
 }
 
-func attachmentServerWithFakes(files *attachmentStoreFake) (*AttachmentsServer, *linksFake) {
-	links := &linksFake{}
+func (f *filesFake) Describe(_ context.Context, _, fileID int64) (*storage.File, error) {
+	file, ok := f.known[fileID]
+	if !ok {
+		return nil, errors.NotFound("no such file")
+	}
+
+	return file, nil
+}
+
+func (f *filesFake) Remove(_ context.Context, ids []int64) error {
+	f.removed = append(f.removed, ids...)
+
+	return nil
+}
+
+func fileLink(id int64) string {
+	return "https://kb.example/any/file/" + strconv.FormatInt(id, 10)
+}
+
+func attachmentServerWithFakes(files *attachmentStoreFake) (*AttachmentsServer, *filesFake) {
+	links := &filesFake{known: map[int64]*storage.File{}}
 	svc := service.NewAttachmentService(&attachmentUoWFake{files: files}, links, slog.New(slog.DiscardHandler))
 
 	return NewAttachmentsServer(svc), links
@@ -102,7 +140,7 @@ func attachmentContext() context.Context {
 func TestListFilesFullPath(t *testing.T) {
 	now := time.Now()
 	files := &attachmentStoreFake{items: []*model.Attachment{{
-		ID: 4, Name: "guide.pdf", Size: 2048, Mime: "application/pdf", Source: "knowledgebase",
+		ID: 4, Name: "guide.pdf", Size: 2048, Mime: "application/pdf",
 		CreatedAt: now, CreatedBy: &model.Lookup{ID: 9, Name: "Admin"},
 	}}}
 	server, links := attachmentServerWithFakes(files)
@@ -145,12 +183,12 @@ func TestListFilesFullPath(t *testing.T) {
 		t.Fatalf("file = %+v", got)
 	}
 
-	if got.GetSource() != "knowledgebase" || got.GetUrl() != "https://kb.example/any/file/4" || got.GetCreatedAt() != now.UnixMilli() {
-		t.Fatalf("file = %+v, want the source, the signed link and epoch ms", got)
+	if got.GetUrl() != fileLink(4) || got.GetCreatedAt() != now.UnixMilli() {
+		t.Fatalf("file = %+v, want the signed link and epoch ms", got)
 	}
 
 	if got.GetCreatedBy().GetId() != 9 || got.GetCreatedBy().GetName() != "Admin" || got.GetCreatedBy().GetType() != "webitel" {
-		t.Fatalf("created_by = %+v, want the uploader as a webitel user", got.GetCreatedBy())
+		t.Fatalf("created_by = %+v, want the author as a webitel user", got.GetCreatedBy())
 	}
 }
 
@@ -192,6 +230,47 @@ func TestListFilesRequiresSession(t *testing.T) {
 	}
 }
 
+func TestAttachFileFullPath(t *testing.T) {
+	files := &attachmentStoreFake{}
+	server, links := attachmentServerWithFakes(files)
+	links.known[4] = &storage.File{
+		ID: 4, Name: "guide.pdf", Mime: "application/pdf", Size: 2048, URL: fileLink(4),
+	}
+
+	tag, err := kbetag.Encode(kbetag.TypeArticle, 7, 3)
+	if err != nil {
+		t.Fatalf("etag: %v", err)
+	}
+
+	got, err := server.AttachFile(attachmentContext(), &kb.AttachFileRequest{ArticleEtag: tag, FileId: 4})
+	if err != nil {
+		t.Fatalf("AttachFile: %v", err)
+	}
+
+	if files.articleID != 7 || files.attachID != 4 {
+		t.Fatalf("attach addressed article %d file %d", files.articleID, files.attachID)
+	}
+
+	if got.GetId() != 4 || got.GetName() != "guide.pdf" || got.GetSize() != 2048 || got.GetUrl() != fileLink(4) {
+		t.Fatalf("file = %+v", got)
+	}
+}
+
+func TestAttachFileRejectsABrokenLocator(t *testing.T) {
+	files := &attachmentStoreFake{}
+	server, _ := attachmentServerWithFakes(files)
+
+	_, err := server.AttachFile(attachmentContext(), &kb.AttachFileRequest{ArticleEtag: "nope", FileId: 4})
+
+	if errors.Code(err) != codes.InvalidArgument || errors.ID(err) != "kb.etag.invalid" {
+		t.Fatalf("error = %v (id %q), want an invalid etag", err, errors.ID(err))
+	}
+
+	if files.attachID != 0 {
+		t.Fatal("the store was reached despite the rejected request")
+	}
+}
+
 func TestDeleteFileFullPath(t *testing.T) {
 	files := &attachmentStoreFake{deleted: &model.Attachment{ID: 4, Name: "guide.pdf"}}
 	server, links := attachmentServerWithFakes(files)
@@ -213,6 +292,10 @@ func TestDeleteFileFullPath(t *testing.T) {
 	if got.GetId() != 4 || got.GetName() != "guide.pdf" || got.GetUrl() != "" || links.calls != 0 {
 		t.Fatalf("file = %+v, signing calls = %d; a removed file carries no link", got, links.calls)
 	}
+
+	if len(links.removed) != 1 || links.removed[0] != 4 {
+		t.Fatalf("storage was asked to remove %v, want the file", links.removed)
+	}
 }
 
 func TestDeleteFileGuards(t *testing.T) {
@@ -225,7 +308,7 @@ func TestDeleteFileGuards(t *testing.T) {
 		{
 			name:     "the file id is required",
 			req:      &kb.DeleteFileRequest{ArticleEtag: "7"},
-			wantCode: codes.InvalidArgument, wantID: "options.delete.id_required",
+			wantCode: codes.InvalidArgument, wantID: "kb.attachment.file_required",
 		},
 		{
 			name:     "the article locator must parse",
@@ -252,10 +335,10 @@ func TestDeleteFileGuards(t *testing.T) {
 	}
 }
 
-func TestFileToProtoWithoutUploader(t *testing.T) {
+func TestFileToProtoWithoutAuthor(t *testing.T) {
 	got := fileToProto(&model.Attachment{ID: 4})
 
 	if got.GetCreatedBy() != nil || got.GetCreatedAt() != 0 {
-		t.Fatalf("file = %+v, want no uploader and a zero time", got)
+		t.Fatalf("file = %+v, want no author and a zero time", got)
 	}
 }

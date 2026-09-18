@@ -26,6 +26,7 @@ require (
 	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
 	github.com/webitel/webitel-go-kit/infra/pubsub/rabbitmq v0.0.0-20260826083159-429f167cb300
+	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260901092450-f7cbb06aceb5
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
 	github.com/webitel/webitel-go-kit/pkg/etag v0.2.0
 	github.com/webitel/webitel-go-kit/pkg/interceptors v0.1.1
