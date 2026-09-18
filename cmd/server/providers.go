@@ -23,6 +23,7 @@ import (
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/infra/embedding"
+	"github.com/webitel/webitel-kb/infra/storage"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/auth/manager/webitel_app"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -232,6 +233,23 @@ func ProvideAuthManager(cfg *config.Config, lc fx.Lifecycle) (auth.Manager, erro
 	})
 
 	return webitel_app.New(conn)
+}
+
+// ProvideStorageFiles connects to the Storage service through service
+// discovery; article attachments live there.
+func ProvideStorageFiles(dp discovery.DiscoveryProvider, lc fx.Lifecycle) (storage.Files, error) {
+	client, err := storage.New(dp)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(_ context.Context) error {
+			return client.Close()
+		},
+	})
+
+	return client, nil
 }
 
 func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {

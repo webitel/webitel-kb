@@ -37,6 +37,28 @@ type UnitOfWork interface {
 
 	// OutboxStore accesses the transactional outbox.
 	OutboxStore() OutboxStore
+
+	// AttachmentStore accesses the files bound to articles.
+	AttachmentStore() AttachmentStore
+}
+
+// AttachmentStore binds the files Storage keeps to articles. Every operation is
+// scoped to the caller's domain and to one article.
+type AttachmentStore interface {
+	// List returns a page of the files of the article and whether a next page
+	// exists.
+	List(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.Attachment, bool, error)
+
+	// Attach binds an uploaded file to the article and returns the binding;
+	// binding the same file twice refreshes its metadata.
+	Attach(ctx context.Context, opts options.Creator, articleID int64, in *model.Attachment) (*model.Attachment, error)
+
+	// Delete unbinds the file the options identify from the article and
+	// returns it; a file of another article or domain is not found.
+	Delete(ctx context.Context, opts options.Deleter, articleID int64) (*model.Attachment, error)
+
+	// Bound reports whether any article still binds the file.
+	Bound(ctx context.Context, fileID int64) (bool, error)
 }
 
 // OutboxStore records events for the relay to deliver.

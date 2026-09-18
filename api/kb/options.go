@@ -152,6 +152,17 @@ var WebitelAPI = WebitelServicesInfo{
 					},
 				},
 			},
+			"AttachFile": WebitelMethod{
+				Access: 2,
+				Input:  "AttachFileRequest",
+				Output: "File",
+				HttpBindings: []*HttpBinding{
+					{
+						Path:   "/v1/kb/articles/{article_etag}/files",
+						Method: "POST",
+					},
+				},
+			},
 			"DeleteFile": WebitelMethod{
 				Access: 2,
 				Input:  "DeleteFileRequest",

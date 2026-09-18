@@ -179,6 +179,7 @@ func (f *articleUoWFake) ArticleStore() store.ArticleStore               { retur
 func (f *articleUoWFake) ArticleVersionStore() store.ArticleVersionStore { return f.versions }
 func (f *articleUoWFake) OutboxStore() store.OutboxStore                 { return &f.outbox }
 func (f *articleUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
+func (f *articleUoWFake) AttachmentStore() store.AttachmentStore         { return nil }
 
 func newArticleServers(uow *articleUoWFake) (*ArticlesServer, *VersionsServer, *TagsServer) {
 	svc := service.NewArticleService(uow, slog.New(slog.DiscardHandler))
