@@ -126,6 +126,20 @@ SELECT count(*),
 	return count, time.Duration(seconds * float64(time.Second)), nil
 }
 
+// CountIndexFailed reports how many live articles failed indexing, across domains.
+func (s *Store) CountIndexFailed(ctx context.Context) (int64, error) {
+	var count int64
+
+	err := s.QueryRow(ctx,
+		`SELECT count(*) FROM kb.article WHERE index_state = $1 AND deleted_at IS NULL`,
+		model.IndexStateFailed).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("postgres: count index failed: %w", err)
+	}
+
+	return count, nil
+}
+
 // MarkIndexFailed records that an envelope could not be delivered and the
 // article will not be indexed from it. Without this the article would sit in
 // the pending state forever while the row itself is already acknowledged.

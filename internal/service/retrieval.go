@@ -38,13 +38,21 @@ type RetrievalService struct {
 	uow       store.UnitOfWork
 	enc       crypto.Encryptor
 	providers ProviderResolver
+	metrics   ProviderMetrics
 	log       *slog.Logger
 }
 
+// ProviderMetrics records the calls retrieval makes to model providers.
+type ProviderMetrics interface {
+	Embedding(ctx context.Context, provider, modelRef string, took time.Duration, err error)
+	Rerank(ctx context.Context, provider, modelRef string, took time.Duration, err error)
+}
+
 func NewRetrievalService(
-	uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver, log *slog.Logger,
+	uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver,
+	metrics ProviderMetrics, log *slog.Logger,
 ) *RetrievalService {
-	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, log: log}
+	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, metrics: metrics, log: log}
 }
 
 // Search runs full-text search over subjects and published bodies.
@@ -221,6 +229,7 @@ func (s *RetrievalService) embedWith(ctx context.Context, query string, space *m
 	ctx, cancel := context.WithTimeout(ctx, embedTimeout)
 	defer cancel()
 
+	started := time.Now()
 	result, err := provider.Embed(ctx, embedding.EmbedRequest{
 		ModelRef:   space.ModelRef,
 		APIKey:     key,
@@ -229,6 +238,8 @@ func (s *RetrievalService) embedWith(ctx context.Context, query string, space *m
 		Task:       embedding.TaskQuery,
 		Texts:      []string{query},
 	})
+	s.metrics.Embedding(ctx, space.Provider, space.ModelRef, time.Since(started), err)
+
 	if err != nil {
 		return nil, embedError(err)
 	}
