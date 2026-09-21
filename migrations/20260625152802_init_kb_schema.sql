@@ -118,15 +118,6 @@ CREATE TABLE kb.team_space (
 );
 CREATE INDEX team_space_space_idx ON kb.team_space (space_id);
 
-CREATE TABLE kb.article_case (
-    article_id bigint NOT NULL REFERENCES kb.article (id) ON DELETE CASCADE,
-    case_id    bigint NOT NULL REFERENCES cases."case" (id) ON DELETE CASCADE,
-    source     smallint NOT NULL,  -- 1=manual, 2=resolution
-    created_at timestamptz NOT NULL DEFAULT now(),
-    created_by bigint NULL,
-    PRIMARY KEY (article_id, case_id)
-);
-
 CREATE TABLE kb.outbox_events (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     aggregate_id bigint NOT NULL,  -- article id
