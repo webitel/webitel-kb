@@ -14,6 +14,7 @@ import (
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/infra/embedding"
 	"github.com/webitel/webitel-kb/internal/auth"
+	"github.com/webitel/webitel-kb/internal/metrics"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/service"
@@ -97,7 +98,7 @@ func retrievalServerWithFake() (*RetrievalServer, *retrievalStoreFake) {
 	fake := &retrievalStoreFake{}
 	svc := service.NewRetrievalService(
 		&retrievalUoWFake{retrieval: fake, spaces: []*model.SpaceEmbedding{{SpaceID: 3}}},
-		sealer{}, embedding.NewRegistry(), slog.New(slog.DiscardHandler),
+		sealer{}, embedding.NewRegistry(), metrics.Noop(), slog.New(slog.DiscardHandler),
 	)
 
 	return NewRetrievalServer(svc), fake

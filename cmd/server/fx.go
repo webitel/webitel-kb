@@ -11,6 +11,7 @@ import (
 	grpcsrv "github.com/webitel/webitel-kb/infra/server/grpc"
 	"github.com/webitel/webitel-kb/infra/tls"
 	grpchandler "github.com/webitel/webitel-kb/internal/handler/grpc"
+	"github.com/webitel/webitel-kb/internal/metrics"
 	"github.com/webitel/webitel-kb/internal/relay"
 	"github.com/webitel/webitel-kb/internal/service"
 	"github.com/webitel/webitel-kb/internal/store/postgres"
@@ -29,6 +30,7 @@ func NewApp(cfg *config.Config) *fx.App {
 		fx.Invoke(func(discovery.DiscoveryProvider) error { return nil }),
 		fx.Invoke(func(crypto.Encryptor) {}),
 
+		metrics.Module,
 		pubsub.Module,
 		tls.Module,
 		postgres.Module,

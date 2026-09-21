@@ -6,12 +6,14 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/infra/embedding"
+	"github.com/webitel/webitel-kb/internal/metrics"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	queryobject "github.com/webitel/webitel-kb/internal/store/query_object"
@@ -57,7 +59,7 @@ func semanticServiceWithFakes() (*RetrievalService, *retrievalUow, *queryEmbedde
 	embedder := &queryEmbedder{vectors: map[string][]float32{}}
 	uow := &retrievalUow{retrieval: &retrievalStoreFake{}, spaces: &fakeSpaceStore{}}
 
-	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}, discardLogger()), uow, embedder
+	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}, metrics.Noop(), discardLogger()), uow, embedder
 }
 
 func semanticOpts() options.Searcher {
@@ -268,3 +270,73 @@ func TestSemanticSearchCitations(t *testing.T) {
 
 // discardLogger is the logger of a test: the service logs, nothing reads it.
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+// providerCall is one call the service reported to its metrics.
+type providerCall struct {
+	kind, provider, modelRef string
+	failed                   bool
+}
+
+type recordingMetrics struct{ calls []providerCall }
+
+func (m *recordingMetrics) Embedding(_ context.Context, provider, modelRef string, _ time.Duration, err error) {
+	m.calls = append(m.calls, providerCall{"embedding", provider, modelRef, err != nil})
+}
+
+func (m *recordingMetrics) Rerank(_ context.Context, provider, modelRef string, _ time.Duration, err error) {
+	m.calls = append(m.calls, providerCall{"rerank", provider, modelRef, err != nil})
+}
+
+func TestProviderCallsReachTheMetrics(t *testing.T) {
+	providerErr := errors.New("provider is down")
+
+	tests := []struct {
+		name string
+		call func(svc *RetrievalService)
+		err  error
+		want providerCall
+	}{
+		{
+			name: "embedding answered",
+			call: func(svc *RetrievalService) {
+				_, _ = svc.embedWith(context.Background(), "q",
+					&model.SpaceEmbedding{Provider: "bge-m3", ModelRef: "BAAI/bge-m3", Dimensions: 3})
+			},
+			want: providerCall{"embedding", "bge-m3", "BAAI/bge-m3", false},
+		},
+		{
+			name: "embedding failed",
+			call: func(svc *RetrievalService) {
+				_, _ = svc.embedWith(context.Background(), "q",
+					&model.SpaceEmbedding{Provider: "bge-m3", ModelRef: "BAAI/bge-m3", Dimensions: 3})
+			},
+			err:  providerErr,
+			want: providerCall{"embedding", "bge-m3", "BAAI/bge-m3", true},
+		},
+		{
+			name: "rerank failed",
+			call: func(svc *RetrievalService) {
+				_, _ = svc.rerankWith(context.Background(), "q",
+					&model.SpaceReranker{Enabled: true, Provider: "bge-reranker", ModelRef: "BAAI/bge-reranker-v2-m3"},
+					[]*model.ChunkHit{{}})
+			},
+			err:  providerErr,
+			want: providerCall{"rerank", "bge-reranker", "BAAI/bge-reranker-v2-m3", true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, embedder := semanticServiceWithFakes()
+			embedder.err, embedder.rerankErr = tt.err, tt.err
+			recorder := &recordingMetrics{}
+			svc.metrics = recorder
+
+			tt.call(svc)
+
+			if len(recorder.calls) != 1 || recorder.calls[0] != tt.want {
+				t.Fatalf("recorded %+v, want [%+v]", recorder.calls, tt.want)
+			}
+		})
+	}
+}
