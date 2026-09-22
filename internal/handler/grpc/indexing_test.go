@@ -146,7 +146,7 @@ func TestInternalAPIIsServedOnlyWhenGuarded(t *testing.T) {
 			RegisterService(
 				conf, log, server,
 				NewSpacesServer(nil), NewEmbeddingModelsServer(nil), NewArticlesServer(nil),
-				NewVersionsServer(nil), NewTagsServer(nil), NewAttachmentsServer(), NewRetrievalServer(nil),
+				NewVersionsServer(nil), NewTagsServer(nil), NewAttachmentsServer(nil), NewRetrievalServer(nil),
 				indexingServer(nil, log),
 			)
 

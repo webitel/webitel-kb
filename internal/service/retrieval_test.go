@@ -83,8 +83,9 @@ type retrievalUow struct {
 	txCalls   int
 }
 
-func (u *retrievalUow) RetrievalStore() store.RetrievalStore { return u.retrieval }
-func (u *retrievalUow) SpaceStore() store.SpaceStore         { return u.spaces }
+func (u *retrievalUow) RetrievalStore() store.RetrievalStore   { return u.retrieval }
+func (u *retrievalUow) AttachmentStore() store.AttachmentStore { return nil }
+func (u *retrievalUow) SpaceStore() store.SpaceStore           { return u.spaces }
 
 func (u *retrievalUow) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
 	u.txCalls++

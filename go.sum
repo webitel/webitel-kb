@@ -303,6 +303,8 @@ github.com/webitel/webitel-go-kit/infra/otel v0.1.0 h1:WVTQThn/PeOlP59809udJzRJf
 github.com/webitel/webitel-go-kit/infra/otel v0.1.0/go.mod h1:+LXWtFYgGVqVOVvOmHS9jfvM0LOLn5WM4iZQa8Ual5I=
 github.com/webitel/webitel-go-kit/infra/pubsub/rabbitmq v0.0.0-20260826083159-429f167cb300 h1:5PBcINjmrElRtJvJeksajB3k56PPkUI26w2rvRGACbY=
 github.com/webitel/webitel-go-kit/infra/pubsub/rabbitmq v0.0.0-20260826083159-429f167cb300/go.mod h1:bPIqEVkt3pJFB/KqfEOBlZV6SlOOC1wusg6BQYcD1Wk=
+github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260901092450-f7cbb06aceb5 h1:p0/G+oaAGCm/i9ZmfKWNK11bzG6ialyFr6EAHQLYPI4=
+github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260901092450-f7cbb06aceb5/go.mod h1:pDNLCygkIoDlz0m9pj9p9961FqtNqINLXJq1vtUDs2k=
 github.com/webitel/webitel-go-kit/pkg/errors v0.1.0 h1:0fQuPpEHO/Xll7R7CzarjkRbLv06g32Ltu/XY3SQRCI=
 github.com/webitel/webitel-go-kit/pkg/errors v0.1.0/go.mod h1:v6cQFLuiwx6vHJuRo+TNi7qMEg3iymI1isoG0eKLW1E=
 github.com/webitel/webitel-go-kit/pkg/etag v0.2.0 h1:lCI0YVX6fa7wDAG5Ym59Wpk9kzarmtidy3nLAe7iAes=

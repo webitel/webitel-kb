@@ -72,6 +72,11 @@ func (u *unitOfWork) OutboxStore() store.OutboxStore {
 	return &outboxStore{db: u.querier}
 }
 
+// AttachmentStore returns the attachment store bound to the current querier.
+func (u *unitOfWork) AttachmentStore() store.AttachmentStore {
+	return &attachmentStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.
