@@ -19,9 +19,9 @@ import (
 // watermill topic is the broker routing key; the exchange is fixed per
 // publisher, so the poison queue cannot end up on the indexing exchange.
 type brokerPublisher struct {
-	broker   Broker
-	exchange string
-	timeout  time.Duration
+	broker    Broker
+	exchange  string
+	timeout   time.Duration
 	published func(ctx context.Context)
 }
 
