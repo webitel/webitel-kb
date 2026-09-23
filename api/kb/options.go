@@ -102,6 +102,17 @@ var WebitelAPI = WebitelServicesInfo{
 					},
 				},
 			},
+			"ReindexArticle": WebitelMethod{
+				Access: 2,
+				Input:  "ReindexArticleRequest",
+				Output: "Article",
+				HttpBindings: []*HttpBinding{
+					{
+						Path:   "/v1/kb/articles/{etag}/reindex",
+						Method: "POST",
+					},
+				},
+			},
 			"ListChildren": WebitelMethod{
 				Access: 1,
 				Input:  "ListChildrenRequest",

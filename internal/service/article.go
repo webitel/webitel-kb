@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,19 @@ func NewArticleService(uow store.UnitOfWork, log *slog.Logger) *ArticleService {
 var mergeReadFields = []string{
 	"id", "space", "parent_id", "subject", "tags", "type", "state", "ver",
 }
+
+// reindexReadFields adds the indexing state the reindex checks to the merge read.
+var reindexReadFields = append(slices.Clone(mergeReadFields), "index_state")
+
+var errReindexNotFailed = errors.InvalidArgument(
+	"only an article that failed indexing can be reindexed",
+	errors.WithID("kb.article.reindex_not_failed"),
+)
+
+var errReindexNoVersion = errors.InvalidArgument(
+	"the article has no version to index",
+	errors.WithID("kb.article.no_version"),
+)
 
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
@@ -337,6 +351,55 @@ func (s *ArticleService) RestoreVersion(
 	}
 
 	return restored, nil
+}
+
+// Reindex queues the latest version of a failed article for indexing again.
+func (s *ArticleService) Reindex(
+	ctx context.Context, opts options.Updator, expectedVer int32,
+) (*model.Article, error) {
+	session := opts.GetAuthOpts()
+
+	var queued *model.Article
+
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
+			auth: session, ids: []int64{opts.GetID()}, fields: reindexReadFields,
+		})
+		if err != nil {
+			return err
+		}
+
+		if current.IndexState != model.IndexStateFailed {
+			return errReindexNotFailed
+		}
+
+		// The version store lists the newest version first.
+		versions, _, err := tx.ArticleVersionStore().List(ctx, readOptions{
+			auth: session, fields: []string{"id"},
+		}, current.ID)
+		if err != nil {
+			return err
+		}
+
+		if len(versions) == 0 {
+			return errReindexNoVersion
+		}
+
+		pending := *current
+		pending.IndexState = model.IndexStatePending
+
+		queued, err = tx.ArticleStore().Update(ctx, opts, &pending, expectedVer)
+		if err != nil {
+			return err
+		}
+
+		return requestReindex(ctx, tx, session, current.ID, versions[0].ID, current.SpaceID)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return queued, nil
 }
 
 func requestReindex(

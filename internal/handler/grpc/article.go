@@ -171,6 +171,25 @@ func (s *ArticlesServer) MoveArticle(ctx context.Context, req *kb.MoveArticleReq
 	return articleToProto(moved)
 }
 
+func (s *ArticlesServer) ReindexArticle(ctx context.Context, req *kb.ReindexArticleRequest) (*kb.Article, error) {
+	id, ver, err := etag.Parse(etag.TypeArticle, req.GetEtag())
+	if err != nil {
+		return nil, err
+	}
+
+	opts, err := options.NewUpdateOptions(ctx, options.WithUpdateID(id))
+	if err != nil {
+		return nil, err
+	}
+
+	queued, err := s.service.Reindex(ctx, opts, ver)
+	if err != nil {
+		return nil, err
+	}
+
+	return articleToProto(queued)
+}
+
 func (s *ArticlesServer) ListChildren(ctx context.Context, req *kb.ListChildrenRequest) (*kb.ArticleList, error) {
 	// Without a parent the unpaged listing would fan out to every root of the
 	// domain, so a missing id is a caller mistake.

@@ -19,15 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Articles_ListArticles_FullMethodName  = "/webitel.kb.Articles/ListArticles"
-	Articles_LocateArticle_FullMethodName = "/webitel.kb.Articles/LocateArticle"
-	Articles_CreateArticle_FullMethodName = "/webitel.kb.Articles/CreateArticle"
-	Articles_UpdateArticle_FullMethodName = "/webitel.kb.Articles/UpdateArticle"
-	Articles_DeleteArticle_FullMethodName = "/webitel.kb.Articles/DeleteArticle"
-	Articles_MoveArticle_FullMethodName   = "/webitel.kb.Articles/MoveArticle"
-	Articles_ListChildren_FullMethodName  = "/webitel.kb.Articles/ListChildren"
-	Articles_ListAncestors_FullMethodName = "/webitel.kb.Articles/ListAncestors"
-	Articles_GetTree_FullMethodName       = "/webitel.kb.Articles/GetTree"
+	Articles_ListArticles_FullMethodName   = "/webitel.kb.Articles/ListArticles"
+	Articles_LocateArticle_FullMethodName  = "/webitel.kb.Articles/LocateArticle"
+	Articles_CreateArticle_FullMethodName  = "/webitel.kb.Articles/CreateArticle"
+	Articles_UpdateArticle_FullMethodName  = "/webitel.kb.Articles/UpdateArticle"
+	Articles_DeleteArticle_FullMethodName  = "/webitel.kb.Articles/DeleteArticle"
+	Articles_MoveArticle_FullMethodName    = "/webitel.kb.Articles/MoveArticle"
+	Articles_ReindexArticle_FullMethodName = "/webitel.kb.Articles/ReindexArticle"
+	Articles_ListChildren_FullMethodName   = "/webitel.kb.Articles/ListChildren"
+	Articles_ListAncestors_FullMethodName  = "/webitel.kb.Articles/ListAncestors"
+	Articles_GetTree_FullMethodName        = "/webitel.kb.Articles/GetTree"
 )
 
 // ArticlesClient is the client API for Articles service.
@@ -50,6 +51,8 @@ type ArticlesClient interface {
 	DeleteArticle(ctx context.Context, in *DeleteArticleRequest, opts ...grpc.CallOption) (*Article, error)
 	// MoveArticle reparents an article, validating cycles and max depth.
 	MoveArticle(ctx context.Context, in *MoveArticleRequest, opts ...grpc.CallOption) (*Article, error)
+	// ReindexArticle queues the latest version of an article for indexing again.
+	ReindexArticle(ctx context.Context, in *ReindexArticleRequest, opts ...grpc.CallOption) (*Article, error)
 	// ListChildren returns the direct children of an article.
 	ListChildren(ctx context.Context, in *ListChildrenRequest, opts ...grpc.CallOption) (*ArticleList, error)
 	// ListAncestors returns the ancestor chain (root first), serving breadcrumbs.
@@ -126,6 +129,16 @@ func (c *articlesClient) MoveArticle(ctx context.Context, in *MoveArticleRequest
 	return out, nil
 }
 
+func (c *articlesClient) ReindexArticle(ctx context.Context, in *ReindexArticleRequest, opts ...grpc.CallOption) (*Article, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Article)
+	err := c.cc.Invoke(ctx, Articles_ReindexArticle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *articlesClient) ListChildren(ctx context.Context, in *ListChildrenRequest, opts ...grpc.CallOption) (*ArticleList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ArticleList)
@@ -176,6 +189,8 @@ type ArticlesServer interface {
 	DeleteArticle(context.Context, *DeleteArticleRequest) (*Article, error)
 	// MoveArticle reparents an article, validating cycles and max depth.
 	MoveArticle(context.Context, *MoveArticleRequest) (*Article, error)
+	// ReindexArticle queues the latest version of an article for indexing again.
+	ReindexArticle(context.Context, *ReindexArticleRequest) (*Article, error)
 	// ListChildren returns the direct children of an article.
 	ListChildren(context.Context, *ListChildrenRequest) (*ArticleList, error)
 	// ListAncestors returns the ancestor chain (root first), serving breadcrumbs.
@@ -209,6 +224,9 @@ func (UnimplementedArticlesServer) DeleteArticle(context.Context, *DeleteArticle
 }
 func (UnimplementedArticlesServer) MoveArticle(context.Context, *MoveArticleRequest) (*Article, error) {
 	return nil, status.Error(codes.Unimplemented, "method MoveArticle not implemented")
+}
+func (UnimplementedArticlesServer) ReindexArticle(context.Context, *ReindexArticleRequest) (*Article, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReindexArticle not implemented")
 }
 func (UnimplementedArticlesServer) ListChildren(context.Context, *ListChildrenRequest) (*ArticleList, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListChildren not implemented")
@@ -348,6 +366,24 @@ func _Articles_MoveArticle_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Articles_ReindexArticle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReindexArticleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ArticlesServer).ReindexArticle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Articles_ReindexArticle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ArticlesServer).ReindexArticle(ctx, req.(*ReindexArticleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Articles_ListChildren_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListChildrenRequest)
 	if err := dec(in); err != nil {
@@ -432,6 +468,10 @@ var Articles_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MoveArticle",
 			Handler:    _Articles_MoveArticle_Handler,
+		},
+		{
+			MethodName: "ReindexArticle",
+			Handler:    _Articles_ReindexArticle_Handler,
 		},
 		{
 			MethodName: "ListChildren",
