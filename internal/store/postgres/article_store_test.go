@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -638,5 +639,49 @@ func TestArticleAcquireSpaceMoveLock(t *testing.T) {
 
 	if f.gotArgs[0] != 27491 || f.gotArgs[1] != int64(7) {
 		t.Fatalf("args = %v, want the move lock class and the space id", f.gotArgs)
+	}
+}
+
+func TestArticleScanMapsPublished(t *testing.T) {
+	cols := []string{
+		"id", "ver", "published_id", "published_number", "published_subject",
+		"published_rich_text", "published_markdown", "published_plain",
+	}
+
+	tests := []struct {
+		name string
+		row  []any
+		want *model.ArticleVersion
+	}{
+		{
+			name: "published version",
+			row: []any{
+				int64(1), int32(4), ptrTo(int64(11)), int32(3), "VPN",
+				[]byte(`{"type":"doc"}`), "# VPN", "VPN",
+			},
+			want: &model.ArticleVersion{
+				ID: 11, ArticleID: 1, VersionNumber: 3, Subject: "VPN",
+				BodyRichText: []byte(`{"type":"doc"}`), BodyMarkdown: "# VPN", BodyPlain: "VPN",
+			},
+		},
+		{
+			name: "not published yet",
+			row:  []any{int64(1), int32(4), nil, int32(0), "", nil, "", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &articleStore{db: &fakeQuerier{rows: &fakeRows{cols: cols, vals: [][]any{tt.row}}}}
+
+			got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{1}})
+			if err != nil {
+				t.Fatalf("Locate: %v", err)
+			}
+
+			if !reflect.DeepEqual(got.Published, tt.want) {
+				t.Fatalf("published = %+v, want %+v", got.Published, tt.want)
+			}
+		})
 	}
 }

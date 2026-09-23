@@ -55,7 +55,9 @@ func (f *articleStoreFake) List(
 	return f.items, false, nil
 }
 
-func (f *articleStoreFake) Locate(context.Context, options.Searcher) (*model.Article, error) {
+func (f *articleStoreFake) Locate(_ context.Context, opts options.Searcher) (*model.Article, error) {
+	f.fields = opts.GetFields()
+
 	if len(f.items) == 0 {
 		return nil, errors.NotFound("entity does not exist or access is denied")
 	}
@@ -289,6 +291,61 @@ func TestVersionToProtoBody(t *testing.T) {
 				t.Fatalf("body present = %v, want %v", hasDoc, tt.wantDoc)
 			}
 		})
+	}
+}
+
+func TestArticleToProtoPublished(t *testing.T) {
+	tests := []struct {
+		name      string
+		published *model.ArticleVersion
+		wantBody  string
+		wantErr   codes.Code
+	}{
+		{name: "not requested", published: nil},
+		{name: "published body", published: &model.ArticleVersion{ID: 40, BodyMarkdown: "# VPN"}, wantBody: "# VPN"},
+		{name: "broken document", published: &model.ArticleVersion{ID: 40, BodyRichText: []byte(`{`)}, wantErr: codes.Internal},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := articleToProto(&model.Article{ID: 7, Ver: 4, Published: tt.published})
+
+			if tt.wantErr != 0 {
+				if errors.Code(err) != tt.wantErr {
+					t.Fatalf("err = %v, want %s", err, tt.wantErr)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("articleToProto: %v", err)
+			}
+
+			if (got.GetPublished() != nil) != (tt.published != nil) {
+				t.Fatalf("published = %+v", got.GetPublished())
+			}
+
+			if got.GetPublished().GetBodyMarkdown() != tt.wantBody {
+				t.Fatalf("body = %q, want %q", got.GetPublished().GetBodyMarkdown(), tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestLocateArticlePassesFields(t *testing.T) {
+	articles := &articleStoreFake{items: []*model.Article{{ID: 7, Ver: 4}}}
+	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
+
+	_, err := server.LocateArticle(articleContext(), &kb.LocateArticleRequest{
+		Etag: "7", Fields: []string{"subject", "published"},
+	})
+	if err != nil {
+		t.Fatalf("LocateArticle: %v", err)
+	}
+
+	if !slices.Contains(articles.fields, "published") {
+		t.Fatalf("fields = %v, want the caller selection", articles.fields)
 	}
 }
 

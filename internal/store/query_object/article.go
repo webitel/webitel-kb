@@ -8,6 +8,7 @@ const (
 	articleJoinSpace = 1 << iota
 	articleJoinCreatedBy
 	articleJoinUpdatedBy
+	articleJoinPublished
 )
 
 // ArticleQuery builds SELECTs over knowledge-base articles.
@@ -70,6 +71,13 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 				requiresJoin: articleJoinUpdatedBy,
 				sortable:     true,
 			},
+			"published": {
+				sqlExpr: "pv.id",
+				aliasedExpr: "pv.id AS published_id, COALESCE(pv.version_number, 0) AS published_number, " +
+					"COALESCE(pv.subject, '') AS published_subject, pv.body_rich_text AS published_rich_text, " +
+					"COALESCE(pv.body_markdown, '') AS published_markdown, COALESCE(pv.body_plain, '') AS published_plain",
+				requiresJoin: articleJoinPublished,
+			},
 		}
 	}
 
@@ -91,6 +99,10 @@ func (q *ArticleQuery) EnsureJoins(required int) {
 
 	if missing&articleJoinUpdatedBy != 0 {
 		q.builder = q.builder.LeftJoin("directory.wbt_user ub ON ub.id = m.updated_by")
+	}
+
+	if missing&articleJoinPublished != 0 {
+		q.builder = q.builder.LeftJoin("kb.article_version pv ON pv.id = m.published_version_id")
 	}
 
 	q.joins |= required

@@ -66,7 +66,7 @@ func (s *ArticlesServer) LocateArticle(ctx context.Context, req *kb.LocateArticl
 		return nil, err
 	}
 
-	opts, err := options.NewLocateOptions(ctx, options.WithID(id))
+	opts, err := options.NewLocateOptions(ctx, options.WithID(id), options.WithFields(req))
 	if err != nil {
 		return nil, err
 	}

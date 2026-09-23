@@ -50,7 +50,7 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 		return nil, err
 	}
 
-	return &kb.Article{
+	out := &kb.Article{
 		Id:                 in.ID,
 		DomainId:           in.DomainID,
 		Space:              lookupToProto(in.Space),
@@ -68,7 +68,18 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 		CreatedBy:          lookupToProto(in.CreatedBy),
 		UpdatedBy:          lookupToProto(in.UpdatedBy),
 		Etag:               tag,
-	}, nil
+	}
+
+	if in.Published != nil {
+		published, err := versionToProto(in.Published)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Published = published
+	}
+
+	return out, nil
 }
 
 func articleListToProto(items []*model.Article, next bool) (*kb.ArticleList, error) {
