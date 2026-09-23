@@ -486,6 +486,45 @@ func TestArticleUpdateMergesOverStored(t *testing.T) {
 	}
 }
 
+func TestArticleUpdateAppliesMask(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       *model.Article
+		mask     []string
+		wantID   string
+		wantTags []string
+	}{
+		{name: "masked tags clear", in: &model.Article{}, mask: []string{"tags"}, wantTags: nil},
+		{name: "unmasked tags stay", in: &model.Article{Subject: "new"}, mask: []string{"subject"}, wantTags: []string{"vpn"}},
+		{name: "masked empty subject rejected", in: &model.Article{Subject: " "}, mask: []string{"subject"}, wantID: "kb.article.subject_required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			opts := updaterOpts()
+			opts.mask = tt.mask
+
+			_, err := svc.Update(context.Background(), opts, tt.in, nil, 4)
+			if tt.wantID != "" {
+				if errors.ID(err) != tt.wantID || uow.articles.updateCalls != 0 {
+					t.Fatalf("err = %v, updates = %d; want %s and no write", err, uow.articles.updateCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if !slices.Equal(uow.articles.updateIn.Tags, tt.wantTags) {
+				t.Fatalf("tags = %v, want %v", uow.articles.updateIn.Tags, tt.wantTags)
+			}
+		})
+	}
+}
+
 func TestArticleUpdateUsesClientVersion(t *testing.T) {
 	// The optimistic lock compares against what the client saw, not what the
 	// locked read returned: otherwise the guard would never fail.

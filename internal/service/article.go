@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +29,12 @@ type ArticleService struct {
 func NewArticleService(uow store.UnitOfWork, log *slog.Logger) *ArticleService {
 	return &ArticleService{uow: uow, log: log}
 }
+
+// errSubjectRequired rejects an article left without a subject.
+var errSubjectRequired = errors.InvalidArgument(
+	"a subject is required",
+	errors.WithID("kb.article.subject_required"),
+)
 
 // mergeReadFields is what the locked read must carry for the merge: the store
 // rewrites every column, so an unread one would be written back empty.
@@ -60,10 +67,7 @@ func (s *ArticleService) Create(
 	normalizeInput(in)
 
 	if in.Subject == "" {
-		return nil, errors.InvalidArgument(
-			"a subject is required",
-			errors.WithID("kb.article.subject_required"),
-		)
+		return nil, errSubjectRequired
 	}
 
 	if err := validateArticleCodes(in.Type, in.State); err != nil {
@@ -129,6 +133,10 @@ func (s *ArticleService) Update(
 
 	normalizeInput(in)
 
+	if in.Subject == "" && slices.Contains(opts.GetMask(), "subject") {
+		return nil, errSubjectRequired
+	}
+
 	body, err := s.convertBody(ctx, rawBody)
 	if err != nil {
 		return nil, err
@@ -150,7 +158,7 @@ func (s *ArticleService) Update(
 			return err
 		}
 
-		merged := current.Merge(in)
+		merged := current.Merge(in, opts.GetMask())
 
 		// New content invalidates what the pipeline indexed.
 		if len(rawBody) != 0 {
@@ -323,7 +331,7 @@ func (s *ArticleService) RestoreVersion(
 			return err
 		}
 
-		aligned := current.Merge(&model.Article{Subject: source.Subject})
+		aligned := current.Merge(&model.Article{Subject: source.Subject}, nil)
 		aligned.IndexState = model.IndexStatePending
 
 		if _, err := tx.ArticleStore().Update(ctx, opts, aligned, current.Ver); err != nil {

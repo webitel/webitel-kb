@@ -185,6 +185,10 @@ func (f fakeModels) Locate(context.Context, options.Searcher) (*model.EmbeddingM
 	return f.u.embModel, nil
 }
 
+func (f fakeModels) LocateForUpdate(context.Context, options.Searcher) (*model.EmbeddingModel, error) {
+	return nil, errFakeUnused
+}
+
 func (f fakeModels) Create(context.Context, options.Creator, *model.EmbeddingModel, []byte) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
@@ -279,7 +283,7 @@ func TestSpacesServerPassesTeamsThrough(t *testing.T) {
 
 	if _, err := server.UpdateSpace(ctx, &kb.UpdateSpaceRequest{Id: 7, Input: &kb.InputSpace{
 		Name: "docs", Language: "uk", EmbeddingModelId: 3, TeamIds: []int64{3},
-	}}); err != nil {
+	}, XJsonMask: []string{"name", "teamIds"}}); err != nil {
 		t.Fatalf("UpdateSpace: %v", err)
 	}
 

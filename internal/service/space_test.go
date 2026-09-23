@@ -46,11 +46,13 @@ type writeOpts struct {
 	auth   auth.Auther
 	fields []string
 	id     int64
+	mask   []string
 }
 
 func (o *writeOpts) GetAuthOpts() auth.Auther { return o.auth }
 func (o *writeOpts) GetFields() []string      { return o.fields }
 func (o *writeOpts) GetID() int64             { return o.id }
+func (o *writeOpts) GetMask() []string        { return o.mask }
 
 // fakeSpaceStore records calls and plays back preset spaces. The stored
 // (pre-write) space and the read-back result are distinct objects, so a test
@@ -188,6 +190,10 @@ func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 	}
 
 	return found, nil
+}
+
+func (f *gateModelStore) LocateForUpdate(context.Context, options.Searcher) (*model.EmbeddingModel, error) {
+	return nil, errors.Internal("not used by the space flows")
 }
 
 func (f *gateModelStore) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {
@@ -425,6 +431,68 @@ func TestSpaceUpdateAcceptsOmittedLanguage(t *testing.T) {
 	// hold only against a row no concurrent writer can move.
 	if uow.spaces.lockedLocates != 1 {
 		t.Fatalf("locked locates = %d, want 1", uow.spaces.lockedLocates)
+	}
+}
+
+func TestSpaceUpdateAppliesMask(t *testing.T) {
+	tests := []struct {
+		name       string
+		in         *model.Space
+		teamIDs    []int64
+		mask       []string
+		wantName   string
+		wantDesc   string
+		wantRebind bool
+		wantID     string
+	}{
+		{
+			name: "full update rewrites and rebinds", in: &model.Space{Name: "new", EmbeddingModelID: 3},
+			teamIDs: []int64{2}, wantName: "new", wantRebind: true,
+		},
+		{
+			name: "partial update keeps the rest and the teams", in: &model.Space{Name: "new"},
+			teamIDs: nil, mask: []string{"name"}, wantName: "new", wantDesc: "about",
+		},
+		{
+			name: "masked teams rebind", in: &model.Space{},
+			teamIDs: nil, mask: []string{"team_ids"}, wantName: "docs", wantDesc: "about", wantRebind: true,
+		},
+		{
+			name: "masked empty name rejected", in: &model.Space{},
+			mask: []string{"name"}, wantID: "kb.space.name_required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.current = &model.Space{
+				ID: 7, Name: "docs", Description: "about", Language: "uk", EmbeddingModelID: 3,
+			}
+			opts := updaterOpts()
+			opts.mask = tt.mask
+
+			_, err := svc.Update(context.Background(), opts, tt.in, tt.teamIDs)
+			if tt.wantID != "" {
+				if errors.ID(err) != tt.wantID || uow.spaces.updateCalls != 0 {
+					t.Fatalf("err = %v, updates = %d; want %s and no write", err, uow.spaces.updateCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if got := uow.spaces.updateIn; got.Name != tt.wantName || got.Description != tt.wantDesc {
+				t.Fatalf("written name %q description %q, want %q %q", got.Name, got.Description, tt.wantName, tt.wantDesc)
+			}
+
+			if rebound := len(uow.spaces.replacedWith) == 1; rebound != tt.wantRebind {
+				t.Fatalf("teams rebound = %v, want %v", rebound, tt.wantRebind)
+			}
+		})
 	}
 }
 

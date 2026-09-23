@@ -123,15 +123,30 @@ func (s *embeddingModelStore) List(
 }
 
 func (s *embeddingModelStore) Locate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+	return s.locateModel(ctx, opts, false)
+}
+
+func (s *embeddingModelStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+	return s.locateModel(ctx, opts, true)
+}
+
+func (s *embeddingModelStore) locateModel(
+	ctx context.Context, opts options.Searcher, lock bool,
+) (*model.EmbeddingModel, error) {
 	if len(opts.GetIDs()) != 1 {
 		return nil, errLocateSingleID
 	}
 
-	sql, args, err := queryobject.NewEmbeddingModelQuery(queryobject.EmbeddingModelFrom).
+	query := queryobject.NewEmbeddingModelQuery(queryobject.EmbeddingModelFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithIDs(opts.GetIDs()).
-		WithFields(opts.GetFields()).
-		ToSQL()
+		WithFields(opts.GetFields())
+
+	if lock {
+		query.WithLockForUpdate()
+	}
+
+	sql, args, err := query.ToSQL()
 	if err != nil {
 		return nil, ParseError(err)
 	}

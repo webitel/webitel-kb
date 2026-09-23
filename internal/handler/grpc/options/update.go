@@ -2,6 +2,10 @@ package options
 
 import (
 	"context"
+	"slices"
+	"strings"
+
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -21,6 +25,7 @@ type UpdateOptions struct {
 
 	fields []string
 	id     int64
+	mask   []string
 }
 
 // NewUpdateOptions builds write options for an update request. The target id
@@ -67,6 +72,37 @@ func WithUpdateID(id int64) UpdateOption {
 	}
 }
 
+// WithUpdateMask applies the JSON paths of an update, reduced to their root
+// fields under the input's proto names; at least one is required.
+func WithUpdateMask(paths []string, input protoreflect.MessageDescriptor) UpdateOption {
+	return func(u *UpdateOptions) error {
+		for _, path := range paths {
+			name, _, _ := strings.Cut(path, ".")
+			if name == "" {
+				continue
+			}
+
+			if field := input.Fields().ByJSONName(name); field != nil {
+				name = string(field.Name())
+			}
+
+			if !slices.Contains(u.mask, name) {
+				u.mask = append(u.mask, name)
+			}
+		}
+
+		if len(u.mask) == 0 {
+			return errors.InvalidArgument(
+				"the update names no fields",
+				errors.WithID("options.update.mask_required"),
+			)
+		}
+
+		return nil
+	}
+}
+
 func (u *UpdateOptions) GetAuthOpts() auth.Auther { return u.auth }
 func (u *UpdateOptions) GetFields() []string      { return u.fields }
 func (u *UpdateOptions) GetID() int64             { return u.id }
+func (u *UpdateOptions) GetMask() []string        { return u.mask }

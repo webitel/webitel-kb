@@ -120,7 +120,10 @@ func (s *ArticlesServer) UpdateArticle(ctx context.Context, req *kb.UpdateArticl
 		return nil, err
 	}
 
-	opts, err := options.NewUpdateOptions(ctx, options.WithUpdateID(id))
+	opts, err := options.NewUpdateOptions(ctx,
+		options.WithUpdateID(id),
+		options.WithUpdateMask(req.GetXJsonMask(), in.ProtoReflect().Descriptor()),
+	)
 	if err != nil {
 		return nil, err
 	}

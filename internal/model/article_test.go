@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestBuildTree(t *testing.T) {
 	tests := []struct {
@@ -78,6 +81,40 @@ func TestBuildTree(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.want(t, BuildTree(tt.nodes))
+		})
+	}
+}
+
+func TestArticleMerge(t *testing.T) {
+	stored := Article{
+		ID: 1, Subject: "vpn", Type: ArticleTypeArticle, State: ArticleStateActive,
+		Tags: []string{"net"},
+	}
+
+	tests := []struct {
+		name     string
+		in       *Article
+		mask     []string
+		wantSubj string
+		wantTags []string
+	}{
+		{"unset fields keep stored", &Article{}, nil, "vpn", []string{"net"}},
+		{"set fields override", &Article{Subject: "new", Tags: []string{"hr"}}, nil, "new", []string{"hr"}},
+		{"unmasked nil tags keep stored", &Article{Subject: "new"}, []string{"subject"}, "new", []string{"net"}},
+		{"masked nil tags clear", &Article{}, []string{"tags"}, "vpn", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stored.Merge(tt.in, tt.mask)
+
+			if got.Subject != tt.wantSubj || !slices.Equal(got.Tags, tt.wantTags) {
+				t.Fatalf("merged subject %q tags %v, want %q %v", got.Subject, got.Tags, tt.wantSubj, tt.wantTags)
+			}
+
+			if got.Type != stored.Type || got.State != stored.State {
+				t.Fatalf("merged type %d state %d, want the stored ones", got.Type, got.State)
+			}
 		})
 	}
 }

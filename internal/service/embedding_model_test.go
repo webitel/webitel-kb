@@ -45,11 +45,13 @@ type stubWriteOpts struct {
 	auth   auth.Auther
 	fields []string
 	id     int64
+	mask   []string
 }
 
 func (o *stubWriteOpts) GetAuthOpts() auth.Auther { return o.auth }
 func (o *stubWriteOpts) GetFields() []string      { return o.fields }
 func (o *stubWriteOpts) GetID() int64             { return o.id }
+func (o *stubWriteOpts) GetMask() []string        { return o.mask }
 
 // fakeModelStore records store calls and plays back preset results.
 type fakeModelStore struct {
@@ -61,9 +63,10 @@ type fakeModelStore struct {
 	locateErr error
 	configErr error
 
-	locateIDs    []int64
-	locateFields []string
-	listFilter   model.EmbeddingModelFilter
+	locateIDs     []int64
+	locateFields  []string
+	lockedLocates int
+	listFilter    model.EmbeddingModelFilter
 
 	createIn     *model.EmbeddingModel
 	createConfig []byte
@@ -94,6 +97,12 @@ func (f *fakeModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 	}
 
 	return f.located, nil
+}
+
+func (f *fakeModelStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+	f.lockedLocates++
+
+	return f.Locate(ctx, opts)
 }
 
 func (f *fakeModelStore) Create(
@@ -498,6 +507,61 @@ func TestUpdateCredentialFlow(t *testing.T) {
 
 			if string(models.updateConfig) != tt.wantConfig {
 				t.Fatalf("config = %q, want %q", models.updateConfig, tt.wantConfig)
+			}
+		})
+	}
+}
+
+func TestUpdateAppliesMask(t *testing.T) {
+	stored := &model.EmbeddingModel{
+		ID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
+		Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001",
+	}
+
+	tests := []struct {
+		name       string
+		in         *model.EmbeddingModel
+		apiKey     string
+		mask       []string
+		wantName   string
+		wantConfig string
+		wantKeep   bool
+	}{
+		{
+			name: "partial update keeps the rest", in: &model.EmbeddingModel{Name: "renamed"},
+			mask: []string{"name"}, wantName: "renamed", wantKeep: true,
+		},
+		{
+			name: "unmasked key is ignored", in: &model.EmbeddingModel{Name: "renamed"},
+			apiKey: "next", mask: []string{"name"}, wantName: "renamed", wantKeep: true,
+		},
+		{
+			name: "masked key replaces credential", in: &model.EmbeddingModel{},
+			apiKey: "next", mask: []string{"api_key"}, wantName: "gemini prod", wantConfig: "enc:next",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{located: stored, written: &model.EmbeddingModel{ID: 1}}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1, mask: tt.mask}
+
+			if _, err := svc.Update(context.Background(), opts, tt.in, tt.apiKey); err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if got := models.updateIn; got.Name != tt.wantName || got.ModelRef != stored.ModelRef {
+				t.Fatalf("written %+v, want name %q over the stored model", got, tt.wantName)
+			}
+
+			if models.lockedLocates != 1 {
+				t.Fatalf("locked locates = %d, want 1", models.lockedLocates)
+			}
+
+			if models.updateKeepConfig != tt.wantKeep || string(models.updateConfig) != tt.wantConfig {
+				t.Fatalf("keep %v config %q, want %v %q",
+					models.updateKeepConfig, models.updateConfig, tt.wantKeep, tt.wantConfig)
 			}
 		})
 	}

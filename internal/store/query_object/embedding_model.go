@@ -77,6 +77,13 @@ func (q *EmbeddingModelQuery) WithDomainScope(domainID int64) *EmbeddingModelQue
 	return q
 }
 
+// WithLockForUpdate locks the selected model rows until the transaction ends.
+func (q *EmbeddingModelQuery) WithLockForUpdate() *EmbeddingModelQuery {
+	q.builder = q.builder.Suffix("FOR UPDATE OF m")
+
+	return q
+}
+
 // WithType keeps models of the given type; empty means any.
 func (q *EmbeddingModelQuery) WithType(modelType string) *EmbeddingModelQuery {
 	if modelType != "" {

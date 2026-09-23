@@ -14,4 +14,7 @@ type Updator interface {
 
 	// GetID returns the entity to update; never zero.
 	GetID() int64
+
+	// GetMask returns the input fields a partial update applies.
+	GetMask() []string
 }

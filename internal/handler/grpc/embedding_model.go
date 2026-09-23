@@ -88,7 +88,10 @@ func (s *EmbeddingModelsServer) UpdateModel(ctx context.Context, req *kb.UpdateM
 		return nil, errModelInputRequired
 	}
 
-	opts, err := options.NewUpdateOptions(ctx, options.WithUpdateID(req.GetId()))
+	opts, err := options.NewUpdateOptions(ctx,
+		options.WithUpdateID(req.GetId()),
+		options.WithUpdateMask(req.GetXJsonMask(), in.ProtoReflect().Descriptor()),
+	)
 	if err != nil {
 		return nil, err
 	}

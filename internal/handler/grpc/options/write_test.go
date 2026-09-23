@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
+
+	"github.com/webitel/webitel-kb/api/kb"
 )
 
 func TestWriteOptionsRequireSession(t *testing.T) {
@@ -137,5 +139,45 @@ func TestDeleteOptionsFieldsAndID(t *testing.T) {
 
 	if got := opts.GetID(); got != 9 {
 		t.Errorf("GetID() = %d, want 9", got)
+	}
+}
+
+func TestWithUpdateMask(t *testing.T) {
+	input := (&kb.InputSpace{}).ProtoReflect().Descriptor()
+
+	tests := []struct {
+		name    string
+		paths   []string
+		want    []string
+		wantErr bool
+	}{
+		{name: "no paths", wantErr: true},
+		{name: "empty body path", paths: []string{""}, wantErr: true},
+		{name: "json and proto names", paths: []string{"teamIds", "home_article_id"}, want: []string{"team_ids", "home_article_id"}},
+		{name: "nested path keeps its root", paths: []string{"description.x", "description"}, want: []string{"description"}},
+		{name: "unknown root is kept", paths: []string{"createdAt"}, want: []string{"createdAt"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var u UpdateOptions
+
+			err := WithUpdateMask(tt.paths, input)(&u)
+			if tt.wantErr {
+				if errors.ID(err) != "options.update.mask_required" {
+					t.Fatalf("err = %v, want options.update.mask_required", err)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("WithUpdateMask: %v", err)
+			}
+
+			if !slices.Equal(u.GetMask(), tt.want) {
+				t.Fatalf("mask = %v, want %v", u.GetMask(), tt.want)
+			}
+		})
 	}
 }
