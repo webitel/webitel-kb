@@ -117,13 +117,20 @@ func TestRetrievalSearchMapsTheRequest(t *testing.T) {
 			req:          &kb.SearchRequest{Query: "vpn"},
 			wantSize:     options.DefaultSearchSize,
 			wantPage:     1,
-			wantMatchAll: true,
+			wantMatchAll: false,
 		},
 		{
-			name:         "all tags is the default match",
+			name:         "any tag is the default match",
 			req:          &kb.SearchRequest{Query: "vpn", Tags: []string{"a", "b"}, Size: 3, Page: 2},
 			wantSize:     3,
 			wantPage:     2,
+			wantMatchAll: false,
+		},
+		{
+			name:         "all tags",
+			req:          &kb.SearchRequest{Query: "vpn", Tags: []string{"a", "b"}, TagMatch: kb.TagMatch_TAG_MATCH_ALL, Size: 3},
+			wantSize:     3,
+			wantPage:     1,
 			wantMatchAll: true,
 		},
 		{
@@ -293,6 +300,35 @@ func TestRetrievalRequiresASession(t *testing.T) {
 
 func retrievalContext() context.Context {
 	return auth.WithSession(context.Background(), modelSession{})
+}
+
+func TestSemanticSearchMapsTagMatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		match        kb.TagMatch
+		wantMatchAll bool
+	}{
+		{name: "any tag is the default match", match: kb.TagMatch_TAG_MATCH_UNSPECIFIED, wantMatchAll: false},
+		{name: "all tags", match: kb.TagMatch_TAG_MATCH_ALL, wantMatchAll: true},
+		{name: "any tag", match: kb.TagMatch_TAG_MATCH_ANY, wantMatchAll: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, fake := retrievalServerWithFake()
+
+			_, err := server.SemanticSearch(retrievalContext(), &kb.SemanticSearchRequest{
+				Query: "vpn", SpaceIds: []int64{3}, Tags: []string{"net", "vpn"}, TagMatch: tt.match,
+			})
+			if err != nil {
+				t.Fatalf("SemanticSearch: %v", err)
+			}
+
+			if fake.hybrid.Filter.TagsMatchAll != tt.wantMatchAll {
+				t.Fatalf("filter = %+v", fake.hybrid.Filter)
+			}
+		})
+	}
 }
 
 func TestSemanticSearchFullPath(t *testing.T) {
