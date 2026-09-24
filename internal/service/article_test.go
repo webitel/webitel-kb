@@ -975,3 +975,82 @@ func TestArticleBodyWithKnownNodesLogsNothing(t *testing.T) {
 		t.Fatalf("log = %q, want silence", logged.String())
 	}
 }
+
+func TestArticleReindex(t *testing.T) {
+	tests := []struct {
+		name       string
+		indexState int32
+		history    []*model.ArticleVersion
+		wantID     string
+	}{
+		{
+			name:       "failed article queues its latest version",
+			indexState: model.IndexStateFailed,
+			history:    []*model.ArticleVersion{{ID: 41, VersionNumber: 3}, {ID: 40, VersionNumber: 2}},
+		},
+		{
+			name:       "indexed article is refused",
+			indexState: model.IndexStateIndexed,
+			history:    []*model.ArticleVersion{{ID: 41, VersionNumber: 3}},
+			wantID:     "kb.article.reindex_not_failed",
+		},
+		{
+			name:       "pending article is refused",
+			indexState: model.IndexStatePending,
+			history:    []*model.ArticleVersion{{ID: 41, VersionNumber: 3}},
+			wantID:     "kb.article.reindex_not_failed",
+		},
+		{
+			name:       "article without a version is refused",
+			indexState: model.IndexStateFailed,
+			wantID:     "kb.article.no_version",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.current.IndexState = tt.indexState
+			uow.versions.history = tt.history
+
+			_, err := svc.Reindex(context.Background(), updaterOpts(), 4)
+
+			if tt.wantID != "" {
+				if errors.ID(err) != tt.wantID {
+					t.Fatalf("error = %v, want %s", err, tt.wantID)
+				}
+
+				if uow.articles.updateCalls != 0 || len(uow.outbox.events) != 0 {
+					t.Fatal("a refused reindex must write nothing")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Reindex: %v", err)
+			}
+
+			if !slices.Contains(uow.articles.locateFields[0], "index_state") {
+				t.Fatalf("locked read fields = %v, want index_state", uow.articles.locateFields[0])
+			}
+
+			in := uow.articles.updateIn
+			if in.IndexState != model.IndexStatePending || in.Subject != "stored" || uow.articles.updateVer != 4 {
+				t.Fatalf("article update = (%+v, %d)", in, uow.articles.updateVer)
+			}
+
+			if len(uow.outbox.events) != 1 {
+				t.Fatalf("events = %d, want one", len(uow.outbox.events))
+			}
+
+			if got := uow.outbox.events[0]; got.VersionID != 41 || got.ArticleID != 7 || got.SpaceID != 3 {
+				t.Fatalf("event = %+v", got)
+			}
+
+			if uow.transactions != 1 {
+				t.Fatalf("transactions = %d, want one", uow.transactions)
+			}
+		})
+	}
+}

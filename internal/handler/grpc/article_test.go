@@ -385,9 +385,10 @@ func TestListChildrenRequiresAParent(t *testing.T) {
 func TestArticleEtagGuards(t *testing.T) {
 	articles := &articleStoreFake{
 		items:   []*model.Article{{ID: 7, Ver: 4}},
-		written: &model.Article{ID: 7, Ver: 5},
+		written: &model.Article{ID: 7, Ver: 5, IndexState: model.IndexStateFailed},
 	}
-	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
+	versions := &articleVersionStoreFake{items: []*model.ArticleVersion{{ID: 40}}}
+	server, _, _ := newArticleServers(&articleUoWFake{articles: articles, versions: versions})
 	ctx := articleContext()
 
 	full, err := kbetag.Encode(kbetag.TypeArticle, 7, 4)
@@ -413,6 +414,11 @@ func TestArticleEtagGuards(t *testing.T) {
 		}},
 		{name: "move", call: func(tag string) error {
 			_, err := server.MoveArticle(ctx, &kb.MoveArticleRequest{Etag: tag, NewParentId: 0})
+
+			return err
+		}},
+		{name: "reindex", call: func(tag string) error {
+			_, err := server.ReindexArticle(ctx, &kb.ReindexArticleRequest{Etag: tag})
 
 			return err
 		}},

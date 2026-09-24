@@ -744,6 +744,52 @@ func (x *MoveArticleRequest) GetNewParentId() int64 {
 	return 0
 }
 
+// ReindexArticleRequest selects the article to index again.
+type ReindexArticleRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Concurrency token / locator of the article.
+	Etag          string `protobuf:"bytes,1,opt,name=etag,proto3" json:"etag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReindexArticleRequest) Reset() {
+	*x = ReindexArticleRequest{}
+	mi := &file_article_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReindexArticleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReindexArticleRequest) ProtoMessage() {}
+
+func (x *ReindexArticleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_article_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReindexArticleRequest.ProtoReflect.Descriptor instead.
+func (*ReindexArticleRequest) Descriptor() ([]byte, []int) {
+	return file_article_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ReindexArticleRequest) GetEtag() string {
+	if x != nil {
+		return x.Etag
+	}
+	return ""
+}
+
 // ListChildrenRequest selects the parent article.
 type ListChildrenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -755,7 +801,7 @@ type ListChildrenRequest struct {
 
 func (x *ListChildrenRequest) Reset() {
 	*x = ListChildrenRequest{}
-	mi := &file_article_proto_msgTypes[9]
+	mi := &file_article_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +813,7 @@ func (x *ListChildrenRequest) String() string {
 func (*ListChildrenRequest) ProtoMessage() {}
 
 func (x *ListChildrenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_article_proto_msgTypes[9]
+	mi := &file_article_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +826,7 @@ func (x *ListChildrenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChildrenRequest.ProtoReflect.Descriptor instead.
 func (*ListChildrenRequest) Descriptor() ([]byte, []int) {
-	return file_article_proto_rawDescGZIP(), []int{9}
+	return file_article_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListChildrenRequest) GetId() int64 {
@@ -801,7 +847,7 @@ type ListAncestorsRequest struct {
 
 func (x *ListAncestorsRequest) Reset() {
 	*x = ListAncestorsRequest{}
-	mi := &file_article_proto_msgTypes[10]
+	mi := &file_article_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -813,7 +859,7 @@ func (x *ListAncestorsRequest) String() string {
 func (*ListAncestorsRequest) ProtoMessage() {}
 
 func (x *ListAncestorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_article_proto_msgTypes[10]
+	mi := &file_article_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -826,7 +872,7 @@ func (x *ListAncestorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAncestorsRequest.ProtoReflect.Descriptor instead.
 func (*ListAncestorsRequest) Descriptor() ([]byte, []int) {
-	return file_article_proto_rawDescGZIP(), []int{10}
+	return file_article_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListAncestorsRequest) GetId() int64 {
@@ -847,7 +893,7 @@ type GetTreeRequest struct {
 
 func (x *GetTreeRequest) Reset() {
 	*x = GetTreeRequest{}
-	mi := &file_article_proto_msgTypes[11]
+	mi := &file_article_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -859,7 +905,7 @@ func (x *GetTreeRequest) String() string {
 func (*GetTreeRequest) ProtoMessage() {}
 
 func (x *GetTreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_article_proto_msgTypes[11]
+	mi := &file_article_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -872,7 +918,7 @@ func (x *GetTreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTreeRequest.ProtoReflect.Descriptor instead.
 func (*GetTreeRequest) Descriptor() ([]byte, []int) {
-	return file_article_proto_rawDescGZIP(), []int{11}
+	return file_article_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetTreeRequest) GetSpaceId() int64 {
@@ -893,7 +939,7 @@ type GetTreeResponse struct {
 
 func (x *GetTreeResponse) Reset() {
 	*x = GetTreeResponse{}
-	mi := &file_article_proto_msgTypes[12]
+	mi := &file_article_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +951,7 @@ func (x *GetTreeResponse) String() string {
 func (*GetTreeResponse) ProtoMessage() {}
 
 func (x *GetTreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_article_proto_msgTypes[12]
+	mi := &file_article_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +964,7 @@ func (x *GetTreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTreeResponse.ProtoReflect.Descriptor instead.
 func (*GetTreeResponse) Descriptor() ([]byte, []int) {
-	return file_article_proto_rawDescGZIP(), []int{12}
+	return file_article_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetTreeResponse) GetNodes() []*TreeNode {
@@ -991,7 +1037,9 @@ const file_article_proto_rawDesc = "" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\"L\n" +
 	"\x12MoveArticleRequest\x12\x12\n" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\x12\"\n" +
-	"\rnew_parent_id\x18\x02 \x01(\x03R\vnewParentId\"%\n" +
+	"\rnew_parent_id\x18\x02 \x01(\x03R\vnewParentId\"+\n" +
+	"\x15ReindexArticleRequest\x12\x12\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\"%\n" +
 	"\x13ListChildrenRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"&\n" +
 	"\x14ListAncestorsRequest\x12\x0e\n" +
@@ -999,14 +1047,15 @@ const file_article_proto_rawDesc = "" +
 	"\x0eGetTreeRequest\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\"=\n" +
 	"\x0fGetTreeResponse\x12*\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\xa7\b\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\x9d\t\n" +
 	"\bArticles\x12e\n" +
 	"\fListArticles\x12\x1f.webitel.kb.ListArticlesRequest\x1a\x17.webitel.kb.ArticleList\"\x1b\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/kb/articles\x12j\n" +
 	"\rLocateArticle\x12 .webitel.kb.LocateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/kb/articles/{etag}\x12j\n" +
 	"\rCreateArticle\x12 .webitel.kb.CreateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18:\x05input\"\x0f/v1/kb/articles\x12\x92\x01\n" +
 	"\rUpdateArticle\x12 .webitel.kb.UpdateArticleRequest\x1a\x13.webitel.kb.Article\"J\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02@:\x05inputZ\x1f:\x05input2\x16/v1/kb/articles/{etag}\x1a\x16/v1/kb/articles/{etag}\x12j\n" +
 	"\rDeleteArticle\x12 .webitel.kb.DeleteArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18*\x16/v1/kb/articles/{etag}\x12n\n" +
-	"\vMoveArticle\x12\x1e.webitel.kb.MoveArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/kb/articles/{etag}/move\x12s\n" +
+	"\vMoveArticle\x12\x1e.webitel.kb.MoveArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/kb/articles/{etag}/move\x12t\n" +
+	"\x0eReindexArticle\x12!.webitel.kb.ReindexArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 \"\x1e/v1/kb/articles/{etag}/reindex\x12s\n" +
 	"\fListChildren\x12\x1f.webitel.kb.ListChildrenRequest\x1a\x17.webitel.kb.ArticleList\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/articles/{id}/children\x12v\n" +
 	"\rListAncestors\x12 .webitel.kb.ListAncestorsRequest\x1a\x17.webitel.kb.ArticleList\"*\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/kb/articles/{id}/ancestors\x12m\n" +
 	"\aGetTree\x12\x1a.webitel.kb.GetTreeRequest\x1a\x1b.webitel.kb.GetTreeResponse\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/spaces/{space_id}/tree\x1a\x0f\x8a\xb5\x18\vkb_articlesB\x90\x01\n" +
@@ -1026,64 +1075,67 @@ func file_article_proto_rawDescGZIP() []byte {
 	return file_article_proto_rawDescData
 }
 
-var file_article_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_article_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_article_proto_goTypes = []any{
-	(*Article)(nil),              // 0: webitel.kb.Article
-	(*InputArticle)(nil),         // 1: webitel.kb.InputArticle
-	(*ListArticlesRequest)(nil),  // 2: webitel.kb.ListArticlesRequest
-	(*ArticleList)(nil),          // 3: webitel.kb.ArticleList
-	(*LocateArticleRequest)(nil), // 4: webitel.kb.LocateArticleRequest
-	(*CreateArticleRequest)(nil), // 5: webitel.kb.CreateArticleRequest
-	(*UpdateArticleRequest)(nil), // 6: webitel.kb.UpdateArticleRequest
-	(*DeleteArticleRequest)(nil), // 7: webitel.kb.DeleteArticleRequest
-	(*MoveArticleRequest)(nil),   // 8: webitel.kb.MoveArticleRequest
-	(*ListChildrenRequest)(nil),  // 9: webitel.kb.ListChildrenRequest
-	(*ListAncestorsRequest)(nil), // 10: webitel.kb.ListAncestorsRequest
-	(*GetTreeRequest)(nil),       // 11: webitel.kb.GetTreeRequest
-	(*GetTreeResponse)(nil),      // 12: webitel.kb.GetTreeResponse
-	(*Lookup)(nil),               // 13: general.Lookup
-	(ArticleType)(0),             // 14: webitel.kb.ArticleType
-	(ArticleState)(0),            // 15: webitel.kb.ArticleState
-	(IndexState)(0),              // 16: webitel.kb.IndexState
-	(*structpb.Struct)(nil),      // 17: google.protobuf.Struct
-	(*TreeNode)(nil),             // 18: webitel.kb.TreeNode
+	(*Article)(nil),               // 0: webitel.kb.Article
+	(*InputArticle)(nil),          // 1: webitel.kb.InputArticle
+	(*ListArticlesRequest)(nil),   // 2: webitel.kb.ListArticlesRequest
+	(*ArticleList)(nil),           // 3: webitel.kb.ArticleList
+	(*LocateArticleRequest)(nil),  // 4: webitel.kb.LocateArticleRequest
+	(*CreateArticleRequest)(nil),  // 5: webitel.kb.CreateArticleRequest
+	(*UpdateArticleRequest)(nil),  // 6: webitel.kb.UpdateArticleRequest
+	(*DeleteArticleRequest)(nil),  // 7: webitel.kb.DeleteArticleRequest
+	(*MoveArticleRequest)(nil),    // 8: webitel.kb.MoveArticleRequest
+	(*ReindexArticleRequest)(nil), // 9: webitel.kb.ReindexArticleRequest
+	(*ListChildrenRequest)(nil),   // 10: webitel.kb.ListChildrenRequest
+	(*ListAncestorsRequest)(nil),  // 11: webitel.kb.ListAncestorsRequest
+	(*GetTreeRequest)(nil),        // 12: webitel.kb.GetTreeRequest
+	(*GetTreeResponse)(nil),       // 13: webitel.kb.GetTreeResponse
+	(*Lookup)(nil),                // 14: general.Lookup
+	(ArticleType)(0),              // 15: webitel.kb.ArticleType
+	(ArticleState)(0),             // 16: webitel.kb.ArticleState
+	(IndexState)(0),               // 17: webitel.kb.IndexState
+	(*structpb.Struct)(nil),       // 18: google.protobuf.Struct
+	(*TreeNode)(nil),              // 19: webitel.kb.TreeNode
 }
 var file_article_proto_depIdxs = []int32{
-	13, // 0: webitel.kb.Article.space:type_name -> general.Lookup
-	14, // 1: webitel.kb.Article.type:type_name -> webitel.kb.ArticleType
-	15, // 2: webitel.kb.Article.state:type_name -> webitel.kb.ArticleState
-	16, // 3: webitel.kb.Article.index_state:type_name -> webitel.kb.IndexState
-	13, // 4: webitel.kb.Article.created_by:type_name -> general.Lookup
-	13, // 5: webitel.kb.Article.updated_by:type_name -> general.Lookup
-	14, // 6: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
-	15, // 7: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
-	17, // 8: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
-	15, // 9: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
-	14, // 10: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
+	14, // 0: webitel.kb.Article.space:type_name -> general.Lookup
+	15, // 1: webitel.kb.Article.type:type_name -> webitel.kb.ArticleType
+	16, // 2: webitel.kb.Article.state:type_name -> webitel.kb.ArticleState
+	17, // 3: webitel.kb.Article.index_state:type_name -> webitel.kb.IndexState
+	14, // 4: webitel.kb.Article.created_by:type_name -> general.Lookup
+	14, // 5: webitel.kb.Article.updated_by:type_name -> general.Lookup
+	15, // 6: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
+	16, // 7: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
+	18, // 8: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
+	16, // 9: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
+	15, // 10: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
 	0,  // 11: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
 	1,  // 12: webitel.kb.CreateArticleRequest.input:type_name -> webitel.kb.InputArticle
 	1,  // 13: webitel.kb.UpdateArticleRequest.input:type_name -> webitel.kb.InputArticle
-	18, // 14: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
+	19, // 14: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
 	2,  // 15: webitel.kb.Articles.ListArticles:input_type -> webitel.kb.ListArticlesRequest
 	4,  // 16: webitel.kb.Articles.LocateArticle:input_type -> webitel.kb.LocateArticleRequest
 	5,  // 17: webitel.kb.Articles.CreateArticle:input_type -> webitel.kb.CreateArticleRequest
 	6,  // 18: webitel.kb.Articles.UpdateArticle:input_type -> webitel.kb.UpdateArticleRequest
 	7,  // 19: webitel.kb.Articles.DeleteArticle:input_type -> webitel.kb.DeleteArticleRequest
 	8,  // 20: webitel.kb.Articles.MoveArticle:input_type -> webitel.kb.MoveArticleRequest
-	9,  // 21: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
-	10, // 22: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
-	11, // 23: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
-	3,  // 24: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
-	0,  // 25: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
-	0,  // 26: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
-	0,  // 27: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
-	0,  // 28: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
-	0,  // 29: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
-	3,  // 30: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
-	3,  // 31: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
-	12, // 32: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
-	24, // [24:33] is the sub-list for method output_type
-	15, // [15:24] is the sub-list for method input_type
+	9,  // 21: webitel.kb.Articles.ReindexArticle:input_type -> webitel.kb.ReindexArticleRequest
+	10, // 22: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
+	11, // 23: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
+	12, // 24: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
+	3,  // 25: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
+	0,  // 26: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
+	0,  // 27: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
+	0,  // 28: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
+	0,  // 29: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
+	0,  // 30: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
+	0,  // 31: webitel.kb.Articles.ReindexArticle:output_type -> webitel.kb.Article
+	3,  // 32: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
+	3,  // 33: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
+	13, // 34: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
+	25, // [25:35] is the sub-list for method output_type
+	15, // [15:25] is the sub-list for method input_type
 	15, // [15:15] is the sub-list for extension type_name
 	15, // [15:15] is the sub-list for extension extendee
 	0,  // [0:15] is the sub-list for field type_name
@@ -1102,7 +1154,7 @@ func file_article_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_article_proto_rawDesc), len(file_article_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
