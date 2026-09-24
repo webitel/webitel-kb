@@ -55,6 +55,10 @@ func (f *modelStoreFake) Locate(context.Context, options.Searcher) (*model.Embed
 	return nil, errors.Internal("not implemented in fake")
 }
 
+func (f *modelStoreFake) LocateForUpdate(context.Context, options.Searcher) (*model.EmbeddingModel, error) {
+	return nil, errors.Internal("not implemented in fake")
+}
+
 func (f *modelStoreFake) Create(
 	context.Context, options.Creator, *model.EmbeddingModel, []byte,
 ) (*model.EmbeddingModel, error) {

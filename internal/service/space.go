@@ -82,33 +82,40 @@ func (s *SpaceService) Create(
 	return created, nil
 }
 
-// Update enforces the immutable fields against the stored space, validates a
-// newly configured model, and rewrites the space with its team binding in one
-// transaction.
+// spaceMergeFields is what the locked read must carry for the merge.
+var spaceMergeFields = []string{
+	"id", "name", "description", "language", "embedding_model_id", "reranker_model_id",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id",
+}
+
+// Update merges the input over the stored space, enforces the immutable
+// fields, validates a newly configured model, and rewrites the space with its
+// team binding in one transaction.
 func (s *SpaceService) Update(
 	ctx context.Context, opts options.Updator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
-	if err := requireName(in); err != nil {
-		return nil, err
-	}
-
+	mask := opts.GetMask()
 	session := opts.GetAuthOpts()
 
 	var updated *model.Space
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		current, err := tx.SpaceStore().LocateForUpdate(ctx, readOptions{
-			auth: session,
-			ids:  []int64{opts.GetID()},
-			fields: []string{
-				"id", "language", "embedding_model_id", "reranker_model_id",
-			},
+			auth:   session,
+			ids:    []int64{opts.GetID()},
+			fields: spaceMergeFields,
 		})
 		if err != nil {
 			return err
 		}
 
-		if in.Language != "" && in.Language != current.Language {
+		merged := current.Merge(in, mask)
+
+		if err := requireName(merged); err != nil {
+			return err
+		}
+
+		if merged.Language != current.Language {
 			return errors.InvalidArgument(
 				"language is immutable",
 				errors.WithID("kb.space.language_immutable"),
@@ -120,7 +127,7 @@ func (s *SpaceService) Update(
 		// check runs before the consistency rules, so clearing the model of a
 		// vector-enabled space reports the true cause.
 		switch {
-		case in.EmbeddingModelID == current.EmbeddingModelID:
+		case merged.EmbeddingModelID == current.EmbeddingModelID:
 			// Unchanged.
 		case current.EmbeddingModelID == 0:
 			// One-way upgrade from a lexical-only space; validated below.
@@ -131,17 +138,17 @@ func (s *SpaceService) Update(
 			)
 		}
 
-		if err := validateRetrievalConfig(in); err != nil {
+		if err := validateRetrievalConfig(merged); err != nil {
 			return err
 		}
 
-		embeddingToValidate := in.EmbeddingModelID
-		if in.EmbeddingModelID == current.EmbeddingModelID {
+		embeddingToValidate := merged.EmbeddingModelID
+		if merged.EmbeddingModelID == current.EmbeddingModelID {
 			embeddingToValidate = 0 // no change, no gate
 		}
 
-		rerankerToValidate := in.RerankerModelID
-		if in.RerankerModelID == current.RerankerModelID {
+		rerankerToValidate := merged.RerankerModelID
+		if merged.RerankerModelID == current.RerankerModelID {
 			rerankerToValidate = 0
 		}
 
@@ -149,15 +156,17 @@ func (s *SpaceService) Update(
 			return err
 		}
 
-		space, err := tx.SpaceStore().Update(ctx, opts, in)
+		space, err := tx.SpaceStore().Update(ctx, opts, merged)
 		if err != nil {
 			return err
 		}
 
-		if err := tx.SpaceStore().ReplaceTeams(
-			ctx, space.ID, session.GetDomainID(), session.GetUserID(), dedupeIDs(teamIDs),
-		); err != nil {
-			return err
+		if len(mask) == 0 || slices.Contains(mask, "team_ids") {
+			if err := tx.SpaceStore().ReplaceTeams(
+				ctx, space.ID, session.GetDomainID(), session.GetUserID(), dedupeIDs(teamIDs),
+			); err != nil {
+				return err
+			}
 		}
 
 		updated, err = tx.SpaceStore().Locate(ctx, readOptions{

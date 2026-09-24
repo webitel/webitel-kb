@@ -401,7 +401,7 @@ func TestArticleEtagGuards(t *testing.T) {
 	}{
 		{name: "update", call: func(tag string) error {
 			_, err := server.UpdateArticle(ctx, &kb.UpdateArticleRequest{
-				Etag: tag, Input: &kb.InputArticle{Subject: "VPN"},
+				Etag: tag, Input: &kb.InputArticle{Subject: "VPN"}, XJsonMask: []string{"subject"},
 			})
 
 			return err

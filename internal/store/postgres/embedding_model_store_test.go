@@ -179,11 +179,13 @@ type fakeWriteOpts struct {
 	auth   auth.Auther
 	fields []string
 	id     int64
+	mask   []string
 }
 
 func (o *fakeWriteOpts) GetAuthOpts() auth.Auther { return o.auth }
 func (o *fakeWriteOpts) GetFields() []string      { return o.fields }
 func (o *fakeWriteOpts) GetID() int64             { return o.id }
+func (o *fakeWriteOpts) GetMask() []string        { return o.mask }
 
 func ptrTo[T any](v T) *T { return &v }
 
@@ -675,5 +677,40 @@ func TestEmbeddingModelStoreAccessorFollowsTransaction(t *testing.T) {
 	// The accessor must bind to the transaction, not the pool.
 	if inner.gotSQL == "" {
 		t.Fatal("the store query did not run on the transaction")
+	}
+}
+
+func TestEmbeddingModelLocateForUpdateLocksTheRow(t *testing.T) {
+	tests := []struct {
+		name     string
+		locate   func(*embeddingModelStore, *fakeSearchOpts) error
+		wantLock bool
+	}{
+		{"locate for update locks", func(s *embeddingModelStore, o *fakeSearchOpts) error {
+			_, err := s.LocateForUpdate(context.Background(), o)
+
+			return err
+		}, true},
+		{"plain locate does not lock", func(s *embeddingModelStore, o *fakeSearchOpts) error {
+			_, err := s.Locate(context.Background(), o)
+
+			return err
+		}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(7)}}}}
+			opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{7}, fields: []string{"id"}}
+
+			if err := tt.locate(&embeddingModelStore{db: f}, opts); err != nil {
+				t.Fatalf("locate: %v", err)
+			}
+
+			// Locks only the model relation: the user joins are outer and unlockable.
+			if got := strings.Contains(f.gotSQL, "FOR UPDATE OF m"); got != tt.wantLock {
+				t.Fatalf("SQL %q locks = %v, want %v", f.gotSQL, got, tt.wantLock)
+			}
+		})
 	}
 }

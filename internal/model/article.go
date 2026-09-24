@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // MaxArticleDepth is the hierarchy ceiling, backstopped by a CHECK in the schema.
 const MaxArticleDepth int32 = 5
@@ -54,8 +57,9 @@ type Article struct {
 	UpdatedBy *Lookup
 }
 
-// Merge overlays the set fields of in over a copy of the article.
-func (a Article) Merge(in *Article) *Article {
+// Merge overlays the set fields of in over a copy of the article. Tags named
+// by mask are taken even when empty, so a partial update can clear them.
+func (a Article) Merge(in *Article, mask []string) *Article {
 	merged := a
 
 	if in.Subject != "" {
@@ -70,7 +74,7 @@ func (a Article) Merge(in *Article) *Article {
 		merged.State = in.State
 	}
 
-	if in.Tags != nil {
+	if in.Tags != nil || slices.Contains(mask, "tags") {
 		merged.Tags = in.Tags
 	}
 

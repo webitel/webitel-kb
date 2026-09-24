@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"net/url"
+	"slices"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -95,42 +96,23 @@ func (s *EmbeddingModelService) Create(
 	return s.uow.EmbeddingModelStore().Create(ctx, opts, in, config)
 }
 
-// Update rewrites a registration; the store resets the validation stamp, so a
-// changed model must pass its probe again. An empty API key on a cloud model
-// keeps the stored credential (the contract has no way to clear it); an
-// embedded model always clears the credential, so switching a model from a
-// cloud provider cannot leave a stale key behind.
+// modelMergeFields is what the locked read must carry for the merge.
+var modelMergeFields = []string{
+	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "endpoint",
+}
+
+// Update merges the input over the stored model under a row lock and rewrites
+// it; the store resets the validation stamp, so a changed model must pass its
+// probe again. An empty API key on a cloud model keeps the stored credential
+// (the contract has no way to clear it); an embedded model always clears the
+// credential, so switching a model from a cloud provider cannot leave a stale
+// key behind.
 func (s *EmbeddingModelService) Update(
 	ctx context.Context, opts options.Updator, in *model.EmbeddingModel, apiKey string,
 ) (*model.EmbeddingModel, error) {
-	if err := validateInput(in, apiKey, false); err != nil {
-		return nil, err
-	}
-
-	setStorageDimensions(in)
-
-	found, err := s.uow.EmbeddingModelStore().Locate(ctx, readOptions{
-		auth:   opts.GetAuthOpts(),
-		ids:    []int64{opts.GetID()},
-		fields: []string{"id", "type"},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if found.Type != in.Type {
-		return nil, errors.InvalidArgument(
-			"model type is immutable",
-			errors.WithID("kb.model.type_immutable"),
-		)
-	}
-
-	if isEmbedded(in.Provider) {
-		return s.uow.EmbeddingModelStore().Update(ctx, opts, in, nil, false)
-	}
-
-	if apiKey == "" {
-		return s.uow.EmbeddingModelStore().Update(ctx, opts, in, nil, true)
+	mask := opts.GetMask()
+	if len(mask) != 0 && !slices.Contains(mask, "api_key") {
+		apiKey = ""
 	}
 
 	config, err := s.sealKey(ctx, apiKey)
@@ -138,7 +120,49 @@ func (s *EmbeddingModelService) Update(
 		return nil, err
 	}
 
-	return s.uow.EmbeddingModelStore().Update(ctx, opts, in, config, false)
+	var updated *model.EmbeddingModel
+
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		found, err := tx.EmbeddingModelStore().LocateForUpdate(ctx, readOptions{
+			auth:   opts.GetAuthOpts(),
+			ids:    []int64{opts.GetID()},
+			fields: modelMergeFields,
+		})
+		if err != nil {
+			return err
+		}
+
+		merged := found.Merge(in, mask)
+
+		if err := validateInput(merged, apiKey, false); err != nil {
+			return err
+		}
+
+		setStorageDimensions(merged)
+
+		if found.Type != merged.Type {
+			return errors.InvalidArgument(
+				"model type is immutable",
+				errors.WithID("kb.model.type_immutable"),
+			)
+		}
+
+		switch {
+		case isEmbedded(merged.Provider):
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, false)
+		case apiKey == "":
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, true)
+		default:
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, config, false)
+		}
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
 }
 
 func (s *EmbeddingModelService) Delete(

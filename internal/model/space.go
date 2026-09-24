@@ -66,3 +66,51 @@ type SpaceReranker struct {
 	// Config is the stored credential, encrypted; empty for self-hosted providers.
 	Config []byte
 }
+
+// spaceInputFields are the input fields an update writes; team_ids travel
+// separately.
+var spaceInputFields = []string{
+	"name", "description", "language", "embedding_model_id", "reranker_model_id",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id",
+}
+
+// Merge overlays the fields of in named by mask over a copy of the space.
+func (s Space) Merge(in *Space, mask []string) *Space {
+	merged := s
+
+	for _, field := range maskOrAll(mask, spaceInputFields) {
+		switch field {
+		case "name":
+			merged.Name = in.Name
+		case "description":
+			merged.Description = in.Description
+		case "language":
+			if in.Language != "" {
+				merged.Language = in.Language
+			}
+		case "embedding_model_id":
+			merged.EmbeddingModelID = in.EmbeddingModelID
+		case "reranker_model_id":
+			merged.RerankerModelID = in.RerankerModelID
+		case "vector_search_enabled":
+			merged.VectorSearchEnabled = in.VectorSearchEnabled
+		case "rerank_enabled":
+			merged.RerankEnabled = in.RerankEnabled
+		case "chunking_strategy":
+			merged.ChunkingStrategy = in.ChunkingStrategy
+		case "home_article_id":
+			merged.HomeArticleID = in.HomeArticleID
+		}
+	}
+
+	return &merged
+}
+
+// maskOrAll returns mask, or all when mask is empty.
+func maskOrAll(mask, all []string) []string {
+	if len(mask) == 0 {
+		return all
+	}
+
+	return mask
+}

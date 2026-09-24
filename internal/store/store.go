@@ -219,6 +219,9 @@ type EmbeddingModelStore interface {
 	// Locate returns the single model the options identify by id.
 	Locate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error)
 
+	// LocateForUpdate is Locate with the row locked until the transaction ends.
+	LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error)
+
 	// Create registers a model owned by the caller's domain. config is the
 	// encrypted provider credential; nil stores NULL.
 	Create(ctx context.Context, opts options.Creator, in *model.EmbeddingModel, config []byte) (*model.EmbeddingModel, error)
