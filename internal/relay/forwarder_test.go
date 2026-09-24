@@ -43,6 +43,11 @@ func (b *fakeBroker) Close() error { return nil }
 type fakeOutbox struct {
 	failed []int64
 	err    error
+
+	backlog      int64
+	oldest       time.Duration
+	failedCount  int64
+	observeError error
 }
 
 func (o *fakeOutbox) Database() (*pgxpool.Pool, error) { return nil, errors.New("not used") }
@@ -51,7 +56,13 @@ func (o *fakeOutbox) CleanupOutbox(context.Context, time.Duration, int) (int64, 
 	return 0, nil
 }
 
-func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) { return 0, 0, nil }
+func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) {
+	return o.backlog, o.oldest, o.observeError
+}
+
+func (o *fakeOutbox) CountIndexFailed(context.Context) (int64, error) {
+	return o.failedCount, o.observeError
+}
 
 func (o *fakeOutbox) MarkIndexFailed(_ context.Context, articleID int64) error {
 	o.failed = append(o.failed, articleID)
@@ -59,14 +70,40 @@ func (o *fakeOutbox) MarkIndexFailed(_ context.Context, articleID int64) error {
 	return o.err
 }
 
+type fakeMetrics struct {
+	backlog   []int64
+	oldest    []time.Duration
+	failed    []int64
+	published []error
+	poisoned  int
+}
+
+func (m *fakeMetrics) Leading(bool) {}
+
+func (m *fakeMetrics) Backlog(count int64, oldest time.Duration) {
+	m.backlog = append(m.backlog, count)
+	m.oldest = append(m.oldest, oldest)
+}
+
+func (m *fakeMetrics) IndexFailed(count int64) { m.failed = append(m.failed, count) }
+
+func (m *fakeMetrics) Published(_ context.Context, err error) { m.published = append(m.published, err) }
+
+func (m *fakeMetrics) Poisoned(context.Context) { m.poisoned++ }
+
 func testForwarder(broker Broker, store Outbox) *Forwarder {
 	return New(
 		Config{PublishTimeout: time.Second},
 		store,
 		broker,
 		nil,
+		&fakeMetrics{},
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
+}
+
+func metricsOf(f *Forwarder) *fakeMetrics {
+	return f.metrics.(*fakeMetrics)
 }
 
 func reindexMessage(routingKey string) *message.Message {
@@ -152,5 +189,81 @@ func TestMarkFailedLeavesASucceedingMessageAlone(t *testing.T) {
 
 	if len(store.failed) != 0 {
 		t.Fatalf("marked %v on success", store.failed)
+	}
+}
+
+func TestForwardRecordsThePublication(t *testing.T) {
+	brokerErr := errors.New("broker is gone")
+
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "delivered"},
+		{name: "rejected by the broker", err: brokerErr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			publish := testForwarder(&fakeBroker{err: tt.err}, &fakeOutbox{})
+			_ = publish.forward(publish.publisherFor(event.ReindexExchange))(reindexMessage("42"))
+
+			got := metricsOf(publish).published
+			if len(got) != 1 || !errors.Is(got[0], tt.err) {
+				t.Fatalf("recorded %v, want one publication with error %v", got, tt.err)
+			}
+		})
+	}
+}
+
+func TestPoisonQueueCountsWhatItSetsAside(t *testing.T) {
+	tests := []struct {
+		name      string
+		exchange  string
+		brokerErr error
+		want      int
+	}{
+		{name: "set aside", exchange: event.ReindexDLX, want: 1},
+		{name: "poison queue unreachable", exchange: event.ReindexDLX, brokerErr: errors.New("broker is gone"), want: 0},
+		{name: "indexing exchange", exchange: event.ReindexExchange, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := testForwarder(&fakeBroker{err: tt.brokerErr}, &fakeOutbox{})
+			_ = f.publisherFor(tt.exchange).Publish("42", reindexMessage("42"))
+
+			if got := metricsOf(f).poisoned; got != tt.want {
+				t.Fatalf("poisoned = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestObserveReportsTheReadings(t *testing.T) {
+	tests := []struct {
+		name  string
+		store *fakeOutbox
+		want  int
+	}{
+		{name: "read", store: &fakeOutbox{backlog: 3, oldest: time.Minute, failedCount: 2}, want: 1},
+		{name: "unavailable", store: &fakeOutbox{observeError: errors.New("db")}, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := testForwarder(&fakeBroker{}, tt.store)
+			f.observeBacklog(context.Background())
+			f.observeIndexFailed(context.Background())
+
+			m := metricsOf(f)
+			if len(m.backlog) != tt.want || len(m.failed) != tt.want {
+				t.Fatalf("readings: backlog %v, failed %v, want %d of each", m.backlog, m.failed, tt.want)
+			}
+
+			if tt.want == 1 && (m.backlog[0] != 3 || m.oldest[0] != time.Minute || m.failed[0] != 2) {
+				t.Fatalf("readings: backlog %v oldest %v failed %v", m.backlog, m.oldest, m.failed)
+			}
+		})
 	}
 }

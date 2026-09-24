@@ -42,7 +42,17 @@ type Outbox interface {
 	Database() (*pgxpool.Pool, error)
 	CleanupOutbox(ctx context.Context, retention time.Duration, batch int) (int64, error)
 	Backlog(ctx context.Context) (int64, time.Duration, error)
+	CountIndexFailed(ctx context.Context) (int64, error)
 	MarkIndexFailed(ctx context.Context, articleID int64) error
+}
+
+// Metrics records the work of the relay.
+type Metrics interface {
+	Leading(leading bool)
+	Backlog(count int64, oldest time.Duration)
+	IndexFailed(count int64)
+	Published(ctx context.Context, err error)
+	Poisoned(ctx context.Context)
 }
 
 // Elector runs the relay on exactly one instance at a time.
@@ -72,18 +82,20 @@ type Forwarder struct {
 	store   Outbox
 	broker  Broker
 	elector Elector
+	metrics Metrics
 	log     *slog.Logger
 
 	cancel context.CancelFunc
 	done   chan struct{}
 }
 
-func New(cfg Config, store Outbox, broker Broker, elector Elector, log *slog.Logger) *Forwarder {
+func New(cfg Config, store Outbox, broker Broker, elector Elector, metrics Metrics, log *slog.Logger) *Forwarder {
 	return &Forwarder{
 		cfg:     cfg,
 		store:   store,
 		broker:  broker,
 		elector: elector,
+		metrics: metrics,
 		log:     log.With(slog.String("component", "relay")),
 		done:    make(chan struct{}),
 	}
@@ -136,6 +148,9 @@ func (f *Forwarder) lead(ctx context.Context) error {
 	}
 
 	f.log.Info("relay leading", slog.String("consumer_group", outbox.ConsumerGroup))
+
+	f.metrics.Leading(true)
+	defer f.metrics.Leading(false)
 
 	var background sync.WaitGroup
 
@@ -219,11 +234,15 @@ func (f *Forwarder) forward(publisher message.Publisher) message.NoPublishHandle
 			return fmt.Errorf("relay: message %s carries no routing key", msg.UUID)
 		}
 
-		return publisher.Publish(key, msg)
+		err := publisher.Publish(key, msg)
+		f.metrics.Published(msg.Context(), err)
+
+		return err
 	}
 }
 
-// observeLoop reports the undelivered backlog while this instance leads.
+// observeLoop reports the undelivered backlog and the failed articles while
+// this instance leads.
 func (f *Forwarder) observeLoop(ctx context.Context) {
 	ticker := time.NewTicker(backlogInterval)
 	defer ticker.Stop()
@@ -235,21 +254,41 @@ func (f *Forwarder) observeLoop(ctx context.Context) {
 		case <-ticker.C:
 		}
 
-		count, oldest, err := f.store.Backlog(ctx)
-		if err != nil {
-			if ctx.Err() == nil {
-				f.log.Error("outbox backlog unavailable", slog.Any("error", err))
-			}
-
-			continue
-		}
-
-		if count > 0 {
-			f.log.Info("outbox backlog",
-				slog.Int64("undelivered", count),
-				slog.Duration("oldest_age", oldest))
-		}
+		f.observeBacklog(ctx)
+		f.observeIndexFailed(ctx)
 	}
+}
+
+func (f *Forwarder) observeBacklog(ctx context.Context) {
+	count, oldest, err := f.store.Backlog(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			f.log.Error("outbox backlog unavailable", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	f.metrics.Backlog(count, oldest)
+
+	if count > 0 {
+		f.log.Info("outbox backlog",
+			slog.Int64("undelivered", count),
+			slog.Duration("oldest_age", oldest))
+	}
+}
+
+func (f *Forwarder) observeIndexFailed(ctx context.Context) {
+	count, err := f.store.CountIndexFailed(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			f.log.Error("failed articles count unavailable", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	f.metrics.IndexFailed(count)
 }
 
 // cleanupLoop removes acknowledged rows for as long as this instance leads.

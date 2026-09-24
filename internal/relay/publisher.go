@@ -19,13 +19,19 @@ import (
 // watermill topic is the broker routing key; the exchange is fixed per
 // publisher, so the poison queue cannot end up on the indexing exchange.
 type brokerPublisher struct {
-	broker   Broker
-	exchange string
-	timeout  time.Duration
+	broker    Broker
+	exchange  string
+	timeout   time.Duration
+	published func(ctx context.Context)
 }
 
 func (f *Forwarder) publisherFor(exchange string) message.Publisher {
-	return &brokerPublisher{broker: f.broker, exchange: exchange, timeout: f.cfg.PublishTimeout}
+	p := &brokerPublisher{broker: f.broker, exchange: exchange, timeout: f.cfg.PublishTimeout}
+	if exchange == event.ReindexDLX {
+		p.published = f.metrics.Poisoned
+	}
+
+	return p
 }
 
 func (p *brokerPublisher) Publish(topic string, msgs ...*message.Message) error {
@@ -39,6 +45,10 @@ func (p *brokerPublisher) Publish(topic string, msgs ...*message.Message) error 
 
 		if err != nil {
 			return err
+		}
+
+		if p.published != nil {
+			p.published(msg.Context())
 		}
 	}
 
