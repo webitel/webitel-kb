@@ -55,6 +55,8 @@ type Article struct {
 	UpdatedAt time.Time
 	CreatedBy *Lookup
 	UpdatedBy *Lookup
+	// Published is the live version, read only on request.
+	Published *ArticleVersion
 }
 
 // Merge overlays the set fields of in over a copy of the article. Tags named

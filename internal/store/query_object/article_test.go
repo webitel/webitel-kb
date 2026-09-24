@@ -1,6 +1,7 @@
 package queryobject
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -136,8 +137,14 @@ func TestArticleUserJoinsRenderOncePerAlias(t *testing.T) {
 func TestArticleDefaultsCoverReadModel(t *testing.T) {
 	q := NewArticleQuery(ArticleFrom)
 
-	if got, want := len(q.DefaultFields()), len(q.FieldsMetadata()); got != want {
-		t.Fatalf("defaults name %d fields, metadata has %d", got, want)
+	for field := range q.FieldsMetadata() {
+		if field != "published" && !slices.Contains(q.DefaultFields(), field) {
+			t.Fatalf("defaults leave out %q", field)
+		}
+	}
+
+	if slices.Contains(q.DefaultFields(), "published") {
+		t.Fatal("defaults read the published version")
 	}
 
 	sql, _ := mustSQLArgs(t, q)
@@ -297,5 +304,34 @@ func TestArticleWithFieldsLeavesTheCallerSliceAlone(t *testing.T) {
 
 	if len(asked) != 1 || asked[0] != "subject" {
 		t.Fatalf("caller selection = %v, want it untouched", asked)
+	}
+}
+
+func TestArticlePublishedJoin(t *testing.T) {
+	const join = "LEFT JOIN kb.article_version pv ON pv.id=m.published_version_id"
+
+	tests := []struct {
+		name   string
+		fields []string
+		joins  int
+	}{
+		{name: "defaults leave it out", fields: nil, joins: 0},
+		{name: "narrow selection leaves it out", fields: []string{"id", "subject"}, joins: 0},
+		{name: "requested once", fields: []string{"id", "published"}, joins: 1},
+		{name: "beside space", fields: []string{"space", "published"}, joins: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _ := mustSQLArgs(t, NewArticleQuery(ArticleFrom).WithDomainScope(5).WithFields(tt.fields))
+
+			if got := strings.Count(sql, join); got != tt.joins {
+				t.Fatalf("published join rendered %d times, want %d: %s", got, tt.joins, sql)
+			}
+
+			if tt.joins == 1 && !strings.Contains(sql, "AS published_markdown") {
+				t.Fatalf("SQL %q does not select the published body", sql)
+			}
+		})
 	}
 }

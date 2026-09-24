@@ -209,6 +209,13 @@ type articleRecord struct {
 	CreatedByName      *string   `db:"created_by_name"`
 	UpdatedByID        *int64    `db:"updated_by_id"`
 	UpdatedByName      *string   `db:"updated_by_name"`
+
+	PublishedID       *int64 `db:"published_id"`
+	PublishedNumber   int32  `db:"published_number"`
+	PublishedSubject  string `db:"published_subject"`
+	PublishedRichText []byte `db:"published_rich_text"`
+	PublishedMarkdown string `db:"published_markdown"`
+	PublishedPlain    string `db:"published_plain"`
 }
 
 func mapArticle(record *articleRecord) *model.Article {
@@ -241,8 +248,26 @@ func mapArticle(record *articleRecord) *model.Article {
 
 	out.CreatedBy = mapLookup(record.CreatedByID, record.CreatedByName)
 	out.UpdatedBy = mapLookup(record.UpdatedByID, record.UpdatedByName)
+	out.Published = mapPublished(record)
 
 	return out
+}
+
+// mapPublished builds the published version when it was requested and exists.
+func mapPublished(record *articleRecord) *model.ArticleVersion {
+	if record.PublishedID == nil {
+		return nil
+	}
+
+	return mapArticleVersion(&articleVersionRecord{
+		ID:            *record.PublishedID,
+		ArticleID:     record.ID,
+		VersionNumber: record.PublishedNumber,
+		Subject:       record.PublishedSubject,
+		BodyRichText:  record.PublishedRichText,
+		BodyMarkdown:  record.PublishedMarkdown,
+		BodyPlain:     record.PublishedPlain,
+	})
 }
 
 func (s *articleStore) List(
