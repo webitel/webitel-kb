@@ -679,8 +679,8 @@ func TestValidateDimensionsMismatch(t *testing.T) {
 
 	_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
 
-	if err == nil || errors.ID(err) != "kb.model.dimensions_mismatch" || errors.Code(err) != codes.Aborted {
-		t.Fatalf("Validate error = %v, want a dimensions-mismatch abort", err)
+	if err == nil || errors.ID(err) != "kb.model.dimensions_mismatch" || errors.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("Validate error = %v, want a dimensions-mismatch precondition failure", err)
 	}
 
 	if models.markCalls != 0 {
@@ -695,8 +695,8 @@ func TestValidateProviderCallFails(t *testing.T) {
 
 	_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
 
-	if err == nil || errors.ID(err) != "kb.model.validation_failed" || errors.Code(err) != codes.Aborted {
-		t.Fatalf("Validate error = %v, want a validation-failed abort", err)
+	if err == nil || errors.ID(err) != "kb.model.validation_failed" || errors.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("Validate error = %v, want a validation-failed precondition failure", err)
 	}
 
 	if models.markCalls != 0 {
@@ -713,8 +713,8 @@ func TestValidateUnsupportedProvider(t *testing.T) {
 
 	_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
 
-	if err == nil || errors.ID(err) != "kb.model.provider_unsupported" || errors.Code(err) != codes.Aborted {
-		t.Fatalf("Validate error = %v, want a provider-unsupported abort", err)
+	if err == nil || errors.ID(err) != "kb.model.provider_unsupported" || errors.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("Validate error = %v, want a provider-unsupported precondition failure", err)
 	}
 
 	if models.markCalls != 0 {
@@ -732,8 +732,8 @@ func TestValidateUnsupportedRole(t *testing.T) {
 
 	_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
 
-	if err == nil || errors.ID(err) != "kb.model.provider_unsupported" || errors.Code(err) != codes.Aborted {
-		t.Fatalf("Validate error = %v, want a provider-unsupported abort", err)
+	if err == nil || errors.ID(err) != "kb.model.provider_unsupported" || errors.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("Validate error = %v, want a provider-unsupported precondition failure", err)
 	}
 
 	if models.markCalls != 0 {
@@ -788,7 +788,7 @@ func TestValidateRerankerScoreCountMismatch(t *testing.T) {
 	_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 6})
 
 	if err == nil || errors.ID(err) != "kb.model.validation_failed" {
-		t.Fatalf("Validate error = %v, want a validation-failed abort", err)
+		t.Fatalf("Validate error = %v, want a validation-failed precondition failure", err)
 	}
 
 	if models.markCalls != 0 {

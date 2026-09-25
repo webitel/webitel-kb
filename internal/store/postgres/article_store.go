@@ -147,7 +147,7 @@ const maxTreeNodes = 10000
 // errTreeTooLarge reports a hierarchy too large for one response.
 var errTreeTooLarge = errors.New(
 	"the space hierarchy is too large to return at once: list the children level by level",
-	errors.WithCode(codes.ResourceExhausted),
+	errors.WithCode(codes.FailedPrecondition),
 	errors.WithID("kb.article.tree_too_large"),
 )
 

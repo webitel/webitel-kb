@@ -226,9 +226,9 @@ func TestArticleVersionCreatePassesOtherErrors(t *testing.T) {
 			wantCode: codes.NotFound,
 		},
 		{
-			name:     "a foreign key violation stays aborted",
+			name:     "a foreign key violation stays a failed precondition",
 			queryErr: &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation},
-			wantCode: codes.Aborted,
+			wantCode: codes.FailedPrecondition,
 		},
 		{
 			name:     "a unique violation on another constraint stays a duplicate",

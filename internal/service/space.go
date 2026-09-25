@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 
+	"google.golang.org/grpc/codes"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/auth"
@@ -197,8 +199,9 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 		}
 
 		if hasArticles {
-			return errors.Aborted(
+			return errors.New(
 				"space still holds articles; archive or move them first",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.space.articles_exist"),
 			)
 		}
