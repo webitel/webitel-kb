@@ -20,8 +20,8 @@ require (
 	github.com/rabbitmq/amqp091-go v1.13.0
 	github.com/spf13/pflag v1.0.10
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/webitel/crypto/cryptobox v0.1.0
-	github.com/webitel/crypto/cryptostore v0.1.0
+	github.com/webitel/crypto/cryptobox v0.2.0
+	github.com/webitel/crypto/cryptostore v0.2.1
 	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260803090450-fac61ca3df42
 	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
 	github.com/webitel/webitel-go-kit/infra/otel v0.1.0
