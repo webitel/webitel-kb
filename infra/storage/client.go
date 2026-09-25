@@ -232,13 +232,14 @@ func (c *Client) call(ctx context.Context) (context.Context, context.CancelFunc)
 }
 
 // wrap keeps the code Storage answered with, so an outage is not reported as a
-// missing file.
+// missing file. The answer itself stays in the cause: it is not for the client.
 func wrap(err error, id string) error {
+	wrappers := []errors.Wrapper{errors.WithID(id), errors.WithCause(err)}
 	if st, ok := status.FromError(err); ok {
-		return errors.Wrap(err, errors.WithCode(st.Code()), errors.WithID(id))
+		wrappers = append(wrappers, errors.WithCode(st.Code()))
 	}
 
-	return errors.Wrap(err, errors.WithID(id))
+	return errors.New("storage request failed", wrappers...)
 }
 
 // Close shuts the connection pool down.

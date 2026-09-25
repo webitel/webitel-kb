@@ -43,22 +43,23 @@ func ParseError(err error) error {
 				errors.WithValue("constraint", pgErr.ConstraintName),
 			)
 		case pgerrcode.ForeignKeyViolation:
-			return errors.Aborted(
+			return errors.New(
 				"invalid input: referenced entity does not exist or is still referenced",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("store.pg.foreign_key"),
 				errors.WithCause(err),
 				errors.WithValue("constraint", pgErr.ConstraintName),
 				errors.WithValue("table", pgErr.TableName),
 			)
 		case pgerrcode.CheckViolation:
-			return errors.Aborted(
+			return errors.InvalidArgument(
 				"invalid input: value violates a constraint",
 				errors.WithID("store.pg.check"),
 				errors.WithCause(err),
 				errors.WithValue("constraint", pgErr.ConstraintName),
 			)
 		case pgerrcode.NotNullViolation:
-			return errors.Aborted(
+			return errors.InvalidArgument(
 				"invalid input: required value is missing",
 				errors.WithID("store.pg.not_null"),
 				errors.WithCause(err),

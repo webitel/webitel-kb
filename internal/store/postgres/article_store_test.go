@@ -512,7 +512,7 @@ func TestArticleTreeRefusesAnOversizedSpace(t *testing.T) {
 
 	_, err := s.Tree(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7)
 
-	if errors.Code(err) != codes.ResourceExhausted || errors.ID(err) != "kb.article.tree_too_large" {
+	if errors.Code(err) != codes.FailedPrecondition || errors.ID(err) != "kb.article.tree_too_large" {
 		t.Fatalf("error = %v, want the tree ceiling", err)
 	}
 }

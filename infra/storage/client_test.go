@@ -6,7 +6,11 @@ import (
 	"testing"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	storagepb "github.com/webitel/webitel-kb/api/storage"
 )
@@ -248,6 +252,52 @@ func TestJoinURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := joinURL(tt.base, tt.path); got != tt.want {
 				t.Fatalf("joinURL(%q, %q) = %q, want %q", tt.base, tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWrapKeepsTheCodeAndHidesTheAnswer(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode codes.Code
+	}{
+		{
+			name:     "a storage status keeps its code",
+			err:      status.Error(codes.NotFound, `{"id":"app.file.not_found","detail":"sql: no rows"}`),
+			wantCode: codes.NotFound,
+		},
+		{
+			name:     "an outage stays an outage",
+			err:      status.Error(codes.Unavailable, "connection refused"),
+			wantCode: codes.Unavailable,
+		},
+		{
+			name:     "a plain error is internal",
+			err:      stderrors.New("no instances"),
+			wantCode: codes.Internal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := wrap(tt.err, "storage.client.describe_file")
+
+			if got := errors.Code(err); got != tt.wantCode {
+				t.Errorf("code = %v, want %v", got, tt.wantCode)
+			}
+
+			if got := errors.ID(err); got != "storage.client.describe_file" {
+				t.Errorf("id = %q, want the call id", got)
+			}
+
+			if err.Error() != "storage request failed" {
+				t.Errorf("message = %q, want no storage answer in it", err.Error())
+			}
+
+			if !stderrors.Is(err, tt.err) {
+				t.Errorf("error = %v, want the storage answer as the cause", err)
 			}
 		})
 	}

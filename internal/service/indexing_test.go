@@ -68,7 +68,7 @@ func TestResolveSpaceEmbeddingRefusals(t *testing.T) {
 			name:     "a space without a model is refused by reason",
 			spaceID:  7,
 			store:    &fakeSpaceStore{resolved: &model.SpaceEmbedding{VectorSearchEnabled: true}},
-			wantCode: codes.Aborted,
+			wantCode: codes.FailedPrecondition,
 			wantID:   "kb.space.model_unset",
 		},
 		{
@@ -77,7 +77,7 @@ func TestResolveSpaceEmbeddingRefusals(t *testing.T) {
 			store: &fakeSpaceStore{resolved: &model.SpaceEmbedding{
 				VectorSearchEnabled: true, ModelID: 9, Provider: "gemini",
 			}},
-			wantCode: codes.Aborted,
+			wantCode: codes.FailedPrecondition,
 			wantID:   "kb.model.credential_missing",
 		},
 	}

@@ -565,13 +565,13 @@ func TestSpaceUpdateSkipsGateForUnchangedModels(t *testing.T) {
 }
 
 func TestSpaceDeleteGate(t *testing.T) {
-	t.Run("referenced space aborts the delete", func(t *testing.T) {
+	t.Run("referenced space refuses the delete", func(t *testing.T) {
 		svc, uow := newSpaceFixture()
 		uow.spaces.hasArticles = true
 
 		_, err := svc.Delete(context.Background(), updaterOpts())
-		if errors.Code(err) != codes.Aborted {
-			t.Fatalf("err = %v, want Aborted", err)
+		if errors.Code(err) != codes.FailedPrecondition {
+			t.Fatalf("err = %v, want FailedPrecondition", err)
 		}
 
 		if uow.spaces.deleteCalls != 0 {
