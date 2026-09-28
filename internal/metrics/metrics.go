@@ -11,31 +11,55 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/semconv/v1.40.0/genaiconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/messagingconv"
+
+	"github.com/webitel/webitel-go-kit/infra/otel/semconv/v0.2.0/kbconv"
+	"github.com/webitel/webitel-go-kit/infra/otel/semconv/v0.2.0/outboxconv"
 
 	"github.com/webitel/webitel-kb/internal/model"
 )
 
-// Outcome label values.
-const (
-	OutcomeOK    = "ok"
-	OutcomeError = "error"
-)
+// providerBuckets are the GenAI boundaries: from 10 ms, doubling up to 81.92 s.
+var providerBuckets = func() []float64 {
+	b := make([]float64, 14)
+	for i := range b {
+		b[i] = 0.01 * float64(int(1)<<i)
+	}
 
-// providerBuckets bound one provider call, up to its timeout.
-var providerBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30}
+	return b
+}()
 
-// Metrics records what the service does. Gauges report only readings taken
-// while this instance leads the relay, so a follower exports none of them.
+// operationSend names a publish in messaging.operation.name.
+const operationSend = "send"
+
+// genAIProviders renames the providers the GenAI conventions know.
+var genAIProviders = map[string]genaiconv.ProviderNameAttr{
+	"gemini": genaiconv.ProviderNameGCPGemini,
+}
+
+var relayStates = []outboxconv.RelayStateAttr{outboxconv.RelayStateLeader, outboxconv.RelayStateFollower}
+
+var indexStates = map[int32]kbconv.ArticleIndexStateAttr{
+	model.IndexStatePending:  kbconv.ArticleIndexStatePending,
+	model.IndexStateIndexing: kbconv.ArticleIndexStateIndexing,
+	model.IndexStateIndexed:  kbconv.ArticleIndexStateIndexed,
+	model.IndexStateFailed:   kbconv.ArticleIndexStateFailed,
+}
+
+// Metrics records what the service does. Readings of the outbox and of the
+// indexes are reported only while this instance leads the relay.
 type Metrics struct {
-	embedding metric.Float64Histogram
-	rerank    metric.Float64Histogram
-	published metric.Int64Counter
-	poisoned  metric.Int64Counter
+	embedding genaiconv.ClientOperationDuration
+	rerank    kbconv.RerankDuration
+	sent      messagingconv.ClientSentMessages
+	poisoned  outboxconv.RelayPoisoned
 
 	mu      sync.Mutex
 	leading bool
 	backlog *backlogReading
-	failed  *int64
+	indexes map[int32]int64
 }
 
 type backlogReading struct {
@@ -45,7 +69,7 @@ type backlogReading struct {
 
 // Provide builds the instruments over the global meter provider.
 func Provide() (*Metrics, error) {
-	return New(otel.Meter(model.ServiceName))
+	return New(otel.Meter(model.ServiceName, metric.WithInstrumentationVersion(model.Version)))
 }
 
 // Noop discards every measurement.
@@ -61,33 +85,21 @@ func New(meter metric.Meter) (*Metrics, error) {
 
 	var err error
 
-	if m.embedding, err = meter.Float64Histogram("kb_embedding_duration_seconds",
-		metric.WithUnit("s"),
-		metric.WithDescription("Duration of one embedding call to a provider"),
-		metric.WithExplicitBucketBoundaries(providerBuckets...),
-	); err != nil {
+	if m.embedding, err = genaiconv.NewClientOperationDuration(meter,
+		metric.WithExplicitBucketBoundaries(providerBuckets...)); err != nil {
 		return nil, fmt.Errorf("metrics: embedding: %w", err)
 	}
 
-	if m.rerank, err = meter.Float64Histogram("kb_rerank_duration_seconds",
-		metric.WithUnit("s"),
-		metric.WithDescription("Duration of one rerank call to a provider"),
-		metric.WithExplicitBucketBoundaries(providerBuckets...),
-	); err != nil {
+	if m.rerank, err = kbconv.NewRerankDuration(meter,
+		metric.WithExplicitBucketBoundaries(providerBuckets...)); err != nil {
 		return nil, fmt.Errorf("metrics: rerank: %w", err)
 	}
 
-	if m.published, err = meter.Int64Counter("kb_outbox_published_total",
-		metric.WithUnit("{event}"),
-		metric.WithDescription("Attempts to publish an outbox event to the broker"),
-	); err != nil {
-		return nil, fmt.Errorf("metrics: published: %w", err)
+	if m.sent, err = messagingconv.NewClientSentMessages(meter); err != nil {
+		return nil, fmt.Errorf("metrics: sent messages: %w", err)
 	}
 
-	if m.poisoned, err = meter.Int64Counter("kb_outbox_poisoned_total",
-		metric.WithUnit("{event}"),
-		metric.WithDescription("Outbox events set aside after the retries were spent"),
-	); err != nil {
+	if m.poisoned, err = outboxconv.NewRelayPoisoned(meter); err != nil {
 		return nil, fmt.Errorf("metrics: poisoned: %w", err)
 	}
 
@@ -99,55 +111,53 @@ func New(meter metric.Meter) (*Metrics, error) {
 }
 
 func (m *Metrics) observe(meter metric.Meter) error {
-	backlog, err := meter.Int64ObservableGauge("kb_outbox_backlog",
-		metric.WithUnit("{event}"),
-		metric.WithDescription("Outbox events not delivered to the broker yet"))
+	count, err := outboxconv.NewEventCountObservable(meter)
 	if err != nil {
-		return fmt.Errorf("metrics: backlog: %w", err)
+		return fmt.Errorf("metrics: event count: %w", err)
 	}
 
-	oldest, err := meter.Float64ObservableGauge("kb_outbox_oldest_age_seconds",
-		metric.WithUnit("s"),
-		metric.WithDescription("Age of the oldest outbox event not delivered yet"))
+	age, err := outboxconv.NewEventAgeObservable(meter)
 	if err != nil {
-		return fmt.Errorf("metrics: oldest age: %w", err)
+		return fmt.Errorf("metrics: event age: %w", err)
 	}
 
-	failed, err := meter.Int64ObservableGauge("kb_articles_index_failed",
-		metric.WithUnit("{article}"),
-		metric.WithDescription("Articles whose last version could not be indexed"))
+	status, err := outboxconv.NewRelayStatusObservable(meter)
 	if err != nil {
-		return fmt.Errorf("metrics: index failed: %w", err)
+		return fmt.Errorf("metrics: relay status: %w", err)
 	}
 
-	leader, err := meter.Int64ObservableGauge("kb_relay_leader",
-		metric.WithDescription("Whether this instance runs the outbox relay"))
+	indexes, err := kbconv.NewArticleIndexCountObservable(meter)
 	if err != nil {
-		return fmt.Errorf("metrics: leader: %w", err)
+		return fmt.Errorf("metrics: index count: %w", err)
 	}
 
 	_, err = meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 
-		var lead int64
+		current := outboxconv.RelayStateFollower
 		if m.leading {
-			lead = 1
+			current = outboxconv.RelayStateLeader
 		}
 
-		o.ObserveInt64(leader, lead)
+		for _, s := range relayStates {
+			o.ObserveInt64(status.Inst(), boolValue(s == current), metric.WithAttributes(status.AttrRelayState(s)))
+		}
 
 		if m.backlog != nil {
-			o.ObserveInt64(backlog, m.backlog.count)
-			o.ObserveFloat64(oldest, m.backlog.oldest.Seconds())
+			o.ObserveInt64(count.Inst(), m.backlog.count)
+			o.ObserveFloat64(age.Inst(), m.backlog.oldest.Seconds())
 		}
 
-		if m.failed != nil {
-			o.ObserveInt64(failed, *m.failed)
+		if m.indexes != nil {
+			for state, attr := range indexStates {
+				o.ObserveInt64(indexes.Inst(), m.indexes[state],
+					metric.WithAttributes(indexes.AttrArticleIndexState(attr)))
+			}
 		}
 
 		return nil
-	}, backlog, oldest, failed, leader)
+	}, count.Inst(), age.Inst(), status.Inst(), indexes.Inst())
 	if err != nil {
 		return fmt.Errorf("metrics: callback: %w", err)
 	}
@@ -157,20 +167,27 @@ func (m *Metrics) observe(meter metric.Meter) error {
 
 // Embedding records one embedding call to a provider.
 func (m *Metrics) Embedding(ctx context.Context, provider, modelRef string, took time.Duration, err error) {
-	m.embedding.Record(ctx, took.Seconds(), metric.WithAttributes(providerAttrs(provider, modelRef, err)...))
+	name, ok := genAIProviders[provider]
+	if !ok {
+		name = genaiconv.ProviderNameAttr(provider)
+	}
+
+	m.embedding.Record(ctx, took.Seconds(), genaiconv.OperationNameEmbeddings, name,
+		withError(err, m.embedding.AttrRequestModel(modelRef))...)
 }
 
 // Rerank records one rerank call to a provider.
 func (m *Metrics) Rerank(ctx context.Context, provider, modelRef string, took time.Duration, err error) {
-	m.rerank.Record(ctx, took.Seconds(), metric.WithAttributes(providerAttrs(provider, modelRef, err)...))
+	m.rerank.Record(ctx, took.Seconds(), modelRef, provider, withError(err)...)
 }
 
-// Published counts one attempt to publish an outbox event.
-func (m *Metrics) Published(ctx context.Context, err error) {
-	m.published.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome(err))))
+// Published counts one attempt to publish an outbox event to the exchange.
+func (m *Metrics) Published(ctx context.Context, exchange string, err error) {
+	m.sent.Add(ctx, 1, operationSend, messagingconv.SystemRabbitMQ,
+		withError(err, m.sent.AttrDestinationTemplate(exchange))...)
 }
 
-// Poisoned counts an outbox event set aside for good.
+// Poisoned counts an outbox event moved to the poison queue.
 func (m *Metrics) Poisoned(ctx context.Context) {
 	m.poisoned.Add(ctx, 1)
 }
@@ -185,7 +202,7 @@ func (m *Metrics) Leading(leading bool) {
 
 	if !leading {
 		m.backlog = nil
-		m.failed = nil
+		m.indexes = nil
 	}
 }
 
@@ -197,26 +214,27 @@ func (m *Metrics) Backlog(count int64, oldest time.Duration) {
 	m.backlog = &backlogReading{count: count, oldest: oldest}
 }
 
-// IndexFailed keeps the latest count of articles that failed indexing.
-func (m *Metrics) IndexFailed(count int64) {
+// IndexStates keeps the latest count of live articles by index state.
+func (m *Metrics) IndexStates(counts map[int32]int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.failed = &count
+	m.indexes = counts
 }
 
-func providerAttrs(provider, modelRef string, err error) []attribute.KeyValue {
-	return []attribute.KeyValue{
-		attribute.String("provider", provider),
-		attribute.String("model", modelRef),
-		attribute.String("outcome", outcome(err)),
-	}
-}
-
-func outcome(err error) string {
+// withError adds error.type to attrs when the call failed.
+func withError(err error, attrs ...attribute.KeyValue) []attribute.KeyValue {
 	if err != nil {
-		return OutcomeError
+		attrs = append(attrs, semconv.ErrorType(err))
 	}
 
-	return OutcomeOK
+	return attrs
+}
+
+func boolValue(b bool) int64 {
+	if b {
+		return 1
+	}
+
+	return 0
 }

@@ -13,6 +13,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/webitel/webitel-kb/internal/event"
+	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/outbox"
 )
 
@@ -46,7 +47,7 @@ type fakeOutbox struct {
 
 	backlog      int64
 	oldest       time.Duration
-	failedCount  int64
+	indexStates  map[int32]int64
 	observeError error
 }
 
@@ -60,8 +61,8 @@ func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) {
 	return o.backlog, o.oldest, o.observeError
 }
 
-func (o *fakeOutbox) CountIndexFailed(context.Context) (int64, error) {
-	return o.failedCount, o.observeError
+func (o *fakeOutbox) CountIndexStates(context.Context) (map[int32]int64, error) {
+	return o.indexStates, o.observeError
 }
 
 func (o *fakeOutbox) MarkIndexFailed(_ context.Context, articleID int64) error {
@@ -70,11 +71,16 @@ func (o *fakeOutbox) MarkIndexFailed(_ context.Context, articleID int64) error {
 	return o.err
 }
 
+type publication struct {
+	exchange string
+	err      error
+}
+
 type fakeMetrics struct {
 	backlog   []int64
 	oldest    []time.Duration
-	failed    []int64
-	published []error
+	indexes   []map[int32]int64
+	published []publication
 	poisoned  int
 }
 
@@ -85,9 +91,11 @@ func (m *fakeMetrics) Backlog(count int64, oldest time.Duration) {
 	m.oldest = append(m.oldest, oldest)
 }
 
-func (m *fakeMetrics) IndexFailed(count int64) { m.failed = append(m.failed, count) }
+func (m *fakeMetrics) IndexStates(counts map[int32]int64) { m.indexes = append(m.indexes, counts) }
 
-func (m *fakeMetrics) Published(_ context.Context, err error) { m.published = append(m.published, err) }
+func (m *fakeMetrics) Published(_ context.Context, exchange string, err error) {
+	m.published = append(m.published, publication{exchange, err})
+}
 
 func (m *fakeMetrics) Poisoned(context.Context) { m.poisoned++ }
 
@@ -192,25 +200,27 @@ func TestMarkFailedLeavesASucceedingMessageAlone(t *testing.T) {
 	}
 }
 
-func TestForwardRecordsThePublication(t *testing.T) {
+func TestPublishRecordsTheSend(t *testing.T) {
 	brokerErr := errors.New("broker is gone")
 
 	tests := []struct {
-		name string
-		err  error
+		name     string
+		exchange string
+		err      error
 	}{
-		{name: "delivered"},
-		{name: "rejected by the broker", err: brokerErr},
+		{name: "delivered", exchange: event.ReindexExchange},
+		{name: "rejected by the broker", exchange: event.ReindexExchange, err: brokerErr},
+		{name: "set aside", exchange: event.ReindexDLX},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			publish := testForwarder(&fakeBroker{err: tt.err}, &fakeOutbox{})
-			_ = publish.forward(publish.publisherFor(event.ReindexExchange))(reindexMessage("42"))
+			f := testForwarder(&fakeBroker{err: tt.err}, &fakeOutbox{})
+			_ = f.publisherFor(tt.exchange).Publish("42", reindexMessage("42"))
 
-			got := metricsOf(publish).published
-			if len(got) != 1 || !errors.Is(got[0], tt.err) {
-				t.Fatalf("recorded %v, want one publication with error %v", got, tt.err)
+			got := metricsOf(f).published
+			if len(got) != 1 || got[0].exchange != tt.exchange || !errors.Is(got[0].err, tt.err) {
+				t.Fatalf("recorded %v, want one send to %s with error %v", got, tt.exchange, tt.err)
 			}
 		})
 	}
@@ -246,7 +256,7 @@ func TestObserveReportsTheReadings(t *testing.T) {
 		store *fakeOutbox
 		want  int
 	}{
-		{name: "read", store: &fakeOutbox{backlog: 3, oldest: time.Minute, failedCount: 2}, want: 1},
+		{name: "read", store: &fakeOutbox{backlog: 3, oldest: time.Minute, indexStates: map[int32]int64{model.IndexStateFailed: 2}}, want: 1},
 		{name: "unavailable", store: &fakeOutbox{observeError: errors.New("db")}, want: 0},
 	}
 
@@ -254,15 +264,15 @@ func TestObserveReportsTheReadings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := testForwarder(&fakeBroker{}, tt.store)
 			f.observeBacklog(context.Background())
-			f.observeIndexFailed(context.Background())
+			f.observeIndexStates(context.Background())
 
 			m := metricsOf(f)
-			if len(m.backlog) != tt.want || len(m.failed) != tt.want {
-				t.Fatalf("readings: backlog %v, failed %v, want %d of each", m.backlog, m.failed, tt.want)
+			if len(m.backlog) != tt.want || len(m.indexes) != tt.want {
+				t.Fatalf("readings: backlog %v, indexes %v, want %d of each", m.backlog, m.indexes, tt.want)
 			}
 
-			if tt.want == 1 && (m.backlog[0] != 3 || m.oldest[0] != time.Minute || m.failed[0] != 2) {
-				t.Fatalf("readings: backlog %v oldest %v failed %v", m.backlog, m.oldest, m.failed)
+			if tt.want == 1 && (m.backlog[0] != 3 || m.oldest[0] != time.Minute || m.indexes[0][model.IndexStateFailed] != 2) {
+				t.Fatalf("readings: backlog %v oldest %v indexes %v", m.backlog, m.oldest, m.indexes)
 			}
 		})
 	}

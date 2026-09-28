@@ -42,7 +42,7 @@ type Outbox interface {
 	Database() (*pgxpool.Pool, error)
 	CleanupOutbox(ctx context.Context, retention time.Duration, batch int) (int64, error)
 	Backlog(ctx context.Context) (int64, time.Duration, error)
-	CountIndexFailed(ctx context.Context) (int64, error)
+	CountIndexStates(ctx context.Context) (map[int32]int64, error)
 	MarkIndexFailed(ctx context.Context, articleID int64) error
 }
 
@@ -50,8 +50,8 @@ type Outbox interface {
 type Metrics interface {
 	Leading(leading bool)
 	Backlog(count int64, oldest time.Duration)
-	IndexFailed(count int64)
-	Published(ctx context.Context, err error)
+	IndexStates(counts map[int32]int64)
+	Published(ctx context.Context, exchange string, err error)
 	Poisoned(ctx context.Context)
 }
 
@@ -234,15 +234,12 @@ func (f *Forwarder) forward(publisher message.Publisher) message.NoPublishHandle
 			return fmt.Errorf("relay: message %s carries no routing key", msg.UUID)
 		}
 
-		err := publisher.Publish(key, msg)
-		f.metrics.Published(msg.Context(), err)
-
-		return err
+		return publisher.Publish(key, msg)
 	}
 }
 
-// observeLoop reports the undelivered backlog and the failed articles while
-// this instance leads.
+// observeLoop reports the undelivered backlog and the article index states
+// while this instance leads.
 func (f *Forwarder) observeLoop(ctx context.Context) {
 	ticker := time.NewTicker(backlogInterval)
 	defer ticker.Stop()
@@ -255,7 +252,7 @@ func (f *Forwarder) observeLoop(ctx context.Context) {
 		}
 
 		f.observeBacklog(ctx)
-		f.observeIndexFailed(ctx)
+		f.observeIndexStates(ctx)
 	}
 }
 
@@ -278,17 +275,17 @@ func (f *Forwarder) observeBacklog(ctx context.Context) {
 	}
 }
 
-func (f *Forwarder) observeIndexFailed(ctx context.Context) {
-	count, err := f.store.CountIndexFailed(ctx)
+func (f *Forwarder) observeIndexStates(ctx context.Context) {
+	counts, err := f.store.CountIndexStates(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			f.log.Error("failed articles count unavailable", slog.Any("error", err))
+			f.log.Error("article index states unavailable", slog.Any("error", err))
 		}
 
 		return
 	}
 
-	f.metrics.IndexFailed(count)
+	f.metrics.IndexStates(counts)
 }
 
 // cleanupLoop removes acknowledged rows for as long as this instance leads.
