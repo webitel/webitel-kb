@@ -22,10 +22,11 @@ type brokerPublisher struct {
 	broker   Broker
 	exchange string
 	timeout  time.Duration
+	metrics  Metrics
 }
 
 func (f *Forwarder) publisherFor(exchange string) message.Publisher {
-	return &brokerPublisher{broker: f.broker, exchange: exchange, timeout: f.cfg.PublishTimeout}
+	return &brokerPublisher{broker: f.broker, exchange: exchange, timeout: f.cfg.PublishTimeout, metrics: f.metrics}
 }
 
 func (p *brokerPublisher) Publish(topic string, msgs ...*message.Message) error {
@@ -37,8 +38,14 @@ func (p *brokerPublisher) Publish(topic string, msgs ...*message.Message) error 
 
 		cancel()
 
+		p.metrics.Published(msg.Context(), p.exchange, err)
+
 		if err != nil {
 			return err
+		}
+
+		if p.exchange == event.ReindexDLX {
+			p.metrics.Poisoned(msg.Context())
 		}
 	}
 

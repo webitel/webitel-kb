@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/fx"
@@ -32,6 +33,14 @@ import (
 	_ "github.com/mbobakov/grpc-consul-resolver"
 	// Register the consul provider in the discovery factory used by ProvideSD.
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
+	// Register the OTel exporters selected by OTEL_*_EXPORTER.
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/stdout"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/prometheus"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/stdout"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/trace/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/trace/stdout"
 )
 
 func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
@@ -91,13 +100,20 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 		)
 		otelHandler := otelslog.NewHandler("slog")
 
-		shutdown, err := otelsdk.Configure(context.Background(), otelsdk.WithResource(service),
+		otelOpts := []otelsdk.Option{
+			otelsdk.WithResource(service),
 			otelsdk.WithLogBridge(
 				func() {
 					handlers = append(handlers, otelHandler)
 				},
 			),
-		)
+		}
+
+		if os.Getenv("OTEL_METRICS_EXPORTER") != "" {
+			otelOpts = append(otelOpts, otelsdk.WithMetricOptions(rpcDurationView()))
+		}
+
+		shutdown, err := otelsdk.Configure(context.Background(), otelOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -124,6 +140,16 @@ func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {
 	slog.SetDefault(logger)
 
 	return logger, nil
+}
+
+// rpcDurationView sets the RPC latency buckets around the endpoint budgets.
+func rpcDurationView() sdkmetric.Option {
+	return sdkmetric.WithView(sdkmetric.NewView(
+		sdkmetric.Instrument{Name: "rpc.server.call.duration"},
+		sdkmetric.Stream{Aggregation: sdkmetric.AggregationExplicitBucketHistogram{
+			Boundaries: []float64{0.025, 0.05, 0.1, 0.15, 0.3, 0.5, 1, 2.5, 5, 10},
+		}},
+	))
 }
 
 func parseLevel(lvl string) slog.Level {
