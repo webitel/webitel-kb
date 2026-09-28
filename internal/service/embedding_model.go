@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"slices"
 
+	"google.golang.org/grpc/codes"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/infra/crypto"
@@ -262,15 +264,17 @@ func probe(ctx context.Context, p embedding.Provider, m *model.EmbeddingModel, a
 		}
 
 		if len(res.Vectors) != 1 {
-			return errors.Aborted(
+			return errors.New(
 				"model validation failed: provider returned no vector for the probe",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.model.validation_failed"),
 			)
 		}
 
 		if got := int32(len(res.Vectors[0])); got != m.Dimensions {
-			return errors.Aborted(
+			return errors.New(
 				"dimensions mismatch between the model response and the registration",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.model.dimensions_mismatch"),
 				errors.WithValue("got", got),
 				errors.WithValue("registered", m.Dimensions),
@@ -289,8 +293,9 @@ func probe(ctx context.Context, p embedding.Provider, m *model.EmbeddingModel, a
 		}
 
 		if len(res.Scores) != len(probeDocuments) {
-			return errors.Aborted(
+			return errors.New(
 				"model validation failed: provider scored a different number of documents",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.model.validation_failed"),
 			)
 		}
@@ -312,16 +317,18 @@ func probeFailed(err error) error {
 		return unsupportedProvider(err)
 	}
 
-	return errors.Aborted(
+	return errors.New(
 		"model validation failed",
+		errors.WithCode(codes.FailedPrecondition),
 		errors.WithID("kb.model.validation_failed"),
 		errors.WithCause(err),
 	)
 }
 
 func unsupportedProvider(err error) error {
-	return errors.Aborted(
+	return errors.New(
 		"provider is not supported yet",
+		errors.WithCode(codes.FailedPrecondition),
 		errors.WithID("kb.model.provider_unsupported"),
 		errors.WithCause(err),
 	)

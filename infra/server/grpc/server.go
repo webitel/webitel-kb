@@ -20,8 +20,6 @@ import (
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
-	intrcp "github.com/webitel/webitel-go-kit/pkg/interceptors"
-
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/server/grpc/interceptors"
 	infratls "github.com/webitel/webitel-kb/infra/tls"
@@ -147,7 +145,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		grpc.Creds(grpcTLS),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
-			intrcp.UnaryServerErrorInterceptor(),
+			interceptors.NewUnaryErrorInterceptor(log),
 			interceptors.NewUnaryAuthInterceptor(conf.AuthManager, conf.InternalGuard),
 			validatemiddleware.UnaryServerInterceptor(validator),
 		),

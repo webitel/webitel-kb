@@ -182,8 +182,9 @@ func (s *RetrievalService) embedQuery(
 		}
 
 		if space.ModelID == 0 {
-			return nil, errors.Aborted(
+			return nil, errors.New(
 				"space has no embedding model",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.space.model_unset"),
 			)
 		}
