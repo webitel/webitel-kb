@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -263,28 +264,73 @@ func TestSpaceReplaceTeams(t *testing.T) {
 	})
 }
 
-func TestSpaceHasArticles(t *testing.T) {
-	f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
-	s := &spaceStore{db: f}
-
-	has, err := s.HasArticles(context.Background(), 7, 5)
-	if err != nil || !has {
-		t.Fatalf("has = %v, err %v", has, err)
+func TestSpaceArticleChecks(t *testing.T) {
+	tests := []struct {
+		name     string
+		call     func(s *spaceStore) (bool, error)
+		want     []string
+		wantArgs []any
+	}{
+		{
+			name: "has live articles",
+			call: func(s *spaceStore) (bool, error) { return s.HasArticles(context.Background(), 7, 5) },
+			want: []string{
+				"WHERE a.space_id = $1 AND s.domain_id = $2",
+				"AND a.deleted_at IS NULL",
+			},
+			wantArgs: []any{int64(7), int64(5)},
+		},
+		{
+			name: "holds a live article",
+			call: func(s *spaceStore) (bool, error) { return s.HoldsArticle(context.Background(), 7, 11, 5) },
+			want: []string{
+				"WHERE a.id = $1 AND a.space_id = $2 AND s.domain_id = $3",
+				"AND a.deleted_at IS NULL",
+			},
+			wantArgs: []any{int64(11), int64(7), int64(5)},
+		},
 	}
 
-	// ANY referencing article blocks — the same condition the schema RESTRICT
-	// enforces; a narrower filter here would surface raw FK errors.
-	for _, absent := range []string{"state", "deleted_at"} {
-		if strings.Contains(f.gotSQL, absent) {
-			t.Errorf("SQL %q must not filter by %s", f.gotSQL, absent)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
+
+			got, err := tt.call(&spaceStore{db: f})
+			if err != nil || !got {
+				t.Fatalf("got = %v, err %v", got, err)
+			}
+
+			for _, want := range tt.want {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+				}
+			}
+
+			if !slices.Equal(f.gotArgs, tt.wantArgs) {
+				t.Fatalf("args = %v, want %v", f.gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestSpacePurgeDeletedArticles(t *testing.T) {
+	f := &fakeQuerier{}
+
+	if err := (&spaceStore{db: f}).PurgeDeletedArticles(context.Background(), 7, 5); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+
+	for _, want := range []string{
+		"DELETE FROM kb.article a USING kb.space s",
+		"a.space_id = $1 AND s.domain_id = $2",
+		"AND a.deleted_at IS NOT NULL",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}
 
-	if !strings.Contains(f.gotSQL, "s.domain_id = $2") {
-		t.Errorf("SQL %q is not domain-scoped", f.gotSQL)
-	}
-
-	if f.gotArgs[0] != int64(7) || f.gotArgs[1] != int64(5) {
+	if !slices.Equal(f.gotArgs, []any{int64(7), int64(5)}) {
 		t.Fatalf("args = %v, want [space domain]", f.gotArgs)
 	}
 }

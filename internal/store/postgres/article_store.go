@@ -45,7 +45,8 @@ const createChildArticleSQL = `INSERT INTO kb.article
 // deleteArticleCTEs soft-deletes the article and its subtree. The root is
 // written first, carrying the scope and version guards in its own WHERE so a
 // concurrent writer cannot slip past them; the subtree walk starts from the
-// written root, so a guard miss deletes nothing at all.
+// written root, so a guard miss deletes nothing at all. A space whose home page
+// was deleted is left without one.
 const deleteArticleCTEs = `WITH RECURSIVE root AS (
 	UPDATE kb.article a SET deleted_at = now(), state = $4, updated_at = now(), updated_by = $5
 	FROM kb.space s
@@ -61,6 +62,10 @@ const deleteArticleCTEs = `WITH RECURSIVE root AS (
 	UPDATE kb.article a SET deleted_at = now(), state = $4, updated_at = now(), updated_by = $5
 	FROM tree WHERE a.id = tree.id AND a.id <> $1
 	RETURNING a.id
+), home AS (
+	UPDATE kb.space s SET home_article_id = NULL
+	FROM tree WHERE s.home_article_id = tree.id
+	RETURNING s.id
 ), m AS (
 	SELECT * FROM root
 ) `

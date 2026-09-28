@@ -178,17 +178,23 @@ type SpaceStore interface {
 	Update(ctx context.Context, opts options.Updator, in *model.Space) (*model.Space, error)
 
 	// Delete removes the space opts identify and returns its last state. The
-	// team binding goes with it; any remaining article blocks the delete.
+	// team binding goes with it; any remaining article, deleted ones included,
+	// blocks the delete.
 	Delete(ctx context.Context, opts options.Deleter) (*model.Space, error)
 
 	// ReplaceTeams rewrites the team binding of a domain's space to exactly the
 	// given set; an empty set removes the binding.
 	ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error
 
-	// HasArticles reports whether any article still references a domain's
-	// space — the same condition the schema enforces on delete, checked here
-	// so the caller can fail with a domain error instead of a raw constraint.
+	// HasArticles reports whether a domain's space still holds a live article.
 	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
+
+	// HoldsArticle reports whether a live article belongs to a domain's space.
+	HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
+
+	// PurgeDeletedArticles removes the deleted articles of a domain's space for
+	// good, with everything that cascades from them.
+	PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error
 
 	// ResolveEmbedding returns the embedding model of a space, credential
 	// included.

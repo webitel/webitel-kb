@@ -47,10 +47,11 @@ func (s *ArticlesServer) ListArticles(ctx context.Context, req *kb.ListArticlesR
 	}
 
 	items, next, err := s.service.List(ctx, opts, model.ArticleFilter{
-		SpaceID: req.GetSpaceId(),
-		Type:    int32(req.GetType()),
-		State:   int32(req.GetState()),
-		Tags:    req.GetTags(),
+		SpaceID:      req.GetSpaceId(),
+		Type:         int32(req.GetType()),
+		State:        int32(req.GetState()),
+		Tags:         req.GetTags(),
+		TagsMatchAll: req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
 	})
 	if err != nil {
 		return nil, err

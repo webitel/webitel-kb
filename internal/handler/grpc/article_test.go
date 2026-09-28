@@ -376,6 +376,35 @@ func TestListArticlesFullPath(t *testing.T) {
 	}
 }
 
+func TestListArticlesTagMatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		match        kb.TagMatch
+		wantMatchAll bool
+	}{
+		{name: "unset matches any tag", match: kb.TagMatch_TAG_MATCH_UNSPECIFIED},
+		{name: "any", match: kb.TagMatch_TAG_MATCH_ANY},
+		{name: "all", match: kb.TagMatch_TAG_MATCH_ALL, wantMatchAll: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			articles := &articleStoreFake{}
+			server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
+
+			if _, err := server.ListArticles(articleContext(), &kb.ListArticlesRequest{
+				SpaceId: 3, Tags: []string{"net", "vpn"}, TagMatch: tt.match,
+			}); err != nil {
+				t.Fatalf("ListArticles: %v", err)
+			}
+
+			if articles.filter.TagsMatchAll != tt.wantMatchAll {
+				t.Fatalf("match all = %v, want %v", articles.filter.TagsMatchAll, tt.wantMatchAll)
+			}
+		})
+	}
+}
+
 func TestNarrowProjectionStillRendersTheEtag(t *testing.T) {
 	articles := &articleStoreFake{items: []*model.Article{{ID: 7, Ver: 4, Subject: "VPN"}}}
 	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
