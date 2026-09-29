@@ -7,7 +7,7 @@ require (
 	buf.build/gen/go/webitel/webitel-go/protocolbuffers/go v1.36.12-20260528093848-00aedb783a79.1
 	buf.build/go/protovalidate v1.3.0
 	github.com/Masterminds/squirrel v1.5.4
-	github.com/ThreeDotsLabs/watermill v1.5.2
+	github.com/ThreeDotsLabs/watermill v1.5.3
 	github.com/ThreeDotsLabs/watermill-amqp/v3 v3.1.0
 	github.com/ThreeDotsLabs/watermill-sql/v4 v4.1.2
 	github.com/fsnotify/fsnotify v1.10.1
