@@ -144,7 +144,7 @@ func (f *articleVersionStoreFake) Locate(
 }
 
 func (f *articleVersionStoreFake) Create(
-	_ context.Context, _ options.Creator, in *model.ArticleVersion, _ string,
+	_ context.Context, _ options.Creator, in *model.ArticleVersion,
 ) (*model.ArticleVersion, error) {
 	f.createIn = in
 

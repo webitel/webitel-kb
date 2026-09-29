@@ -62,11 +62,11 @@ func TestArticleVersionRestoreStaysWithinTheArticle(t *testing.T) {
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
 	in := &model.ArticleVersion{ArticleID: 7, BodyRichText: []byte(`{}`), RestoredFrom: 3}
 
-	if _, err := s.Create(context.Background(), opts, in, model.TextSearchDefault); err != nil {
+	if _, err := s.Create(context.Background(), opts, in); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if !strings.Contains(f.gotSQL, "SELECT 1 FROM kb.article_version src WHERE src.id = $8::bigint AND src.article_id = a.id") {
+	if !strings.Contains(f.gotSQL, "SELECT 1 FROM kb.article_version src WHERE src.id = $7::bigint AND src.article_id = a.id") {
 		t.Fatalf("SQL %q does not bind the restore source to the article", f.gotSQL)
 	}
 }
@@ -101,7 +101,7 @@ func TestArticleVersionCreateNumbersAndVectorizes(t *testing.T) {
 		BodyRichText: []byte(`{"type":"doc"}`), BodyMarkdown: "# VPN", BodyPlain: "VPN",
 	}
 
-	created, err := s.Create(context.Background(), opts, in, model.TextSearchDefault)
+	created, err := s.Create(context.Background(), opts, in)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestArticleVersionCreateNumbersAndVectorizes(t *testing.T) {
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.article_version",
 		"(SELECT COALESCE(max(v.version_number), 0) + 1 FROM kb.article_version v WHERE v.article_id = a.id)",
-		"to_tsvector($7::regconfig, $6)",
+		"to_tsvector(s.text_search_config::regconfig, $6)",
 		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -125,12 +125,12 @@ func TestArticleVersionCreateNumbersAndVectorizes(t *testing.T) {
 		t.Errorf("args = %v, want markdown then plain text", f.gotArgs)
 	}
 
-	if f.gotArgs[6] != model.TextSearchDefault {
-		t.Errorf("args[6] = %v, want the text search configuration", f.gotArgs[6])
+	if f.gotArgs[6] != (*int64)(nil) {
+		t.Errorf("args[6] = %v, want no restore reference", f.gotArgs[6])
 	}
 
-	if f.gotArgs[7] != (*int64)(nil) {
-		t.Errorf("args[7] = %v, want no restore reference", f.gotArgs[7])
+	if len(f.gotArgs) != 9 {
+		t.Errorf("args = %v, want no configuration argument", f.gotArgs)
 	}
 }
 
@@ -144,16 +144,16 @@ func TestArticleVersionCreateCarriesRestoreReference(t *testing.T) {
 		BodyMarkdown: "m", BodyPlain: "p", RestoredFrom: 3, Notes: "from #1",
 	}
 
-	if _, err := s.Create(context.Background(), opts, in, model.TextSearchDefault); err != nil {
+	if _, err := s.Create(context.Background(), opts, in); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	restoredFrom, ok := f.gotArgs[7].(*int64)
+	restoredFrom, ok := f.gotArgs[6].(*int64)
 	if !ok || restoredFrom == nil || *restoredFrom != 3 {
-		t.Errorf("args[7] = %v, want the restored version id", f.gotArgs[7])
+		t.Errorf("args[6] = %v, want the restored version id", f.gotArgs[6])
 	}
 
-	if f.gotArgs[1] != int64(5) || f.gotArgs[9] != ptrTo(int64(9)) && f.gotArgs[9].(*int64) == nil {
+	if f.gotArgs[1] != int64(5) || f.gotArgs[8] != ptrTo(int64(9)) && f.gotArgs[8].(*int64) == nil {
 		t.Errorf("args = %v, want the caller domain and author", f.gotArgs)
 	}
 }
@@ -166,7 +166,7 @@ func TestArticleVersionCreateLostRace(t *testing.T) {
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
 
-	_, err := s.Create(context.Background(), opts, &model.ArticleVersion{ArticleID: 7}, model.TextSearchDefault)
+	_, err := s.Create(context.Background(), opts, &model.ArticleVersion{ArticleID: 7})
 
 	if errors.Code(err) != codes.Aborted || errors.ID(err) != "kb.article.version_race" {
 		t.Fatalf("error = %v, want a version race", err)
@@ -244,7 +244,7 @@ func TestArticleVersionCreatePassesOtherErrors(t *testing.T) {
 
 			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5}, fields: []string{"id"}}
 
-			_, err := s.Create(context.Background(), opts, &model.ArticleVersion{ArticleID: 7}, model.TextSearchDefault)
+			_, err := s.Create(context.Background(), opts, &model.ArticleVersion{ArticleID: 7})
 
 			if errors.Code(err) != tt.wantCode {
 				t.Fatalf("error = %v, want %v", err, tt.wantCode)

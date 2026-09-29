@@ -120,7 +120,7 @@ func (s *ArticleService) Create(
 			BodyRichText: rawBody,
 			BodyMarkdown: body.Markdown,
 			BodyPlain:    body.Plain,
-		}, model.TextSearchDefault)
+		})
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func (s *ArticleService) Update(
 			return nil
 		}
 
-		version, err := tx.ArticleVersionStore().Create(ctx, opts, next, model.TextSearchDefault)
+		version, err := tx.ArticleVersionStore().Create(ctx, opts, next)
 		if err != nil {
 			return err
 		}
@@ -378,7 +378,7 @@ func (s *ArticleService) RestoreVersion(
 			BodyPlain:    source.BodyPlain,
 			RestoredFrom: source.ID,
 			Notes:        notes,
-		}, model.TextSearchDefault)
+		})
 		if err != nil {
 			return err
 		}

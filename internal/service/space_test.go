@@ -74,6 +74,7 @@ type fakeSpaceStore struct {
 	teamUnknown   bool
 	teamAsked     int64
 
+	createIn    *model.Space // Create input
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
 	readBack    *model.Space // plain Locate result (the post-write read-back)
@@ -119,8 +120,9 @@ func (f *fakeSpaceStore) LocateForUpdate(_ context.Context, opts options.Searche
 	return f.current, nil
 }
 
-func (f *fakeSpaceStore) Create(_ context.Context, _ options.Creator, _ *model.Space) (*model.Space, error) {
+func (f *fakeSpaceStore) Create(_ context.Context, _ options.Creator, in *model.Space) (*model.Space, error) {
 	f.createCalls++
+	f.createIn = in
 
 	return f.written, nil
 }
@@ -288,6 +290,8 @@ func TestSpaceCreateValidation(t *testing.T) {
 	}{
 		{"name required", &model.Space{Language: "uk"}, codes.InvalidArgument},
 		{"language required", &model.Space{Name: "docs"}, codes.InvalidArgument},
+		{"language must be a tag", &model.Space{Name: "docs", Language: "Ukrainian"}, codes.InvalidArgument},
+		{"language must not be undetermined", &model.Space{Name: "docs", Language: "und"}, codes.InvalidArgument},
 		{
 			"vector search requires a model",
 			&model.Space{Name: "docs", Language: "uk", VectorSearchEnabled: true},
@@ -391,6 +395,18 @@ func TestSpaceCreateHappyPath(t *testing.T) {
 
 	if len(uow.spaces.replacedWith) != 1 || len(uow.spaces.replacedWith[0]) != 2 {
 		t.Fatalf("teams replaced with %v, want deduplicated [1 2]", uow.spaces.replacedWith)
+	}
+}
+
+func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
+	svc, uow := newSpaceFixture()
+
+	if _, err := svc.Create(context.Background(), creatorOpts(), &model.Space{Name: "docs", Language: "PT-br"}, nil); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if got := uow.spaces.createIn.Language; got != "pt-BR" {
+		t.Fatalf("stored language = %q, want pt-BR", got)
 	}
 }
 
