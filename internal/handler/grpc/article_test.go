@@ -444,7 +444,10 @@ func TestArticleEtagGuards(t *testing.T) {
 		items:   []*model.Article{{ID: 7, Ver: 4}},
 		written: &model.Article{ID: 7, Ver: 5, IndexState: model.IndexStateFailed},
 	}
-	versions := &articleVersionStoreFake{items: []*model.ArticleVersion{{ID: 40}}}
+	versions := &articleVersionStoreFake{
+		items:   []*model.ArticleVersion{{ID: 40}},
+		created: &model.ArticleVersion{ID: 41},
+	}
 	server, _, _ := newArticleServers(&articleUoWFake{articles: articles, versions: versions})
 	ctx := articleContext()
 

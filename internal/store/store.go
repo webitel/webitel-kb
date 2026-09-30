@@ -208,6 +208,18 @@ type SpaceStore interface {
 	TeamSpaces(ctx context.Context, domainID, teamID int64) ([]int64, bool, error)
 }
 
+// ModelValidation says what a model update does with validated_at.
+type ModelValidation int
+
+const (
+	// ValidationKeep leaves the stamp as it is.
+	ValidationKeep ModelValidation = iota
+	// ValidationReset clears it: the model must pass validation again.
+	ValidationReset
+	// ValidationStamp sets it: the update passed the probe itself.
+	ValidationStamp
+)
+
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see
 // the caller's domain and global models; writes are restricted to the caller's
 // domain, so global models stay read-only. The provider credential (config) is
@@ -226,11 +238,16 @@ type EmbeddingModelStore interface {
 	// encrypted provider credential; nil stores NULL.
 	Create(ctx context.Context, opts options.Creator, in *model.EmbeddingModel, config []byte) (*model.EmbeddingModel, error)
 
-	// Update rewrites the writable fields of the model opts identify and resets
-	// validated_at: a changed registration must pass validation again. With
-	// keepConfig the stored credential is left untouched; otherwise config
-	// replaces it.
-	Update(ctx context.Context, opts options.Updator, in *model.EmbeddingModel, config []byte, keepConfig bool) (*model.EmbeddingModel, error)
+	// Update rewrites the writable fields of the model opts identify and applies
+	// validation to validated_at. With keepConfig the stored credential is left
+	// untouched; otherwise config replaces it.
+	Update(
+		ctx context.Context, opts options.Updator, in *model.EmbeddingModel,
+		config []byte, keepConfig bool, validation ModelValidation,
+	) (*model.EmbeddingModel, error)
+
+	// InUse reports whether a live space of the domain refers to the model.
+	InUse(ctx context.Context, id, domainID int64) (bool, error)
 
 	// Delete removes the model opts identify and returns its last state.
 	Delete(ctx context.Context, opts options.Deleter) (*model.EmbeddingModel, error)

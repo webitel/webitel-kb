@@ -190,7 +190,8 @@ func (s *embeddingModelStore) Create(
 }
 
 func (s *embeddingModelStore) Update(
-	ctx context.Context, opts options.Updator, in *model.EmbeddingModel, config []byte, keepConfig bool,
+	ctx context.Context, opts options.Updator, in *model.EmbeddingModel,
+	config []byte, keepConfig bool, validation store.ModelValidation,
 ) (*model.EmbeddingModel, error) {
 	builder := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Update(embeddingModelTable).
@@ -199,9 +200,15 @@ func (s *embeddingModelStore) Update(
 		Set("is_self_hosted", in.IsSelfHosted).
 		Set("model_ref", nullIfEmpty(in.ModelRef)).
 		Set("dimensions", nullIfZero(in.Dimensions)).
-		Set("endpoint", nullIfEmpty(in.Endpoint)).
-		// A changed registration must pass validation again.
-		Set("validated_at", nil)
+		Set("endpoint", nullIfEmpty(in.Endpoint))
+
+	switch validation {
+	case store.ValidationReset:
+		builder = builder.Set("validated_at", nil)
+	case store.ValidationStamp:
+		builder = builder.Set("validated_at", squirrel.Expr("now()"))
+	case store.ValidationKeep:
+	}
 
 	if !keepConfig {
 		builder = builder.Set("config", config)
@@ -246,6 +253,19 @@ func (s *embeddingModelStore) MarkValidated(ctx context.Context, opts options.Up
 	}
 
 	return s.writeReturning(ctx, sql, args, opts.GetFields())
+}
+
+func (s *embeddingModelStore) InUse(ctx context.Context, id, domainID int64) (bool, error) {
+	const sql = `SELECT EXISTS (SELECT 1 FROM kb.space
+		WHERE domain_id = $2 AND deleted_at IS NULL
+		AND $1 IN (embedding_model_id, reranker_model_id, target_embedding_model_id))`
+
+	var used bool
+	if err := s.db.QueryRow(ctx, sql, id, domainID).Scan(&used); err != nil {
+		return false, ParseError(err)
+	}
+
+	return used, nil
 }
 
 func (s *embeddingModelStore) GetConfig(ctx context.Context, id, domainID int64) ([]byte, error) {

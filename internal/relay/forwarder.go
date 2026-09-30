@@ -42,7 +42,6 @@ type Outbox interface {
 	Database() (*pgxpool.Pool, error)
 	CleanupOutbox(ctx context.Context, retention time.Duration, batch int) (int64, error)
 	Backlog(ctx context.Context) (int64, time.Duration, error)
-	MarkIndexFailed(ctx context.Context, articleID int64) error
 }
 
 // Elector runs the relay on exactly one instance at a time.
@@ -152,9 +151,9 @@ func (f *Forwarder) lead(ctx context.Context) error {
 }
 
 // newRouter wires the outbox subscriber to the broker publisher. Middleware is
-// applied outside in: retries run closest to the handler, and only once they
-// are spent does the message reach the marker and the poison queue, which sets
-// a message aside only after the article carries the failure.
+// applied outside in: retries run closest to the handler. A broker failure that
+// outlasts them goes back to the subscriber, which delivers the row again; only
+// an undeliverable message goes to the poison queue.
 func (f *Forwarder) newRouter() (*message.Router, error) {
 	logger := watermill.NewSlogLogger(f.log)
 
@@ -184,8 +183,7 @@ func (f *Forwarder) newRouter() (*message.Router, error) {
 	}
 
 	poison, err := middleware.PoisonQueueWithFilter(
-		f.publisherFor(event.ReindexDLX), event.ReindexDLQ,
-		func(err error) bool { return !errors.Is(err, errNotMarked) },
+		f.publisherFor(event.ReindexDLX), event.ReindexDLQ, poisoned,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("relay: poison queue: %w", err)
@@ -194,12 +192,12 @@ func (f *Forwarder) newRouter() (*message.Router, error) {
 	router.AddMiddleware(
 		middleware.Recoverer,
 		poison,
-		f.markFailed,
 		middleware.Retry{
 			MaxRetries:      retryLimit,
 			InitialInterval: retryInitialInterval,
 			MaxInterval:     retryMaxInterval,
 			Multiplier:      retryMultiplier,
+			ShouldRetry:     retryable,
 			Logger:          logger,
 		}.Middleware,
 	)
@@ -210,13 +208,23 @@ func (f *Forwarder) newRouter() (*message.Router, error) {
 	return router, nil
 }
 
+// poisoned sets aside a message no retry can publish, so it cannot block the rest.
+func poisoned(err error) bool {
+	return errors.Is(err, errUndeliverable)
+}
+
+// retryable skips retries that cannot help.
+func retryable(params middleware.RetryParams) bool {
+	return !errors.Is(params.Err, errUndeliverable)
+}
+
 // forward hands one stored envelope to the broker under the routing key the
 // writer recorded. The payload is never decoded here.
 func (f *Forwarder) forward(publisher message.Publisher) message.NoPublishHandlerFunc {
 	return func(msg *message.Message) error {
 		key := msg.Metadata.Get(outbox.MetadataRoutingKey)
 		if key == "" {
-			return fmt.Errorf("relay: message %s carries no routing key", msg.UUID)
+			return fmt.Errorf("%w: message %s carries no routing key", errUndeliverable, msg.UUID)
 		}
 
 		return publisher.Publish(key, msg)

@@ -193,9 +193,13 @@ func (f fakeModels) Create(context.Context, options.Creator, *model.EmbeddingMod
 	return nil, errFakeUnused
 }
 
-func (f fakeModels) Update(context.Context, options.Updator, *model.EmbeddingModel, []byte, bool) (*model.EmbeddingModel, error) {
+func (f fakeModels) Update(
+	context.Context, options.Updator, *model.EmbeddingModel, []byte, bool, store.ModelValidation,
+) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
 }
+
+func (f fakeModels) InUse(context.Context, int64, int64) (bool, error) { return false, errFakeUnused }
 
 func (f fakeModels) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
