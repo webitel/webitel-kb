@@ -16,6 +16,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
 
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/outbox"
@@ -46,15 +47,6 @@ type Outbox interface {
 	MarkIndexFailed(ctx context.Context, articleID int64) error
 }
 
-// Metrics records the work of the relay.
-type Metrics interface {
-	Leading(leading bool)
-	Backlog(count int64, oldest time.Duration)
-	IndexStates(counts map[int32]int64)
-	Published(ctx context.Context, exchange string, err error)
-	Poisoned(ctx context.Context)
-}
-
 // Elector runs the relay on exactly one instance at a time.
 type Elector interface {
 	Run(ctx context.Context, onStart func(ctx context.Context) error, onStop func())
@@ -82,20 +74,20 @@ type Forwarder struct {
 	store   Outbox
 	broker  Broker
 	elector Elector
-	metrics Metrics
+	metrics *relayMetrics
 	log     *slog.Logger
 
 	cancel context.CancelFunc
 	done   chan struct{}
 }
 
-func New(cfg Config, store Outbox, broker Broker, elector Elector, metrics Metrics, log *slog.Logger) *Forwarder {
+func New(cfg Config, store Outbox, broker Broker, elector Elector, log *slog.Logger) *Forwarder {
 	return &Forwarder{
 		cfg:     cfg,
 		store:   store,
 		broker:  broker,
 		elector: elector,
-		metrics: metrics,
+		metrics: newRelayMetrics(otel.GetMeterProvider()),
 		log:     log.With(slog.String("component", "relay")),
 		done:    make(chan struct{}),
 	}
@@ -149,8 +141,8 @@ func (f *Forwarder) lead(ctx context.Context) error {
 
 	f.log.Info("relay leading", slog.String("consumer_group", outbox.ConsumerGroup))
 
-	f.metrics.Leading(true)
-	defer f.metrics.Leading(false)
+	f.metrics.lead(true)
+	defer f.metrics.lead(false)
 
 	var background sync.WaitGroup
 
@@ -266,7 +258,7 @@ func (f *Forwarder) observeBacklog(ctx context.Context) {
 		return
 	}
 
-	f.metrics.Backlog(count, oldest)
+	f.metrics.readBacklog(count, oldest)
 
 	if count > 0 {
 		f.log.Info("outbox backlog",
@@ -285,7 +277,7 @@ func (f *Forwarder) observeIndexStates(ctx context.Context) {
 		return
 	}
 
-	f.metrics.IndexStates(counts)
+	f.metrics.readIndexStates(counts)
 }
 
 // cleanupLoop removes acknowledged rows for as long as this instance leads.

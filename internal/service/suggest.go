@@ -171,7 +171,6 @@ func (s *RetrievalService) rerankWith(
 	ctx, cancel := context.WithTimeout(ctx, rerankTimeout)
 	defer cancel()
 
-	started := time.Now()
 	result, err := provider.Rerank(ctx, embedding.RerankRequest{
 		ModelRef:  space.ModelRef,
 		APIKey:    key,
@@ -179,8 +178,6 @@ func (s *RetrievalService) rerankWith(
 		Query:     query,
 		Documents: documentsOf(hits),
 	})
-	s.metrics.Rerank(ctx, space.Provider, space.ModelRef, time.Since(started), err)
-
 	if err != nil {
 		return nil, fmt.Errorf("reranker is unavailable: %w", err)
 	}

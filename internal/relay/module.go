@@ -11,7 +11,6 @@ import (
 	"github.com/webitel/webitel-go-kit/infra/discovery/consul"
 
 	"github.com/webitel/webitel-kb/config"
-	"github.com/webitel/webitel-kb/internal/metrics"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/store/postgres"
 )
@@ -54,7 +53,7 @@ func provideElector(cfg *config.Config, log *slog.Logger) (Elector, error) {
 // check Pubsub.Driver, whose default names the broker product, not the
 // protocol.
 func provideForwarder(
-	cfg *config.Config, store *postgres.Store, broker Broker, elector Elector, m *metrics.Metrics, log *slog.Logger,
+	cfg *config.Config, store *postgres.Store, broker Broker, elector Elector, log *slog.Logger,
 ) *Forwarder {
 	return New(Config{
 		PollInterval:    cfg.Relay.PollInterval,
@@ -62,7 +61,7 @@ func provideForwarder(
 		Retention:       cfg.Relay.Retention,
 		CleanupInterval: cfg.Relay.CleanupInterval,
 		CleanupBatch:    cfg.Relay.CleanupBatch,
-	}, store, broker, elector, m, log)
+	}, store, broker, elector, log)
 }
 
 // registerForwarder ties the relay to the fx lifecycle. Depending on

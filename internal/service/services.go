@@ -7,7 +7,6 @@ import (
 
 	"github.com/webitel/webitel-kb/infra/crypto"
 	"github.com/webitel/webitel-kb/infra/embedding"
-	"github.com/webitel/webitel-kb/internal/metrics"
 	"github.com/webitel/webitel-kb/internal/store"
 )
 
@@ -32,8 +31,7 @@ func provideEmbeddingModelService(
 
 // provideRetrievalService binds the concrete registry to the service's resolver seam.
 func provideRetrievalService(
-	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry,
-	m *metrics.Metrics, log *slog.Logger,
+	uow store.UnitOfWork, encryptor crypto.Encryptor, registry *embedding.Registry, log *slog.Logger,
 ) *RetrievalService {
-	return NewRetrievalService(uow, encryptor, registry, m, log)
+	return NewRetrievalService(uow, encryptor, registry, log)
 }
