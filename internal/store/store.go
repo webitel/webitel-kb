@@ -152,7 +152,7 @@ type ArticleVersionStore interface {
 	// Create appends a version to an article, numbering it after the current
 	// last one and building the search vector with the given text search
 	// configuration.
-	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion, textSearchConfig string) (*model.ArticleVersion, error)
+	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion) (*model.ArticleVersion, error)
 }
 
 // SpaceStore persists knowledge-base spaces and their team binding. Every read

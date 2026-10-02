@@ -2,12 +2,6 @@ package model
 
 import "time"
 
-// TextSearchDefault is the configuration article versions build their search
-// vector with. The built-in language agnostic one for now: accent folding and
-// per-language dictionaries are decisions for the retrieval stage, and the
-// stored vectors are cheap to rebuild until then.
-const TextSearchDefault = "simple"
-
 // MaxVersionNotes bounds a restore note, in runes.
 const MaxVersionNotes = 50
 

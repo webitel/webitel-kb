@@ -133,7 +133,8 @@ func TestSummaryHeadlineCarriesNoMarkup(t *testing.T) {
 	sql, args := mustSQLArgs(t, NewSummaryQuery(HitsFrom).WithHeadline("vpn"))
 
 	for _, want := range []string{
-		"ts_headline('" + model.TextSearchDefault + "', v.body_plain, websearch_to_tsquery('" + model.TextSearchDefault + "', $1)",
+		"ts_headline(s.text_search_config::regconfig, v.body_plain, websearch_to_tsquery(s.text_search_config::regconfig, $1)",
+		"JOIN kb.space s ON s.id = m.space_id",
 		`StartSel=""`,
 		`StopSel=""`,
 		"MaxFragments=1",
@@ -178,8 +179,8 @@ func TestSummaryPrefixOrderAndLimit(t *testing.T) {
 	}
 }
 
-func TestSearchHitsRanksBothLexicalSidesSeparately(t *testing.T) {
-	// One branch per side, so each uses its own full-text index.
+func TestSearchHitsFusesThreeRankings(t *testing.T) {
+	// One list per side and index, fused by reciprocal rank.
 	sql, args, err := NewSearchHits("reset password").
 		WithScope(5, model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagsMatchAll: true}).
 		WithPaging(10, 2).
@@ -189,13 +190,20 @@ func TestSearchHitsRanksBothLexicalSidesSeparately(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"WITH h AS (SELECT id, sum(rank) AS rank FROM (",
-		"ts_rank_cd(m.search_tsv, websearch_to_tsquery('simple', ?)) AS rank",
-		"WHERE m.search_tsv @@ websearch_to_tsquery('simple', ?)",
-		"UNION ALL",
+		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, ?) AS query FROM " +
+			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.domain_id = ? AND s.id = ANY(?)) AS configs)",
+		", h AS (SELECT id, sum(1.0 / (60 + rank)) AS rank FROM (",
+		"SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (",
+		// An article only meets the query of its own space configuration.
+		"FROM tq JOIN kb.space s ON s.text_search_config = tq.config JOIN kb.article m ON m.space_id = s.id",
+		"ts_rank_cd(m.search_tsv, tq.query) AS rank_key",
+		"m.search_tsv @@ tq.query",
 		"JOIN kb.article_version v ON v.id = m.published_version_id",
-		"ts_rank_cd(v.tsv, websearch_to_tsquery('simple', ?)) AS rank",
-		"WHERE v.tsv @@ websearch_to_tsquery('simple', ?)",
+		"ts_rank_cd(v.tsv, tq.query) AS rank_key",
+		"v.tsv @@ tq.query",
+		// Trigrams read the short subject only, through its own index.
+		"word_similarity(?, m.subject) AS rank_key",
+		"WHERE ? <% m.subject",
 		"GROUP BY id ORDER BY rank DESC, id",
 		// One row past the page answers whether a next page exists.
 		"LIMIT 11 OFFSET 10",
@@ -205,15 +213,51 @@ func TestSearchHitsRanksBothLexicalSidesSeparately(t *testing.T) {
 		}
 	}
 
-	// Both branches filter identically.
-	for _, want := range []string{"s.domain_id = ?", "m.deleted_at IS NULL", "m.state = ?", "m.space_id = ANY(?)", "m.tags @> ?"} {
-		if got := strings.Count(sql, want); got != 2 {
-			t.Errorf("SQL %q applies %q %d times, want once per branch", sql, want, got)
+	// Every list filters identically.
+	for _, want := range []string{"m.deleted_at IS NULL", "m.state = ?", "AND s.id = ANY(?) AND m.tags", "m.tags @> ?"} {
+		if got := strings.Count(sql, want); got != 3 {
+			t.Errorf("SQL %q applies %q %d times, want once per list", sql, want, got)
 		}
 	}
 
-	if len(args) != 12 {
-		t.Fatalf("args = %v, want six per branch", args)
+	if strings.Contains(sql, "'simple'") || strings.Contains(sql, "m.space_id = ANY") || strings.Contains(sql, "word_similarity(?, v.body_plain)") {
+		t.Errorf("SQL %q parses under a fixed configuration or joins the trigram sides by OR", sql)
+	}
+
+	if len(args) != 17 || args[0] != "reset password" || args[11] != "reset password" || args[12] != "reset password" {
+		t.Fatalf("args = %v", args)
+	}
+}
+
+func TestSearchHitsTrigramsOnlyForKeywordTerms(t *testing.T) {
+	tests := []struct {
+		name string
+		term string
+		want bool
+	}{
+		{"too short to be told from its neighbors", "vpn", false},
+		{"short term padded with spaces", "  ip  ", false},
+		{"keyword", "оплата", true},
+		{"phrase", "reset password", true},
+		{"a whole message", strings.Repeat("слово ", 11), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, _, err := NewSearchHits(tt.term).WithScope(5, model.SearchFilter{}).ToSQL()
+			if err != nil {
+				t.Fatalf("ToSQL: %v", err)
+			}
+
+			if got := strings.Contains(sql, "word_similarity"); got != tt.want {
+				t.Fatalf("trigram lists rendered = %v, want %v: %q", got, tt.want, sql)
+			}
+
+			// The full-text lists stay whatever the length.
+			if !strings.Contains(sql, "m.search_tsv @@ tq.query") {
+				t.Fatalf("SQL %q lost the full-text lists", sql)
+			}
+		})
 	}
 }
 
@@ -278,17 +322,5 @@ func TestSearchHitsPaging(t *testing.T) {
 				t.Errorf("SQL %q contains %q", sql, tt.absent)
 			}
 		})
-	}
-}
-
-func TestSearchParsesWithTheStoredConfiguration(t *testing.T) {
-	// The stored vector of a version is built with this configuration.
-	sql, _, err := NewSearchHits("vpn").ToSQL()
-	if err != nil {
-		t.Fatalf("ToSQL: %v", err)
-	}
-
-	if strings.Count(sql, "websearch_to_tsquery('"+model.TextSearchDefault+"'") != 4 {
-		t.Fatalf("SQL %q does not parse both branches with %q", sql, model.TextSearchDefault)
 	}
 }

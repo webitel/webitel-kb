@@ -22,18 +22,21 @@ import (
 const defaultArticleSort = "+subject"
 
 // createRootArticleSQL inserts a top-level article; selecting from the
-// caller's space enforces the domain scope in the same statement.
+// caller's space enforces the domain scope in the same statement and gives
+// the subject vector its configuration.
 const createRootArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by)
-	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint
+	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
+	       setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')
 	FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2
 	RETURNING *`
 
 // createChildArticleSQL inserts a child article, deriving depth from a live
 // parent of the same space; the depth constraint backstops the maximum.
 const createChildArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by)
-	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint
+	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
+	       setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')
 	FROM kb.space s
 	JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL
 	WHERE s.id = $1 AND s.domain_id = $2
@@ -399,6 +402,9 @@ func (s *articleStore) Update(
 	update := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Update("kb.article m").
 		Set("subject", in.Subject).
+		Set("search_tsv", squirrel.Expr(
+			"setweight(to_tsvector(s.text_search_config::regconfig, ?::text), 'A')", in.Subject,
+		)).
 		Set("tags", nonNilSlice(in.Tags)).
 		Set("type", in.Type).
 		Set("state", in.State).
@@ -412,11 +418,12 @@ func (s *articleStore) Update(
 	}
 
 	sql, args, err := update.
+		From("kb.space s").
 		Where("m.id = ?", opts.GetID()).
 		Where("m.ver = ?", expectedVer).
 		Where("m.deleted_at IS NULL").
-		Where("EXISTS (SELECT 1 FROM kb.space s WHERE s.id = m.space_id AND s.domain_id = ?)", session.GetDomainID()).
-		Suffix("RETURNING *").
+		Where("s.id = m.space_id AND s.domain_id = ?", session.GetDomainID()).
+		Suffix("RETURNING m.*").
 		ToSql()
 	if err != nil {
 		return nil, ParseError(err)

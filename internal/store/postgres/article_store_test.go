@@ -78,6 +78,8 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.article",
 		"SELECT s.id, NULL, 1,",
+		"updated_by, search_tsv)",
+		"setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')",
 		"FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2",
 		"RETURNING *",
 	} {
@@ -105,6 +107,7 @@ func TestArticleCreateChildDerivesDepth(t *testing.T) {
 
 	for _, want := range []string{
 		"p.depth + 1",
+		"setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')",
 		"JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL",
 		"WHERE s.id = $1 AND s.domain_id = $2",
 	} {
@@ -133,7 +136,10 @@ func TestArticleUpdateRendersGuardedCAS(t *testing.T) {
 		"AND m.ver = $",
 		"ver = m.ver + 1",
 		"m.deleted_at IS NULL",
-		"EXISTS (SELECT 1 FROM kb.space s WHERE s.id = m.space_id AND s.domain_id = $",
+		"FROM kb.space s WHERE",
+		"s.id = m.space_id AND s.domain_id = $",
+		"search_tsv = setweight(to_tsvector(s.text_search_config::regconfig, $2::text), 'A')",
+		"RETURNING m.*",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)

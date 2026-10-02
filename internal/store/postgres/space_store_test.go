@@ -73,11 +73,12 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 		}
 	}
 
-	// Column order: domain_id, name, description, language, embedding_model_id,
-	// reranker_model_id, vector_search_enabled, rerank_enabled,
-	// [chunking_strategy = DEFAULT expr, no arg], home_article_id,
-	// created_by, updated_by.
-	wantArgs := []any{int64(5), "docs", (*string)(nil), "uk"}
+	// Column order: domain_id, name, description, language,
+	// text_search_config (the stemmer, bound inside the fallback expression),
+	// embedding_model_id, reranker_model_id, vector_search_enabled,
+	// rerank_enabled, [chunking_strategy = DEFAULT expr, no arg],
+	// home_article_id, created_by, updated_by.
+	wantArgs := []any{int64(5), "docs", (*string)(nil), "uk", "simple"}
 	for i, want := range wantArgs {
 		if want == (*string)(nil) {
 			if got, ok := f.gotArgs[i].(*string); !ok || got != nil {
@@ -94,16 +95,54 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 
 	// Remaining columns: embedding, reranker(nil), vector, rerank,
 	// [chunking = DEFAULT, no arg], home(nil), created_by, updated_by.
-	assertPinned(t, f.gotArgs, 4, ptrTo(int64(3)))
-	assertPinned(t, f.gotArgs, 5, (*int64)(nil))
-	assertPinned(t, f.gotArgs, 6, true)
-	assertPinned(t, f.gotArgs, 7, false)
-	assertPinned(t, f.gotArgs, 8, ptrTo(int64(11)))
-	assertPinned(t, f.gotArgs, 9, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 5, ptrTo(int64(3)))
+	assertPinned(t, f.gotArgs, 6, (*int64)(nil))
+	assertPinned(t, f.gotArgs, 7, true)
+	assertPinned(t, f.gotArgs, 8, false)
+	assertPinned(t, f.gotArgs, 9, ptrTo(int64(11)))
 	assertPinned(t, f.gotArgs, 10, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 11, ptrTo(int64(9)))
 
-	if len(f.gotArgs) != 11 {
-		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
+	if len(f.gotArgs) != 12 {
+		t.Fatalf("args = %d, want 12: %v", len(f.gotArgs), f.gotArgs)
+	}
+}
+
+func TestSpaceCreateWritesTheSearchConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		language string
+		stemmer  string
+	}{
+		{"built-in stemmer", "ru", "russian"},
+		{"region keeps the stemmer", "pt-BR", "portuguese"},
+		{"no stemmer", "uk", "simple"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
+			s := &spaceStore{db: f}
+
+			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
+			if _, err := s.Create(context.Background(), opts, &model.Space{Name: "docs", Language: tt.language}); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			for _, want := range []string{
+				"language,text_search_config,",
+				"COALESCE((SELECT 'kb.' || c.cfgname FROM pg_ts_config c" +
+					" WHERE c.cfgnamespace = 'kb'::regnamespace AND c.cfgname = $5), 'kb.simple')",
+			} {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+				}
+			}
+
+			if f.gotArgs[4] != tt.stemmer {
+				t.Fatalf("stemmer arg = %v, want %q", f.gotArgs[4], tt.stemmer)
+			}
+		})
 	}
 }
 

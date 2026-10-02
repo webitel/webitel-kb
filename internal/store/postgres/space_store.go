@@ -188,19 +188,25 @@ func (s *spaceStore) locateSpace(ctx context.Context, opts options.Searcher, loc
 	return item, nil
 }
 
+// searchConfigExpr picks the kb configuration of the stemmer, or simple when
+// the cluster has no such stemmer.
+const searchConfigExpr = `COALESCE((SELECT 'kb.' || c.cfgname FROM pg_ts_config c` +
+	` WHERE c.cfgnamespace = 'kb'::regnamespace AND c.cfgname = ?), 'kb.simple')`
+
 func (s *spaceStore) Create(ctx context.Context, opts options.Creator, in *model.Space) (*model.Space, error) {
 	session := opts.GetAuthOpts()
 
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Insert(spaceTable).
 		Columns(
-			"domain_id", "name", "description", "language",
+			"domain_id", "name", "description", "language", "text_search_config",
 			"embedding_model_id", "reranker_model_id",
 			"vector_search_enabled", "rerank_enabled", "chunking_strategy",
 			"home_article_id", "created_by", "updated_by",
 		).
 		Values(
 			session.GetDomainID(), in.Name, nullIfEmpty(in.Description), in.Language,
+			squirrel.Expr(searchConfigExpr, model.TextSearchDictionary(in.Language)),
 			nullIfZero(in.EmbeddingModelID), nullIfZero(in.RerankerModelID),
 			in.VectorSearchEnabled, in.RerankEnabled, defaultIfEmpty(in.ChunkingStrategy),
 			nullIfZero(in.HomeArticleID), nullIfZero(session.GetUserID()), nullIfZero(session.GetUserID()),

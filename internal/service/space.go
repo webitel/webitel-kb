@@ -43,6 +43,16 @@ func (s *SpaceService) Create(
 		)
 	}
 
+	canonical, ok := model.CanonicalLanguage(in.Language)
+	if !ok {
+		return nil, errors.InvalidArgument(
+			"language must be a BCP 47 tag",
+			errors.WithID("kb.space.language_invalid"),
+		)
+	}
+
+	in.Language = canonical
+
 	if err := requireName(in); err != nil {
 		return nil, err
 	}

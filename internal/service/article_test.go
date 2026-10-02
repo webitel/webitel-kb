@@ -172,9 +172,8 @@ type fakeVersionStore struct {
 
 	locateErr error
 
-	createIn     *model.ArticleVersion
-	createConfig string
-	createCalls  int
+	createIn    *model.ArticleVersion
+	createCalls int
 
 	order *fakeArticleStore // shared call-order recorder
 }
@@ -191,10 +190,9 @@ func (f *fakeVersionStore) Locate(context.Context, options.Searcher, int64, int3
 	return f.source, nil
 }
 
-func (f *fakeVersionStore) Create(_ context.Context, _ options.Creator, in *model.ArticleVersion, config string) (*model.ArticleVersion, error) {
+func (f *fakeVersionStore) Create(_ context.Context, _ options.Creator, in *model.ArticleVersion) (*model.ArticleVersion, error) {
 	f.createCalls++
 	f.createIn = in
-	f.createConfig = config
 
 	if f.order != nil {
 		f.order.step("create-version")
