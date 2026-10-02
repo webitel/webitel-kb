@@ -135,8 +135,9 @@ func (s *ArticleService) Create(
 }
 
 // Update merges the input over the stored article under a row lock, rewrites
-// it guarded by the client's version, and appends a version when a body came
-// along. Without a body only the metadata change: no version records it.
+// it guarded by the client's version, and appends a version when the body or
+// the subject changes: the subject is part of the indexed content. Other
+// metadata changes record no version.
 func (s *ArticleService) Update(
 	ctx context.Context, opts options.Updator, in *model.Article, rawBody []byte, expectedVer int32,
 ) (*model.Article, error) {
@@ -173,8 +174,30 @@ func (s *ArticleService) Update(
 
 		merged := current.Merge(in, opts.GetMask())
 
+		var next *model.ArticleVersion
+
+		switch {
+		case len(rawBody) != 0:
+			next = &model.ArticleVersion{
+				ArticleID:    current.ID,
+				Subject:      merged.Subject,
+				BodyRichText: rawBody,
+				BodyMarkdown: body.Markdown,
+				BodyPlain:    body.Plain,
+			}
+		case merged.Subject != current.Subject:
+			retitled, ok, err := retitleLatest(ctx, tx, session, current.ID, merged.Subject)
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				next = &retitled
+			}
+		}
+
 		// New content invalidates what the pipeline indexed.
-		if len(rawBody) != 0 {
+		if next != nil {
 			merged.IndexState = model.IndexStatePending
 		}
 
@@ -183,17 +206,11 @@ func (s *ArticleService) Update(
 			return err
 		}
 
-		if len(rawBody) == 0 {
+		if next == nil {
 			return nil
 		}
 
-		version, err := tx.ArticleVersionStore().Create(ctx, opts, &model.ArticleVersion{
-			ArticleID:    opts.GetID(),
-			Subject:      merged.Subject,
-			BodyRichText: rawBody,
-			BodyMarkdown: body.Markdown,
-			BodyPlain:    body.Plain,
-		}, model.TextSearchDefault)
+		version, err := tx.ArticleVersionStore().Create(ctx, opts, next, model.TextSearchDefault)
 		if err != nil {
 			return err
 		}
@@ -205,6 +222,28 @@ func (s *ArticleService) Update(
 	}
 
 	return updated, nil
+}
+
+// retitleLatest copies the latest version under a new subject; ok is false for
+// an article without versions.
+func retitleLatest(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther, articleID int64, subject string,
+) (model.ArticleVersion, bool, error) {
+	// The version store lists the newest version first.
+	latest, _, err := tx.ArticleVersionStore().List(ctx, readOptions{
+		auth: session, fields: []string{"id", "body_rich_text", "body_markdown", "body_plain"},
+	}, articleID)
+	if err != nil || len(latest) == 0 {
+		return model.ArticleVersion{}, false, err
+	}
+
+	return model.ArticleVersion{
+		ArticleID:    articleID,
+		Subject:      subject,
+		BodyRichText: latest[0].BodyRichText,
+		BodyMarkdown: latest[0].BodyMarkdown,
+		BodyPlain:    latest[0].BodyPlain,
+	}, true, nil
 }
 
 func (s *ArticleService) Delete(

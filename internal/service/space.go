@@ -271,7 +271,7 @@ func (s *SpaceService) requireValidatedModels(
 func requireValidatedModel(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther, id int64, wantType string,
 ) error {
-	found, err := tx.EmbeddingModelStore().Locate(ctx, readOptions{
+	found, err := tx.EmbeddingModelStore().LocateForUpdate(ctx, readOptions{
 		auth:   session,
 		ids:    []int64{id},
 		fields: []string{"id", "type", "validated_at"},

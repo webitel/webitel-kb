@@ -3,10 +3,13 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -249,6 +252,12 @@ func (s *spaceStore) Delete(ctx context.Context, opts options.Deleter) (*model.S
 	return s.writeReturning(ctx, sql, args, opts.GetFields())
 }
 
+// errTeamUnknown reports a team id that is not a team of the space domain.
+var errTeamUnknown = errors.InvalidArgument(
+	"team is unknown in this domain",
+	errors.WithID("kb.space.team_unknown"),
+)
+
 // ReplaceTeams rewrites the binding to exactly the given set.
 func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error {
 	const deleteSQL = `DELETE FROM kb.team_space ts USING kb.space s
@@ -263,10 +272,17 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 	}
 
 	const insertSQL = `INSERT INTO kb.team_space (team_id, space_id, created_by)
-		SELECT DISTINCT unnest($1::bigint[]), s.id, $3::bigint FROM kb.space s WHERE s.id = $2 AND s.domain_id = $4`
+		SELECT t.id, s.id, $3::bigint FROM kb.space s
+		JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id
+		WHERE s.id = $2 AND s.domain_id = $4`
 
-	if _, err := s.db.Exec(ctx, insertSQL, teamIDs, spaceID, nullIfZero(userID), domainID); err != nil {
+	tag, err := s.db.Exec(ctx, insertSQL, teamIDs, spaceID, nullIfZero(userID), domainID)
+	if err != nil {
 		return ParseError(err)
+	}
+
+	if tag.RowsAffected() != int64(len(slices.Compact(slices.Sorted(slices.Values(teamIDs))))) {
+		return errTeamUnknown
 	}
 
 	return nil
@@ -334,8 +350,8 @@ const resolveRerankersSQL = `SELECT
 const teamSpacesSQL = `SELECT s.id
 	FROM call_center.cc_team t
 	LEFT JOIN kb.team_space ts ON ts.team_id = t.id
-	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL
-	WHERE t.id = $1 AND t.dc = $2
+	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL
+	WHERE t.id = $1 AND t.domain_id = $2
 	ORDER BY s.id`
 
 func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error) {

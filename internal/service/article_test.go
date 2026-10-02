@@ -675,15 +675,80 @@ func TestArticleSaveFailsWhenTheEventCannotBeStored(t *testing.T) {
 	}
 }
 
-func TestArticleUpdateWithoutBodySkipsVersion(t *testing.T) {
-	svc, uow := newArticleFixture()
-
-	if _, err := svc.Update(context.Background(), updaterOpts(), &model.Article{Subject: "new"}, nil, 4); err != nil {
-		t.Fatalf("Update: %v", err)
+func TestArticleUpdateVersioning(t *testing.T) {
+	latest := &model.ArticleVersion{
+		ID: 31, VersionNumber: 2, Subject: "stored",
+		BodyRichText: []byte(`{"type":"doc"}`), BodyMarkdown: "# latest", BodyPlain: "latest",
 	}
 
-	if uow.versions.createCalls != 0 {
-		t.Fatal("a metadata-only update must not produce a version")
+	tests := []struct {
+		name        string
+		in          *model.Article
+		mask        []string
+		body        []byte
+		history     []*model.ArticleVersion
+		wantVersion bool
+		wantBody    string
+	}{
+		{
+			name: "new subject copies the latest body", in: &model.Article{Subject: "renamed"},
+			mask: []string{"subject"}, history: []*model.ArticleVersion{latest},
+			wantVersion: true, wantBody: "# latest",
+		},
+		{
+			name: "new subject with a body takes the body", in: &model.Article{Subject: "renamed"},
+			body: []byte(validDoc), history: []*model.ArticleVersion{latest},
+			wantVersion: true, wantBody: "hi",
+		},
+		{
+			name: "same subject records nothing", in: &model.Article{Subject: "stored"},
+			mask: []string{"subject"}, history: []*model.ArticleVersion{latest},
+		},
+		{
+			name: "tags record nothing", in: &model.Article{Tags: []string{"x"}},
+			mask: []string{"tags"}, history: []*model.ArticleVersion{latest},
+		},
+		{
+			name: "new subject without versions records nothing", in: &model.Article{Subject: "renamed"},
+			mask: []string{"subject"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.versions.history = tt.history
+			opts := updaterOpts()
+			opts.mask = tt.mask
+
+			if _, err := svc.Update(context.Background(), opts, tt.in, tt.body, 4); err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if got := uow.versions.createCalls == 1; got != tt.wantVersion {
+				t.Fatalf("version created = %v, want %v", got, tt.wantVersion)
+			}
+
+			if got := len(uow.outbox.events) == 1; got != tt.wantVersion {
+				t.Fatalf("reindex requested = %v, want %v", got, tt.wantVersion)
+			}
+
+			if !tt.wantVersion {
+				if uow.articles.updateIn.IndexState != 0 {
+					t.Fatalf("index state = %d, want untouched", uow.articles.updateIn.IndexState)
+				}
+
+				return
+			}
+
+			if got := uow.versions.createIn; got.Subject != "renamed" || !strings.Contains(got.BodyMarkdown, tt.wantBody) {
+				t.Fatalf("version = %q / %q, want subject renamed over %q", got.Subject, got.BodyMarkdown, tt.wantBody)
+			}
+
+			if uow.articles.updateIn.IndexState != model.IndexStatePending {
+				t.Fatalf("index state = %d, want pending", uow.articles.updateIn.IndexState)
+			}
+		})
 	}
 }
 

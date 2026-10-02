@@ -12,7 +12,8 @@ const (
 // spaceTeamsExpr aggregates the team binding into a JSON array right in the
 // SELECT list.
 const spaceTeamsExpr = `(SELECT COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name) ORDER BY t.name), '[]')` +
-	` FROM kb.team_space ts JOIN call_center.cc_team t ON t.id = ts.team_id WHERE ts.space_id = m.id) AS teams`
+	` FROM kb.team_space ts JOIN call_center.cc_team t ON t.id = ts.team_id AND t.domain_id = m.domain_id` +
+	` WHERE ts.space_id = m.id) AS teams`
 
 // SpaceQuery builds SELECTs over knowledge-base spaces.
 type SpaceQuery struct {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -154,7 +155,7 @@ func TestSpaceDeleteRendersScopedCTE(t *testing.T) {
 
 func TestSpaceReplaceTeams(t *testing.T) {
 	t.Run("full replace runs scoped delete then insert", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 2")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 9, []int64{1, 2}); err != nil {
@@ -174,8 +175,38 @@ func TestSpaceReplaceTeams(t *testing.T) {
 			t.Errorf("insert not domain-scoped: %s", f.sqls[1])
 		}
 
+		if !strings.Contains(f.sqls[1], "JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id") {
+			t.Errorf("insert does not check the team domain: %s", f.sqls[1])
+		}
+
 		if got, ok := f.argsList[1][0].([]int64); !ok || len(got) != 2 {
 			t.Errorf("insert args[0] = %v, want the team ids", f.argsList[1][0])
+		}
+	})
+
+	t.Run("bound rows are checked against the distinct ids", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			teamIDs  []int64
+			inserted string
+			wantID   string
+		}{
+			{name: "all bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 2"},
+			{name: "duplicates bound once", teamIDs: []int64{2, 1, 2}, inserted: "INSERT 0 2"},
+			{name: "none bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 0", wantID: "kb.space.team_unknown"},
+			{name: "one of two bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 1", wantID: "kb.space.team_unknown"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				f := &fakeQuerier{tag: pgconn.NewCommandTag(tt.inserted)}
+				s := &spaceStore{db: f}
+
+				err := s.ReplaceTeams(context.Background(), 7, 5, 9, tt.teamIDs)
+				if got := errors.ID(err); got != tt.wantID {
+					t.Fatalf("error id = %q, want %q (err %v)", got, tt.wantID, err)
+				}
+			})
 		}
 	})
 
@@ -391,7 +422,7 @@ func assertPinned(t *testing.T, args []any, i int, want any) {
 
 func TestSpaceReplaceTeamsBindsArgs(t *testing.T) {
 	t.Run("scope and creator pinned", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 2")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 9, []int64{1, 2}); err != nil {
@@ -407,14 +438,14 @@ func TestSpaceReplaceTeamsBindsArgs(t *testing.T) {
 		assertPinned(t, f.argsList[1], 2, ptrTo(int64(9)))
 		assertPinned(t, f.argsList[1], 3, int64(5))
 
-		// The store guards itself against duplicate ids.
-		if !strings.Contains(f.sqls[1], "SELECT DISTINCT unnest") {
+		// The join on team ids guards against duplicates.
+		if !strings.Contains(f.sqls[1], "t.id = ANY($1::bigint[])") {
 			t.Errorf("insert does not deduplicate: %s", f.sqls[1])
 		}
 	})
 
 	t.Run("zero creator becomes NULL", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 1")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 0, []int64{1}); err != nil {
@@ -650,8 +681,8 @@ func TestSpaceTeamSpaces(t *testing.T) {
 			for _, want := range []string{
 				"FROM call_center.cc_team t",
 				"LEFT JOIN kb.team_space ts ON ts.team_id = t.id",
-				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL",
-				"t.id = $1 AND t.dc = $2",
+				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL",
+				"t.id = $1 AND t.domain_id = $2",
 				"ORDER BY s.id",
 			} {
 				if !strings.Contains(f.gotSQL, want) {

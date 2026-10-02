@@ -178,6 +178,7 @@ type gateModelStore struct {
 	models map[int64]*model.EmbeddingModel
 
 	locatedIDs []int64
+	locked     int
 }
 
 func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
@@ -192,8 +193,10 @@ func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 	return found, nil
 }
 
-func (f *gateModelStore) LocateForUpdate(context.Context, options.Searcher) (*model.EmbeddingModel, error) {
-	return nil, errors.Internal("not used by the space flows")
+func (f *gateModelStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+	f.locked++
+
+	return f.Locate(ctx, opts)
 }
 
 func (f *gateModelStore) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {
@@ -204,8 +207,14 @@ func (f *gateModelStore) Create(context.Context, options.Creator, *model.Embeddi
 	return nil, errFakeUnused
 }
 
-func (f *gateModelStore) Update(context.Context, options.Updator, *model.EmbeddingModel, []byte, bool) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Update(
+	context.Context, options.Updator, *model.EmbeddingModel, []byte, bool, store.ModelValidation,
+) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
+}
+
+func (f *gateModelStore) InUse(context.Context, int64, int64) (bool, error) {
+	return false, errFakeUnused
 }
 
 func (f *gateModelStore) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
@@ -375,8 +384,9 @@ func TestSpaceCreateHappyPath(t *testing.T) {
 	}
 
 	// Both models gated; the team set deduplicated.
-	if len(uow.models.locatedIDs) != 2 {
-		t.Fatalf("model gates = %v, want both models checked", uow.models.locatedIDs)
+	if len(uow.models.locatedIDs) != 2 || uow.models.locked != 2 {
+		t.Fatalf("model gates = %v (locked %d), want both models checked under lock",
+			uow.models.locatedIDs, uow.models.locked)
 	}
 
 	if len(uow.spaces.replacedWith) != 1 || len(uow.spaces.replacedWith[0]) != 2 {

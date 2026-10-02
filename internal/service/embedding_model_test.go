@@ -56,9 +56,13 @@ func (o *stubWriteOpts) GetMask() []string        { return o.mask }
 // fakeModelStore records store calls and plays back preset results.
 type fakeModelStore struct {
 	located *model.EmbeddingModel // Locate result
-	written *model.EmbeddingModel // Create/Update/Delete result
-	marked  *model.EmbeddingModel // MarkValidated result
-	config  []byte                // GetConfig result
+	locked  *model.EmbeddingModel // LocateForUpdate result; located when nil
+	inUse   bool                  // InUse result
+	// inUseLater is the InUse result once the model row is locked.
+	inUseLater bool
+	written    *model.EmbeddingModel // Create/Update/Delete result
+	marked     *model.EmbeddingModel // MarkValidated result
+	config     []byte                // GetConfig result
 
 	locateErr error
 	configErr error
@@ -74,6 +78,7 @@ type fakeModelStore struct {
 	updateIn         *model.EmbeddingModel
 	updateConfig     []byte
 	updateKeepConfig bool
+	updateValidation store.ModelValidation
 
 	configID, configDomainID int64
 
@@ -102,7 +107,20 @@ func (f *fakeModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 func (f *fakeModelStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
 	f.lockedLocates++
 
-	return f.Locate(ctx, opts)
+	found, err := f.Locate(ctx, opts)
+	if err == nil && f.locked != nil {
+		return f.locked, nil
+	}
+
+	return found, err
+}
+
+func (f *fakeModelStore) InUse(context.Context, int64, int64) (bool, error) {
+	if f.lockedLocates > 0 {
+		return f.inUse || f.inUseLater, nil
+	}
+
+	return f.inUse, nil
 }
 
 func (f *fakeModelStore) Create(
@@ -117,11 +135,13 @@ func (f *fakeModelStore) Create(
 
 func (f *fakeModelStore) Update(
 	_ context.Context, _ options.Updator, in *model.EmbeddingModel, config []byte, keepConfig bool,
+	validation store.ModelValidation,
 ) (*model.EmbeddingModel, error) {
 	f.updateCalls++
 	f.updateIn = in
 	f.updateConfig = config
 	f.updateKeepConfig = keepConfig
+	f.updateValidation = validation
 
 	return f.written, nil
 }
@@ -406,7 +426,7 @@ func TestStorageDimensionsAreAssigned(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			models := &fakeModelStore{
-				located: &model.EmbeddingModel{ID: 1, Type: tt.in.Type},
+				located: &model.EmbeddingModel{ID: 1, DomainID: 1, Type: tt.in.Type},
 				written: &model.EmbeddingModel{ID: 1},
 			}
 			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
@@ -491,7 +511,7 @@ func TestUpdateCredentialFlow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			models := &fakeModelStore{
-				located: &model.EmbeddingModel{ID: 1, Type: tt.in.Type},
+				located: &model.EmbeddingModel{ID: 1, DomainID: 1, Type: tt.in.Type},
 				written: &model.EmbeddingModel{ID: 1},
 			}
 			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
@@ -514,7 +534,7 @@ func TestUpdateCredentialFlow(t *testing.T) {
 
 func TestUpdateAppliesMask(t *testing.T) {
 	stored := &model.EmbeddingModel{
-		ID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
+		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
 		Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001",
 	}
 
@@ -569,7 +589,7 @@ func TestUpdateAppliesMask(t *testing.T) {
 
 func TestUpdateTypeImmutable(t *testing.T) {
 	models := &fakeModelStore{
-		located: &model.EmbeddingModel{ID: 1, Type: model.ModelTypeEmbedding},
+		located: &model.EmbeddingModel{ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding},
 	}
 	svc := newModelService(models, fakeSealer{}, &fakeResolver{})
 	opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1}
@@ -593,6 +613,128 @@ func TestUpdateTypeImmutable(t *testing.T) {
 
 	if !slices.Contains(models.locateFields, "type") {
 		t.Fatalf("current-read fields = %v, must request type", models.locateFields)
+	}
+}
+
+func TestUpdateRevalidation(t *testing.T) {
+	stored := func() *model.EmbeddingModel {
+		return &model.EmbeddingModel{
+			ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
+			Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001",
+		}
+	}
+	vector := embedding.EmbedResult{Vectors: [][]float32{make([]float32, model.EmbeddingStorageDimensions)}}
+
+	tests := []struct {
+		name      string
+		inUse     bool
+		in        *model.EmbeddingModel
+		apiKey    string
+		mask      []string
+		probeErr  error
+		locked    *model.EmbeddingModel
+		usedLater bool
+		global    bool
+		want      store.ModelValidation
+		wantProbe bool
+		wantKey   string
+		wantErrID string
+	}{
+		{
+			name: "rename keeps the stamp", in: &model.EmbeddingModel{Name: "renamed"},
+			mask: []string{"name"}, want: store.ValidationKeep,
+		},
+		{
+			name: "unused model changes freely", in: &model.EmbeddingModel{ModelRef: "gemini-embedding-002"},
+			mask: []string{"model_ref"}, want: store.ValidationReset,
+		},
+		{
+			name: "used model keeps its model", inUse: true, in: &model.EmbeddingModel{ModelRef: "gemini-embedding-002"},
+			mask: []string{"model_ref"}, wantErrID: "kb.model.in_use",
+		},
+		{
+			name: "used model keeps its provider", inUse: true, in: embeddedInput(),
+			wantErrID: "kb.model.in_use",
+		},
+		{
+			name: "used model rename keeps the stamp", inUse: true, in: &model.EmbeddingModel{Name: "renamed"},
+			mask: []string{"name"}, want: store.ValidationKeep,
+		},
+		{
+			name: "used model takes a new key after the probe", inUse: true, in: &model.EmbeddingModel{},
+			apiKey: "next", mask: []string{"api_key"}, want: store.ValidationStamp, wantProbe: true, wantKey: "next",
+		},
+		{
+			name: "used model rejects a key the probe refuses", inUse: true, in: &model.EmbeddingModel{},
+			apiKey: "bad", mask: []string{"api_key"}, probeErr: errors.New("401"),
+			wantProbe: true, wantKey: "bad", wantErrID: "kb.model.validation_failed",
+		},
+		{
+			name: "model changed while probed", inUse: true, in: &model.EmbeddingModel{},
+			apiKey: "next", mask: []string{"api_key"}, wantProbe: true, wantKey: "next",
+			locked: &model.EmbeddingModel{
+				ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
+				Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-002",
+			},
+			wantErrID: "kb.model.version_conflict",
+		},
+		{
+			name: "model taken by a space meanwhile keeps its stamp", in: &model.EmbeddingModel{ModelRef: "gemini-embedding-002"},
+			mask: []string{"model_ref"}, usedLater: true, wantErrID: "kb.model.version_conflict",
+		},
+		{
+			name: "rename of a model taken meanwhile goes through", in: &model.EmbeddingModel{Name: "renamed"},
+			mask: []string{"name"}, usedLater: true, want: store.ValidationKeep,
+		},
+		{
+			name: "global model is read-only", in: &model.EmbeddingModel{Name: "renamed"},
+			mask: []string{"name"}, global: true, wantErrID: "kb.model.global_read_only",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			located := stored()
+			if tt.global {
+				located.DomainID = 0
+			}
+
+			models := &fakeModelStore{
+				located: located, locked: tt.locked, inUse: tt.inUse, inUseLater: tt.usedLater,
+				written: &model.EmbeddingModel{ID: 1}, config: []byte("enc:old"),
+			}
+			provider := &fakeProvider{embedRes: vector, embedErr: tt.probeErr}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{provider: provider})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1, mask: tt.mask}
+
+			_, err := svc.Update(context.Background(), opts, tt.in, tt.apiKey)
+
+			if tt.wantErrID != "" {
+				if errors.ID(err) != tt.wantErrID {
+					t.Fatalf("err = %v, want %s", err, tt.wantErrID)
+				}
+
+				if models.updateCalls != 0 {
+					t.Fatalf("update calls = %d, want none", models.updateCalls)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Update: %v", err)
+				}
+
+				if models.updateValidation != tt.want {
+					t.Fatalf("validation = %v, want %v", models.updateValidation, tt.want)
+				}
+			}
+
+			if got := provider.embedReq != nil; got != tt.wantProbe {
+				t.Fatalf("probed = %v, want %v", got, tt.wantProbe)
+			}
+
+			if tt.wantProbe && provider.embedReq.APIKey != tt.wantKey {
+				t.Fatalf("probe key = %q, want %q", provider.embedReq.APIKey, tt.wantKey)
+			}
+		})
 	}
 }
 

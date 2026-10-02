@@ -103,12 +103,30 @@ var modelMergeFields = []string{
 	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "endpoint",
 }
 
-// Update merges the input over the stored model under a row lock and rewrites
-// it; the store resets the validation stamp, so a changed model must pass its
-// probe again. An empty API key on a cloud model keeps the stored credential
-// (the contract has no way to clear it); an embedded model always clears the
-// credential, so switching a model from a cloud provider cannot leave a stale
-// key behind.
+// errGlobalReadOnly refuses a write to a model seeded for every domain.
+var errGlobalReadOnly = errors.InvalidArgument(
+	"global models are read-only",
+	errors.WithID("kb.model.global_read_only"),
+)
+
+// errModelInUse refuses an identity change of a model a space relies on.
+var errModelInUse = errors.New(
+	"a model used by a space cannot change its provider or model",
+	errors.WithCode(codes.FailedPrecondition),
+	errors.WithID("kb.model.in_use"),
+)
+
+// errModelChanged reports a model rewritten while its update was being probed.
+var errModelChanged = errors.Aborted(
+	"model was changed concurrently",
+	errors.WithID("kb.model.version_conflict"),
+)
+
+// Update merges the input over the stored model and rewrites it. A model in use
+// keeps its identity; a new connection is probed before the write. An empty API
+// key on a cloud model keeps the stored credential (the contract has no way to
+// clear it); an embedded model always clears the credential, so switching a
+// model from a cloud provider cannot leave a stale key behind.
 func (s *EmbeddingModelService) Update(
 	ctx context.Context, opts options.Updator, in *model.EmbeddingModel, apiKey string,
 ) (*model.EmbeddingModel, error) {
@@ -122,40 +140,70 @@ func (s *EmbeddingModelService) Update(
 		return nil, err
 	}
 
+	session := opts.GetAuthOpts()
+	read := readOptions{
+		auth: session, ids: []int64{opts.GetID()}, fields: append(slices.Clone(modelMergeFields), "domain_id"),
+	}
+
+	found, err := s.uow.EmbeddingModelStore().Locate(ctx, read)
+	if err != nil {
+		return nil, err
+	}
+
+	if found.DomainID == 0 {
+		return nil, errGlobalReadOnly
+	}
+
+	merged := found.Merge(in, mask)
+
+	if err := validateInput(merged, apiKey, false); err != nil {
+		return nil, err
+	}
+
+	setStorageDimensions(merged)
+
+	if found.Type != merged.Type {
+		return nil, errors.InvalidArgument(
+			"model type is immutable",
+			errors.WithID("kb.model.type_immutable"),
+		)
+	}
+
+	inUse, err := s.uow.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
+	if err != nil {
+		return nil, err
+	}
+
+	validation, err := s.revalidate(ctx, found, merged, apiKey, session.GetDomainID(), inUse)
+	if err != nil {
+		return nil, err
+	}
+
 	var updated *model.EmbeddingModel
 
 	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
-		found, err := tx.EmbeddingModelStore().LocateForUpdate(ctx, readOptions{
-			auth:   opts.GetAuthOpts(),
-			ids:    []int64{opts.GetID()},
-			fields: modelMergeFields,
-		})
+		locked, err := tx.EmbeddingModelStore().LocateForUpdate(ctx, read)
 		if err != nil {
 			return err
 		}
 
-		merged := found.Merge(in, mask)
-
-		if err := validateInput(merged, apiKey, false); err != nil {
+		used, err := tx.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
+		if err != nil {
 			return err
 		}
 
-		setStorageDimensions(merged)
-
-		if found.Type != merged.Type {
-			return errors.InvalidArgument(
-				"model type is immutable",
-				errors.WithID("kb.model.type_immutable"),
-			)
+		// A model a space took meanwhile must not lose its stamp.
+		if !sameRegistration(found, locked) || (used && !inUse && validation == store.ValidationReset) {
+			return errModelChanged
 		}
 
 		switch {
 		case isEmbedded(merged.Provider):
-			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, false)
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, false, validation)
 		case apiKey == "":
-			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, true)
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, nil, true, validation)
 		default:
-			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, config, false)
+			updated, err = tx.EmbeddingModelStore().Update(ctx, opts, merged, config, false, validation)
 		}
 
 		return err
@@ -165,6 +213,51 @@ func (s *EmbeddingModelService) Update(
 	}
 
 	return updated, nil
+}
+
+// revalidate decides what the update does with the validation stamp.
+func (s *EmbeddingModelService) revalidate(
+	ctx context.Context, found, merged *model.EmbeddingModel, apiKey string, domainID int64, inUse bool,
+) (store.ModelValidation, error) {
+	identity := found.Provider != merged.Provider || found.ModelRef != merged.ModelRef ||
+		found.IsSelfHosted != merged.IsSelfHosted
+	connection := found.Endpoint != merged.Endpoint || apiKey != ""
+
+	switch {
+	case !identity && !connection:
+		return store.ValidationKeep, nil
+	case !inUse:
+		return store.ValidationReset, nil
+	case identity:
+		return store.ValidationKeep, errModelInUse
+	}
+
+	key := apiKey
+	if key == "" {
+		stored, err := s.openKey(ctx, found.ID, domainID)
+		if err != nil {
+			return store.ValidationKeep, err
+		}
+
+		key = stored
+	}
+
+	provider, err := s.provider(merged.Provider)
+	if err != nil {
+		return store.ValidationKeep, err
+	}
+
+	if err := probe(ctx, provider, merged, key); err != nil {
+		return store.ValidationKeep, err
+	}
+
+	return store.ValidationStamp, nil
+}
+
+// sameRegistration reports whether a model kept the fields the update read.
+func sameRegistration(a, b *model.EmbeddingModel) bool {
+	return a.Type == b.Type && a.Name == b.Name && a.Provider == b.Provider &&
+		a.IsSelfHosted == b.IsSelfHosted && a.ModelRef == b.ModelRef && a.Endpoint == b.Endpoint
 }
 
 func (s *EmbeddingModelService) Delete(
@@ -194,10 +287,7 @@ func (s *EmbeddingModelService) Validate(
 	}
 
 	if found.DomainID == 0 {
-		return nil, errors.InvalidArgument(
-			"global models are read-only",
-			errors.WithID("kb.model.global_read_only"),
-		)
+		return nil, errGlobalReadOnly
 	}
 
 	apiKey, err := s.openKey(ctx, found.ID, opts.GetAuthOpts().GetDomainID())
@@ -205,12 +295,8 @@ func (s *EmbeddingModelService) Validate(
 		return nil, err
 	}
 
-	provider, err := s.providers.ForModel(found.Provider)
+	provider, err := s.provider(found.Provider)
 	if err != nil {
-		if stderrors.Is(err, embedding.ErrUnsupported) {
-			return nil, unsupportedProvider(err)
-		}
-
 		return nil, err
 	}
 
@@ -219,6 +305,20 @@ func (s *EmbeddingModelService) Validate(
 	}
 
 	return s.uow.EmbeddingModelStore().MarkValidated(ctx, opts)
+}
+
+// provider resolves the client of a provider key.
+func (s *EmbeddingModelService) provider(name string) (embedding.Provider, error) {
+	p, err := s.providers.ForModel(name)
+	if err != nil {
+		if stderrors.Is(err, embedding.ErrUnsupported) {
+			return nil, unsupportedProvider(err)
+		}
+
+		return nil, err
+	}
+
+	return p, nil
 }
 
 // sealKey encrypts a non-empty API key into the stored credential.

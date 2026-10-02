@@ -35,7 +35,7 @@ func TestSpaceTeamsSubquery(t *testing.T) {
 
 	for _, want := range []string{
 		"json_agg(json_build_object('id',t.id,'name',t.name)",
-		"FROM kb.team_space ts JOIN call_center.cc_team t ON t.id=ts.team_id WHERE ts.space_id=m.id)AS teams",
+		"FROM kb.team_space ts JOIN call_center.cc_team t ON t.id=ts.team_id AND t.domain_id=m.domain_id WHERE ts.space_id=m.id)AS teams",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)
