@@ -297,7 +297,7 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error) {
 	const sql = `SELECT EXISTS (
 		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.space_id = $1 AND s.domain_id = $2)`
+		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL)`
 
 	var has bool
 	if err := s.db.QueryRow(ctx, sql, spaceID, domainID).Scan(&has); err != nil {
@@ -305,6 +305,30 @@ func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (
 	}
 
 	return has, nil
+}
+
+func (s *spaceStore) HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error) {
+	const sql = `SELECT EXISTS (
+		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
+		WHERE a.id = $1 AND a.space_id = $2 AND s.domain_id = $3 AND a.deleted_at IS NULL)`
+
+	var holds bool
+	if err := s.db.QueryRow(ctx, sql, articleID, spaceID, domainID).Scan(&holds); err != nil {
+		return false, ParseError(err)
+	}
+
+	return holds, nil
+}
+
+func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error {
+	const sql = `DELETE FROM kb.article a USING kb.space s
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NOT NULL`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
 }
 
 // resolveEmbeddingSelect reads spaces with their embedding model. Outer join: a

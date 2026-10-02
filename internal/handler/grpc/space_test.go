@@ -158,6 +158,10 @@ func (f fakeSpaces) ReplaceTeams(_ context.Context, _, _, _ int64, teamIDs []int
 }
 
 func (f fakeSpaces) HasArticles(context.Context, int64, int64) (bool, error) { return false, nil }
+func (f fakeSpaces) HoldsArticle(context.Context, int64, int64, int64) (bool, error) {
+	return false, nil
+}
+func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) error { return nil }
 
 func (f fakeSpaces) ResolveEmbedding(context.Context, int64) (*model.SpaceEmbedding, error) {
 	return f.u.embedding, nil

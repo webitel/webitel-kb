@@ -228,6 +228,9 @@ func TestArticleDeleteRendersSubtreeCascade(t *testing.T) {
 		"SELECT root.id FROM root",
 		"UNION ALL",
 		"FROM tree WHERE a.id = tree.id AND a.id <> $1",
+		// A home page inside the deleted subtree is cleared.
+		"UPDATE kb.space s SET home_article_id = NULL",
+		"FROM tree WHERE s.home_article_id = tree.id",
 		"SELECT * FROM root",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
