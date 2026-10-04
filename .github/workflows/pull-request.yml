@@ -48,9 +48,9 @@ jobs:
       ldflags: >
         -s -w
         -X github.com/webitel/webitel-kb/internal/model.Version=${{ format('{0}{1}', needs.prepare.outputs.version, (github.event.repository.default_branch == github.ref_name || github.event.pull_request.number) && '-dev' || '') }}
-        -X github.com/webitel/webitel-kb/internal/model.Commit=${{ github.sha }}
-        -X github.com/webitel/webitel-kb/internal/model.CommitDate=${{ github.event.head_commit.timestamp }}
-        -X github.com/webitel/webitel-kb/internal/model.Branch=${{ github.ref_name }}
+        -X github.com/webitel/webitel-kb/internal/model.Commit=${{ needs.prepare.outputs.commit }}
+        -X github.com/webitel/webitel-kb/internal/model.CommitDate=${{ needs.prepare.outputs.commit-timestamp }}
+        -X github.com/webitel/webitel-kb/internal/model.Branch=${{ needs.prepare.outputs.branch }}
         
 
       version: ${{ needs.prepare.outputs.version }}
