@@ -1,6 +1,6 @@
 module github.com/webitel/webitel-kb
 
-go 1.26
+go 1.26.0
 
 require (
 	buf.build/gen/go/webitel/webitel-go/grpc/go v1.6.2-20260528093848-00aedb783a79.1
@@ -38,7 +38,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.uber.org/fx v1.24.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688
 	google.golang.org/grpc v1.83.1
 )
