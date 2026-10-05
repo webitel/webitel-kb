@@ -16,6 +16,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
 
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/outbox"
@@ -42,6 +43,7 @@ type Outbox interface {
 	Database() (*pgxpool.Pool, error)
 	CleanupOutbox(ctx context.Context, retention time.Duration, batch int) (int64, error)
 	Backlog(ctx context.Context) (int64, time.Duration, error)
+	CountIndexStates(ctx context.Context) (map[int32]int64, error)
 }
 
 // Elector runs the relay on exactly one instance at a time.
@@ -71,6 +73,7 @@ type Forwarder struct {
 	store   Outbox
 	broker  Broker
 	elector Elector
+	metrics *relayMetrics
 	log     *slog.Logger
 
 	cancel context.CancelFunc
@@ -83,6 +86,7 @@ func New(cfg Config, store Outbox, broker Broker, elector Elector, log *slog.Log
 		store:   store,
 		broker:  broker,
 		elector: elector,
+		metrics: newRelayMetrics(otel.GetMeterProvider()),
 		log:     log.With(slog.String("component", "relay")),
 		done:    make(chan struct{}),
 	}
@@ -135,6 +139,9 @@ func (f *Forwarder) lead(ctx context.Context) error {
 	}
 
 	f.log.Info("relay leading", slog.String("consumer_group", outbox.ConsumerGroup))
+
+	f.metrics.lead(true)
+	defer f.metrics.lead(false)
 
 	var background sync.WaitGroup
 
@@ -231,7 +238,8 @@ func (f *Forwarder) forward(publisher message.Publisher) message.NoPublishHandle
 	}
 }
 
-// observeLoop reports the undelivered backlog while this instance leads.
+// observeLoop reports the undelivered backlog and the article index states
+// while this instance leads.
 func (f *Forwarder) observeLoop(ctx context.Context) {
 	ticker := time.NewTicker(backlogInterval)
 	defer ticker.Stop()
@@ -243,21 +251,41 @@ func (f *Forwarder) observeLoop(ctx context.Context) {
 		case <-ticker.C:
 		}
 
-		count, oldest, err := f.store.Backlog(ctx)
-		if err != nil {
-			if ctx.Err() == nil {
-				f.log.Error("outbox backlog unavailable", slog.Any("error", err))
-			}
-
-			continue
-		}
-
-		if count > 0 {
-			f.log.Info("outbox backlog",
-				slog.Int64("undelivered", count),
-				slog.Duration("oldest_age", oldest))
-		}
+		f.observeBacklog(ctx)
+		f.observeIndexStates(ctx)
 	}
+}
+
+func (f *Forwarder) observeBacklog(ctx context.Context) {
+	count, oldest, err := f.store.Backlog(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			f.log.Error("outbox backlog unavailable", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	f.metrics.readBacklog(count, oldest)
+
+	if count > 0 {
+		f.log.Info("outbox backlog",
+			slog.Int64("undelivered", count),
+			slog.Duration("oldest_age", oldest))
+	}
+}
+
+func (f *Forwarder) observeIndexStates(ctx context.Context) {
+	counts, err := f.store.CountIndexStates(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			f.log.Error("article index states unavailable", slog.Any("error", err))
+		}
+
+		return
+	}
+
+	f.metrics.readIndexStates(counts)
 }
 
 // cleanupLoop removes acknowledged rows for as long as this instance leads.

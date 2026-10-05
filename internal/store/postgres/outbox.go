@@ -124,3 +124,35 @@ SELECT count(*),
 
 	return count, time.Duration(seconds * float64(time.Second)), nil
 }
+
+// CountIndexStates reports how many live articles are in each index state,
+// across domains. A state no article is in is absent.
+func (s *Store) CountIndexStates(ctx context.Context) (map[int32]int64, error) {
+	rows, err := s.Query(ctx,
+		`SELECT index_state, count(*) FROM kb.article WHERE deleted_at IS NULL GROUP BY index_state`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: count index states: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[int32]int64)
+
+	for rows.Next() {
+		var (
+			state int32
+			count int64
+		)
+
+		if err := rows.Scan(&state, &count); err != nil {
+			return nil, fmt.Errorf("postgres: count index states: %w", err)
+		}
+
+		counts[state] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgres: count index states: %w", err)
+	}
+
+	return counts, nil
+}

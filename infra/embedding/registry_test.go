@@ -39,7 +39,8 @@ func TestRegistryForModel(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if got != tt.want {
+			m, ok := got.(measured)
+			if !ok || m.Provider != tt.want || m.key != tt.provider {
 				t.Errorf("provider %q mapped to wrong implementation", tt.provider)
 			}
 		})

@@ -32,6 +32,14 @@ import (
 	_ "github.com/mbobakov/grpc-consul-resolver"
 	// Register the consul provider in the discovery factory used by ProvideSD.
 	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
+	// Register the OTel exporters selected by OTEL_*_EXPORTER.
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/stdout"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/prometheus"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/metric/stdout"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/trace/otlp"
+	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/trace/stdout"
 )
 
 func ProvideLogger(cfg *config.Config, lc fx.Lifecycle) (*slog.Logger, error) {

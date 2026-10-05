@@ -42,7 +42,12 @@ func (b *fakeBroker) Publish(
 
 func (b *fakeBroker) Close() error { return nil }
 
-type fakeOutbox struct{}
+type fakeOutbox struct {
+	backlog      int64
+	oldest       time.Duration
+	indexStates  map[int32]int64
+	observeError error
+}
 
 func (o *fakeOutbox) Database() (*pgxpool.Pool, error) { return nil, errors.New("not used") }
 
@@ -50,7 +55,13 @@ func (o *fakeOutbox) CleanupOutbox(context.Context, time.Duration, int) (int64, 
 	return 0, nil
 }
 
-func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) { return 0, 0, nil }
+func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) {
+	return o.backlog, o.oldest, o.observeError
+}
+
+func (o *fakeOutbox) CountIndexStates(context.Context) (map[int32]int64, error) {
+	return o.indexStates, o.observeError
+}
 
 func testForwarder(broker Broker, store Outbox) *Forwarder {
 	return New(

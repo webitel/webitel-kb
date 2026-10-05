@@ -3,6 +3,9 @@ package embedding
 import (
 	"fmt"
 	"net/http"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Provider keys.
@@ -21,6 +24,7 @@ const (
 type Registry struct {
 	gemini   Provider
 	endpoint Provider
+	metrics  *clientMetrics
 }
 
 // RegistryOption configures the shared HTTP behavior of the registry providers.
@@ -29,6 +33,7 @@ type RegistryOption func(*registryConfig)
 type registryConfig struct {
 	httpClient    *http.Client
 	geminiBaseURL string
+	meterProvider metric.MeterProvider
 }
 
 // WithHTTPClient sets the HTTP client used by all providers (e.g. in tests).
@@ -41,9 +46,15 @@ func WithGeminiBaseURLOption(url string) RegistryOption {
 	return func(c *registryConfig) { c.geminiBaseURL = url }
 }
 
+// WithMeterProvider sets where the provider calls are recorded; the global
+// provider by default.
+func WithMeterProvider(mp metric.MeterProvider) RegistryOption {
+	return func(c *registryConfig) { c.meterProvider = mp }
+}
+
 // NewRegistry builds the provider registry.
 func NewRegistry(opts ...RegistryOption) *Registry {
-	var cfg registryConfig
+	cfg := registryConfig{meterProvider: otel.GetMeterProvider()}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -65,16 +76,18 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 	return &Registry{
 		gemini:   NewGemini(geminiOpts...),
 		endpoint: NewEndpoint(endpointOpts...),
+		metrics:  newClientMetrics(cfg.meterProvider),
 	}
 }
 
-// ForModel returns the Provider for a model's provider key.
+// ForModel returns the Provider for a model's provider key. Every call to it
+// is recorded under that key.
 func (r *Registry) ForModel(provider string) (Provider, error) {
 	switch provider {
 	case ProviderGemini:
-		return r.gemini, nil
+		return measured{Provider: r.gemini, key: provider, metrics: r.metrics}, nil
 	case ProviderBGEM3, ProviderE5, ProviderBGEReranker, ProviderBYOM:
-		return r.endpoint, nil
+		return measured{Provider: r.endpoint, key: provider, metrics: r.metrics}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, provider)
 	}
