@@ -23,17 +23,17 @@ const defaultVersionSort = "-version_number"
 
 // createVersionSQL appends a version to an article of the caller's domain.
 // The number continues the article's own sequence, the search vector is built
-// under the configuration of the space language, and a restore may only point
-// at a version of the same article.
+// under the configuration of the space, and a restore may only point at a
+// version of the same article.
 const createVersionSQL = `INSERT INTO kb.article_version
 	(article_id, version_number, subject, body_rich_text, body_markdown, body_plain, tsv, restored_from, notes, created_by)
 	SELECT a.id,
 	       (SELECT COALESCE(max(v.version_number), 0) + 1 FROM kb.article_version v WHERE v.article_id = a.id),
-	       $3, $4::jsonb, $5, $6, to_tsvector($7::regconfig, $6), $8::bigint, $9, $10::bigint
+	       $3, $4::jsonb, $5, $6, to_tsvector(s.text_search_config::regconfig, $6), $7::bigint, $8, $9::bigint
 	FROM kb.article a JOIN kb.space s ON s.id = a.space_id
 	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
-	  AND ($8::bigint IS NULL OR EXISTS (
-	      SELECT 1 FROM kb.article_version src WHERE src.id = $8::bigint AND src.article_id = a.id))
+	  AND ($7::bigint IS NULL OR EXISTS (
+	      SELECT 1 FROM kb.article_version src WHERE src.id = $7::bigint AND src.article_id = a.id))
 	RETURNING *`
 
 // versionNumberConstraint marks a lost race for the next version number.
@@ -152,7 +152,7 @@ func (s *articleVersionStore) Locate(
 }
 
 func (s *articleVersionStore) Create(
-	ctx context.Context, opts options.Creator, in *model.ArticleVersion, textSearchConfig string,
+	ctx context.Context, opts options.Creator, in *model.ArticleVersion,
 ) (*model.ArticleVersion, error) {
 	session := opts.GetAuthOpts()
 
@@ -165,7 +165,7 @@ func (s *articleVersionStore) Create(
 
 	created, err := cteReadBack(ctx, s.db, createVersionSQL, []any{
 		in.ArticleID, session.GetDomainID(), in.Subject, in.BodyRichText,
-		in.BodyMarkdown, in.BodyPlain, textSearchConfig,
+		in.BodyMarkdown, in.BodyPlain,
 		nullIfZero(in.RestoredFrom), nullIfEmpty(in.Notes), nullIfZero(session.GetUserID()),
 	}, readSQL, readArgs, mapArticleVersion)
 	if err != nil {

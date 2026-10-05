@@ -34,17 +34,17 @@ func TestParseError(t *testing.T) {
 		{
 			"foreign key violation",
 			&pgconn.PgError{Code: pgerrcode.ForeignKeyViolation, ConstraintName: "space_model_fk", TableName: "space"},
-			codes.Aborted,
+			codes.FailedPrecondition,
 		},
 		{
 			"check violation",
 			&pgconn.PgError{Code: pgerrcode.CheckViolation, ConstraintName: "dim_check"},
-			codes.Aborted,
+			codes.InvalidArgument,
 		},
 		{
 			"not null violation",
 			&pgconn.PgError{Code: pgerrcode.NotNullViolation, TableName: "space", ColumnName: "name"},
-			codes.Aborted,
+			codes.InvalidArgument,
 		},
 		{
 			"unknown pg error is internal",

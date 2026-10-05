@@ -14,7 +14,6 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/event"
-	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/outbox"
 	"github.com/webitel/webitel-kb/internal/store"
 )
@@ -156,18 +155,4 @@ func (s *Store) CountIndexStates(ctx context.Context) (map[int32]int64, error) {
 	}
 
 	return counts, nil
-}
-
-// MarkIndexFailed records that an envelope could not be delivered and the
-// article will not be indexed from it. Without this the article would sit in
-// the pending state forever while the row itself is already acknowledged.
-func (s *Store) MarkIndexFailed(ctx context.Context, articleID int64) error {
-	_, err := s.Exec(ctx,
-		`UPDATE kb.article SET index_state = $2 WHERE id = $1`,
-		articleID, model.IndexStateFailed)
-	if err != nil {
-		return fmt.Errorf("postgres: mark index failed: %w", err)
-	}
-
-	return nil
 }

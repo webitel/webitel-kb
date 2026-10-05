@@ -16,8 +16,9 @@ const RRFK = 60
 // BranchDepth is how many chunks each side contributes to the fusion.
 const BranchDepth = 50
 
-// chunkFrom joins a chunk to the article it is the published text of.
-const chunkFrom = "kb.chunk c JOIN kb.article m ON m.published_version_id = c.version_id JOIN kb.space s ON s.id = m.space_id"
+// lexicalFrom enters the chunks of the spaces a text query was parsed for.
+const lexicalFrom = "tq JOIN kb.space s ON s.text_search_config = tq.config" +
+	" JOIN kb.article m ON m.space_id = s.id JOIN kb.chunk c ON c.version_id = m.published_version_id"
 
 // embeddingFrom enters through the vector of a chunk; the article only confirms the published text.
 const embeddingFrom = "kb.chunk_embedding e JOIN kb.chunk c ON c.id = e.chunk_id JOIN kb.article m ON m.published_version_id = c.version_id"
@@ -31,21 +32,22 @@ type vectorBranch struct {
 
 // HybridHits fuses the lexical and the vector ranking of chunks.
 type HybridHits struct {
-	lex    squirrel.SelectBuilder
-	vec    []vectorBranch
-	filter model.SearchFilter
-	topK   int
+	term    string
+	configs squirrel.SelectBuilder
+	lex     squirrel.SelectBuilder
+	vec     []vectorBranch
+	filter  model.SearchFilter
+	topK    int
 }
 
 // NewHybridHits starts the fused query of a term and its vectors.
 func NewHybridHits(q model.HybridQuery) *HybridHits {
-	query := tsQuery()
-
 	h := &HybridHits{
-		lex: squirrel.Select("c.id").
-			Column(fmt.Sprintf("ts_rank_cd(c.tsv, %s) AS rank_key", query), q.Term).
-			From(chunkFrom).
-			Where(fmt.Sprintf("c.tsv @@ %s", query), q.Term),
+		term:    q.Term,
+		configs: newSpaceConfigs(),
+		lex: squirrel.Select("c.id", "ts_rank_cd(c.tsv, tq.query) AS rank_key").
+			From(lexicalFrom).
+			Where("c.tsv @@ tq.query"),
 		filter: q.Filter,
 		topK:   q.TopK,
 	}
@@ -68,8 +70,10 @@ func NewHybridHits(q model.HybridQuery) *HybridHits {
 
 // WithScope applies the criteria every side shares; a vector side keeps to its own spaces.
 func (h *HybridHits) WithScope(domainID int64) *HybridHits {
+	h.configs = scopeSpaceConfigs(h.configs, domainID, h.filter.SpaceIDs)
+
 	lex := whereRetrievable(whereDomainScope(h.lex, domainID))
-	lex = whereSpaces(lex, h.filter.SpaceIDs)
+	lex = whereScopeSpaces(lex, h.filter.SpaceIDs)
 	h.lex = whereTags(lex, h.filter.Tags, h.filter.TagsMatchAll).
 		OrderBy("rank_key DESC", "c.id").
 		Limit(BranchDepth)
@@ -88,15 +92,20 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 
 // ToSQL renders the whole fused statement.
 func (h *HybridHits) ToSQL() (string, []any, error) {
-	lex, args, err := h.lex.ToSql()
+	queries, args, err := textQueries(h.term, h.configs).ToSql()
 	if err != nil {
 		return "", nil, err
 	}
 
-	with := fmt.Sprintf(
-		"WITH lex AS (SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (%s) t)", lex,
-	)
+	lex, lexArgs, err := h.lex.ToSql()
+	if err != nil {
+		return "", nil, err
+	}
+
+	with := fmt.Sprintf("WITH tq AS MATERIALIZED (%s), lex AS (%s)", queries, rankedList(lex))
 	union := "SELECT * FROM lex"
+
+	args = append(args, lexArgs...)
 
 	if len(h.vec) > 0 {
 		branches := make([]string, 0, len(h.vec))

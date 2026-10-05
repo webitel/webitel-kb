@@ -15,24 +15,31 @@ func TestRetrievalSearchRendersRankedPage(t *testing.T) {
 	f := &fakeQuerier{}
 	s := &retrievalStore{db: f}
 
-	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, search: "vpn", size: 10, page: 2}
+	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, search: "router", size: 10, page: 2}
 	filter := model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagsMatchAll: true}
 
 	if _, _, err := s.Search(context.Background(), opts, filter); err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 
+	if len(f.sqls) != 2 || f.sqls[0] != "SET LOCAL pg_trgm.word_similarity_threshold = 0.4" {
+		t.Fatalf("statements = %q, want the trigram setting then the query", f.sqls)
+	}
+
 	for _, want := range []string{
-		"WITH h AS (SELECT id, sum(rank) AS rank FROM (",
+		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, $1) AS query",
+		"s.domain_id = $2 AND s.id = ANY($3)",
+		", h AS (SELECT id, sum(1.0 / (60 + rank)) AS rank FROM (",
 		"UNION ALL",
-		"s.domain_id = $3",
+		"s.domain_id = $4",
 		"m.deleted_at IS NULL",
-		"m.state = $4",
-		"m.space_id = ANY($5)",
-		"m.tags @> $6",
+		"m.state = $5",
+		"s.id = ANY($6)",
+		"m.tags @> $7",
+		"$13 <% m.subject",
 		"GROUP BY id ORDER BY rank DESC, id LIMIT 11 OFFSET 10",
 		// The fragment is built outside the ranked query.
-		"ts_headline('simple', v.body_plain, websearch_to_tsquery('simple', $13)",
+		"ts_headline(s.text_search_config::regconfig, v.body_plain, websearch_to_tsquery(s.text_search_config::regconfig, $18)",
 		"FROM h JOIN kb.article m ON m.id = h.id",
 		"ORDER BY h.rank DESC, m.id",
 	} {
@@ -41,7 +48,7 @@ func TestRetrievalSearchRendersRankedPage(t *testing.T) {
 		}
 	}
 
-	if f.gotArgs[0] != "vpn" || f.gotArgs[2] != int64(5) || f.gotArgs[len(f.gotArgs)-1] != "vpn" {
+	if f.gotArgs[0] != "router" || f.gotArgs[1] != int64(5) || f.gotArgs[len(f.gotArgs)-1] != "router" {
 		t.Fatalf("args = %v, want the term around the scope of each branch", f.gotArgs)
 	}
 }
@@ -208,7 +215,7 @@ func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}}
 	q := model.HybridQuery{
-		Term:    "vpn",
+		Term:    "router",
 		Filter:  model.SearchFilter{SpaceIDs: []int64{7}},
 		Vectors: []model.ModelVector{{ModelID: 9, SpaceIDs: []int64{7}, Vector: []float32{0.5}}},
 		TopK:    10,
@@ -223,7 +230,8 @@ func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"WITH lex AS (",
+		"WITH tq AS MATERIALIZED (",
+		", lex AS (",
 		", vec AS (",
 		"s.domain_id = $",
 		"m.state = $",

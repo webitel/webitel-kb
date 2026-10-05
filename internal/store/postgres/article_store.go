@@ -22,18 +22,21 @@ import (
 const defaultArticleSort = "+subject"
 
 // createRootArticleSQL inserts a top-level article; selecting from the
-// caller's space enforces the domain scope in the same statement.
+// caller's space enforces the domain scope in the same statement and gives
+// the subject vector its configuration.
 const createRootArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by)
-	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint
+	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
+	       setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')
 	FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2
 	RETURNING *`
 
 // createChildArticleSQL inserts a child article, deriving depth from a live
 // parent of the same space; the depth constraint backstops the maximum.
 const createChildArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by)
-	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint
+	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
+	       setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')
 	FROM kb.space s
 	JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL
 	WHERE s.id = $1 AND s.domain_id = $2
@@ -42,7 +45,8 @@ const createChildArticleSQL = `INSERT INTO kb.article
 // deleteArticleCTEs soft-deletes the article and its subtree. The root is
 // written first, carrying the scope and version guards in its own WHERE so a
 // concurrent writer cannot slip past them; the subtree walk starts from the
-// written root, so a guard miss deletes nothing at all.
+// written root, so a guard miss deletes nothing at all. A space whose home page
+// was deleted is left without one.
 const deleteArticleCTEs = `WITH RECURSIVE root AS (
 	UPDATE kb.article a SET deleted_at = now(), state = $4, updated_at = now(), updated_by = $5
 	FROM kb.space s
@@ -58,6 +62,10 @@ const deleteArticleCTEs = `WITH RECURSIVE root AS (
 	UPDATE kb.article a SET deleted_at = now(), state = $4, updated_at = now(), updated_by = $5
 	FROM tree WHERE a.id = tree.id AND a.id <> $1
 	RETURNING a.id
+), home AS (
+	UPDATE kb.space s SET home_article_id = NULL
+	FROM tree WHERE s.home_article_id = tree.id
+	RETURNING s.id
 ), m AS (
 	SELECT * FROM root
 ) `
@@ -147,7 +155,7 @@ const maxTreeNodes = 10000
 // errTreeTooLarge reports a hierarchy too large for one response.
 var errTreeTooLarge = errors.New(
 	"the space hierarchy is too large to return at once: list the children level by level",
-	errors.WithCode(codes.ResourceExhausted),
+	errors.WithCode(codes.FailedPrecondition),
 	errors.WithID("kb.article.tree_too_large"),
 )
 
@@ -399,6 +407,9 @@ func (s *articleStore) Update(
 	update := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Update("kb.article m").
 		Set("subject", in.Subject).
+		Set("search_tsv", squirrel.Expr(
+			"setweight(to_tsvector(s.text_search_config::regconfig, ?::text), 'A')", in.Subject,
+		)).
 		Set("tags", nonNilSlice(in.Tags)).
 		Set("type", in.Type).
 		Set("state", in.State).
@@ -412,11 +423,12 @@ func (s *articleStore) Update(
 	}
 
 	sql, args, err := update.
+		From("kb.space s").
 		Where("m.id = ?", opts.GetID()).
 		Where("m.ver = ?", expectedVer).
 		Where("m.deleted_at IS NULL").
-		Where("EXISTS (SELECT 1 FROM kb.space s WHERE s.id = m.space_id AND s.domain_id = ?)", session.GetDomainID()).
-		Suffix("RETURNING *").
+		Where("s.id = m.space_id AND s.domain_id = ?", session.GetDomainID()).
+		Suffix("RETURNING m.*").
 		ToSql()
 	if err != nil {
 		return nil, ParseError(err)

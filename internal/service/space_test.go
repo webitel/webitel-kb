@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -74,10 +75,17 @@ type fakeSpaceStore struct {
 	teamUnknown   bool
 	teamAsked     int64
 
+	createIn    *model.Space // Create input
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
 	readBack    *model.Space // plain Locate result (the post-write read-back)
 	hasArticles bool
+	holds       bool
+	holdsAsked  [3]int64
+	purgeErr    error
+
+	// trace records the delete flow calls in order.
+	trace []string
 
 	replaceErr error
 
@@ -110,6 +118,7 @@ func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*mode
 
 func (f *fakeSpaceStore) LocateForUpdate(_ context.Context, opts options.Searcher) (*model.Space, error) {
 	f.lockedLocates++
+	f.trace = append(f.trace, "lock")
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
 
 	if f.current == nil {
@@ -119,8 +128,9 @@ func (f *fakeSpaceStore) LocateForUpdate(_ context.Context, opts options.Searche
 	return f.current, nil
 }
 
-func (f *fakeSpaceStore) Create(_ context.Context, _ options.Creator, _ *model.Space) (*model.Space, error) {
+func (f *fakeSpaceStore) Create(_ context.Context, _ options.Creator, in *model.Space) (*model.Space, error) {
 	f.createCalls++
+	f.createIn = in
 
 	return f.written, nil
 }
@@ -134,6 +144,7 @@ func (f *fakeSpaceStore) Update(_ context.Context, _ options.Updator, in *model.
 
 func (f *fakeSpaceStore) Delete(context.Context, options.Deleter) (*model.Space, error) {
 	f.deleteCalls++
+	f.trace = append(f.trace, "delete")
 
 	return f.written, nil
 }
@@ -146,7 +157,21 @@ func (f *fakeSpaceStore) ReplaceTeams(_ context.Context, spaceID, domainID, user
 }
 
 func (f *fakeSpaceStore) HasArticles(context.Context, int64, int64) (bool, error) {
+	f.trace = append(f.trace, "has")
+
 	return f.hasArticles, nil
+}
+
+func (f *fakeSpaceStore) HoldsArticle(_ context.Context, spaceID, articleID, domainID int64) (bool, error) {
+	f.holdsAsked = [3]int64{spaceID, articleID, domainID}
+
+	return f.holds, nil
+}
+
+func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) error {
+	f.trace = append(f.trace, "purge")
+
+	return f.purgeErr
 }
 
 func (f *fakeSpaceStore) ResolveEmbedding(_ context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
@@ -178,6 +203,7 @@ type gateModelStore struct {
 	models map[int64]*model.EmbeddingModel
 
 	locatedIDs []int64
+	locked     int
 }
 
 func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
@@ -192,8 +218,10 @@ func (f *gateModelStore) Locate(_ context.Context, opts options.Searcher) (*mode
 	return found, nil
 }
 
-func (f *gateModelStore) LocateForUpdate(context.Context, options.Searcher) (*model.EmbeddingModel, error) {
-	return nil, errors.Internal("not used by the space flows")
+func (f *gateModelStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.EmbeddingModel, error) {
+	f.locked++
+
+	return f.Locate(ctx, opts)
 }
 
 func (f *gateModelStore) List(context.Context, options.Searcher, model.EmbeddingModelFilter) ([]*model.EmbeddingModel, bool, error) {
@@ -204,8 +232,14 @@ func (f *gateModelStore) Create(context.Context, options.Creator, *model.Embeddi
 	return nil, errFakeUnused
 }
 
-func (f *gateModelStore) Update(context.Context, options.Updator, *model.EmbeddingModel, []byte, bool) (*model.EmbeddingModel, error) {
+func (f *gateModelStore) Update(
+	context.Context, options.Updator, *model.EmbeddingModel, []byte, bool, store.ModelValidation,
+) (*model.EmbeddingModel, error) {
 	return nil, errFakeUnused
+}
+
+func (f *gateModelStore) InUse(context.Context, int64, int64) (bool, error) {
+	return false, errFakeUnused
 }
 
 func (f *gateModelStore) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
@@ -279,6 +313,8 @@ func TestSpaceCreateValidation(t *testing.T) {
 	}{
 		{"name required", &model.Space{Language: "uk"}, codes.InvalidArgument},
 		{"language required", &model.Space{Name: "docs"}, codes.InvalidArgument},
+		{"language must be a tag", &model.Space{Name: "docs", Language: "Ukrainian"}, codes.InvalidArgument},
+		{"language must not be undetermined", &model.Space{Name: "docs", Language: "und"}, codes.InvalidArgument},
 		{
 			"vector search requires a model",
 			&model.Space{Name: "docs", Language: "uk", VectorSearchEnabled: true},
@@ -302,6 +338,11 @@ func TestSpaceCreateValidation(t *testing.T) {
 		{
 			"type mismatch: embedding as reranker",
 			&model.Space{Name: "docs", Language: "uk", RerankerModelID: 3},
+			codes.InvalidArgument,
+		},
+		{
+			"home article of a space that holds none",
+			&model.Space{Name: "docs", Language: "uk", HomeArticleID: 11},
 			codes.InvalidArgument,
 		},
 	}
@@ -375,12 +416,25 @@ func TestSpaceCreateHappyPath(t *testing.T) {
 	}
 
 	// Both models gated; the team set deduplicated.
-	if len(uow.models.locatedIDs) != 2 {
-		t.Fatalf("model gates = %v, want both models checked", uow.models.locatedIDs)
+	if len(uow.models.locatedIDs) != 2 || uow.models.locked != 2 {
+		t.Fatalf("model gates = %v (locked %d), want both models checked under lock",
+			uow.models.locatedIDs, uow.models.locked)
 	}
 
 	if len(uow.spaces.replacedWith) != 1 || len(uow.spaces.replacedWith[0]) != 2 {
 		t.Fatalf("teams replaced with %v, want deduplicated [1 2]", uow.spaces.replacedWith)
+	}
+}
+
+func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
+	svc, uow := newSpaceFixture()
+
+	if _, err := svc.Create(context.Background(), creatorOpts(), &model.Space{Name: "docs", Language: "PT-br"}, nil); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if got := uow.spaces.createIn.Language; got != "pt-BR" {
+		t.Fatalf("stored language = %q, want pt-BR", got)
 	}
 }
 
@@ -564,31 +618,97 @@ func TestSpaceUpdateSkipsGateForUnchangedModels(t *testing.T) {
 	}
 }
 
+func TestSpaceUpdateHomeArticle(t *testing.T) {
+	tests := []struct {
+		name      string
+		stored    int64
+		home      int64
+		holds     bool
+		wantCode  codes.Code
+		wantAsked bool
+	}{
+		{name: "live article of the space", home: 11, holds: true, wantCode: codes.OK, wantAsked: true},
+		{name: "not a live article of the space", home: 11, wantCode: codes.InvalidArgument, wantAsked: true},
+		{name: "unchanged home is not checked again", stored: 11, home: 11, wantCode: codes.OK},
+		{name: "cleared home needs no check", stored: 11, home: 0, wantCode: codes.OK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.current.Name = "docs"
+			uow.spaces.current.HomeArticleID = tt.stored
+			uow.spaces.holds = tt.holds
+
+			opts := updaterOpts()
+			opts.mask = []string{"home_article_id"}
+
+			_, err := svc.Update(context.Background(), opts, &model.Space{HomeArticleID: tt.home}, nil)
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("err = %v, want %v", err, tt.wantCode)
+			}
+
+			asked := uow.spaces.holdsAsked != [3]int64{}
+			if asked != tt.wantAsked {
+				t.Fatalf("home checked = %v, want %v", asked, tt.wantAsked)
+			}
+
+			// The check runs against this space in the caller's domain.
+			if asked && uow.spaces.holdsAsked != [3]int64{7, tt.home, 5} {
+				t.Fatalf("home checked with %v, want [7 %d 5]", uow.spaces.holdsAsked, tt.home)
+			}
+
+			if tt.wantCode != codes.OK && uow.spaces.updateCalls != 0 {
+				t.Fatal("store update must not run on a rejected home article")
+			}
+		})
+	}
+}
+
 func TestSpaceDeleteGate(t *testing.T) {
-	t.Run("referenced space aborts the delete", func(t *testing.T) {
-		svc, uow := newSpaceFixture()
-		uow.spaces.hasArticles = true
+	tests := []struct {
+		name      string
+		live      bool
+		purgeErr  error
+		wantCode  codes.Code
+		wantTrace []string
+	}{
+		{
+			name: "live articles refuse the delete", live: true, wantCode: codes.FailedPrecondition,
+			wantTrace: []string{"lock", "has"},
+		},
+		{
+			name: "deleted articles go with the space", wantCode: codes.OK,
+			wantTrace: []string{"lock", "has", "purge", "delete"},
+		},
+		{
+			name: "failed purge keeps the space", purgeErr: errors.Internal("boom"), wantCode: codes.Internal,
+			wantTrace: []string{"lock", "has", "purge"},
+		},
+	}
 
-		_, err := svc.Delete(context.Background(), updaterOpts())
-		if errors.Code(err) != codes.Aborted {
-			t.Fatalf("err = %v, want Aborted", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.hasArticles = tt.live
+			uow.spaces.purgeErr = tt.purgeErr
 
-		if uow.spaces.deleteCalls != 0 {
-			t.Fatal("store delete must not run while articles reference the space")
-		}
-	})
+			deleted, err := svc.Delete(context.Background(), updaterOpts())
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("err = %v, want %v", err, tt.wantCode)
+			}
 
-	t.Run("empty space deletes in a transaction", func(t *testing.T) {
-		svc, uow := newSpaceFixture()
+			if !slices.Equal(uow.spaces.trace, tt.wantTrace) {
+				t.Fatalf("calls = %v, want %v", uow.spaces.trace, tt.wantTrace)
+			}
 
-		deleted, err := svc.Delete(context.Background(), updaterOpts())
-		if err != nil || deleted.ID != 7 {
-			t.Fatalf("deleted = %+v, err %v", deleted, err)
-		}
+			if uow.transactions != 1 {
+				t.Fatalf("transactions = %d, want everything in one", uow.transactions)
+			}
 
-		if uow.transactions != 1 || uow.spaces.deleteCalls != 1 {
-			t.Fatalf("tx/delete = %d/%d, want 1/1", uow.transactions, uow.spaces.deleteCalls)
-		}
-	})
+			if tt.wantCode == codes.OK && deleted.ID != 7 {
+				t.Fatalf("deleted = %+v", deleted)
+			}
+		})
+	}
 }

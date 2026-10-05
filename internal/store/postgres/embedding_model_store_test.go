@@ -97,6 +97,7 @@ type fakeQuerier struct {
 
 	rows pgx.Rows
 	row  fakeRow
+	tag  pgconn.CommandTag
 	err  error
 }
 
@@ -109,7 +110,7 @@ func (f *fakeQuerier) record(sql string, args []any) {
 func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	f.record(sql, args)
 
-	return pgconn.CommandTag{}, f.err
+	return f.tag, f.err
 }
 
 func (f *fakeQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
@@ -483,7 +484,7 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 
 			_, err := s.Update(context.Background(), opts, &model.EmbeddingModel{
 				Type: "embedding", Name: "gem", Provider: "gemini", Dimensions: 768,
-			}, []byte("new"), tt.keepConfig)
+			}, []byte("new"), tt.keepConfig, store.ValidationReset)
 			if err != nil {
 				t.Fatalf("Update: %v", err)
 			}
@@ -492,7 +493,6 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 				t.Errorf("SQL %q: config touched = %v, want %v", f.gotSQL, got, tt.wantConfig)
 			}
 
-			// Any update invalidates the previous validation.
 			if !strings.Contains(f.gotSQL, "validated_at = $7") {
 				t.Errorf("SQL %q does not reset validated_at", f.gotSQL)
 			}
@@ -508,6 +508,64 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 	}
 }
 
+func TestEmbeddingModelUpdateValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		validation store.ModelValidation
+		want       string
+	}{
+		{name: "keep", validation: store.ValidationKeep},
+		{name: "reset", validation: store.ValidationReset, want: "validated_at = $7"},
+		{name: "stamp", validation: store.ValidationStamp, want: "validated_at = now()"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
+			s := &embeddingModelStore{db: f}
+			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5}, id: 1, fields: []string{"id"}}
+
+			_, err := s.Update(context.Background(), opts, &model.EmbeddingModel{
+				Type: "embedding", Name: "gem", Provider: "gemini", Dimensions: 768,
+			}, nil, true, tt.validation)
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if tt.want == "" && strings.Contains(f.gotSQL, "validated_at") {
+				t.Fatalf("SQL %q touches validated_at", f.gotSQL)
+			}
+
+			if tt.want != "" && !strings.Contains(f.gotSQL, tt.want) {
+				t.Fatalf("SQL %q does not contain %q", f.gotSQL, tt.want)
+			}
+		})
+	}
+}
+
+func TestEmbeddingModelInUse(t *testing.T) {
+	f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
+	s := &embeddingModelStore{db: f}
+
+	used, err := s.InUse(context.Background(), 3, 5)
+	if err != nil || !used {
+		t.Fatalf("InUse = %v, %v; want true", used, err)
+	}
+
+	for _, want := range []string{
+		"domain_id = $2 AND deleted_at IS NULL",
+		"$1 IN (embedding_model_id, reranker_model_id, target_embedding_model_id)",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+		}
+	}
+
+	if !reflect.DeepEqual(f.gotArgs, []any{int64(3), int64(5)}) {
+		t.Errorf("args = %v, want [3 5]", f.gotArgs)
+	}
+}
+
 func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 	// Pin every SET value to its column position: swapping two Set calls (or a
 	// value against its key) must fail here, not corrupt rows in production.
@@ -520,7 +578,7 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 		ModelRef: "mr1", Dimensions: 42, Endpoint: "ep1",
 	}
 
-	if _, err := s.Update(context.Background(), opts, in, []byte("cfg"), false); err != nil {
+	if _, err := s.Update(context.Background(), opts, in, []byte("cfg"), false, store.ValidationReset); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 

@@ -3,10 +3,13 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -185,19 +188,25 @@ func (s *spaceStore) locateSpace(ctx context.Context, opts options.Searcher, loc
 	return item, nil
 }
 
+// searchConfigExpr picks the kb configuration of the stemmer, or simple when
+// the cluster has no such stemmer.
+const searchConfigExpr = `COALESCE((SELECT 'kb.' || c.cfgname FROM pg_ts_config c` +
+	` WHERE c.cfgnamespace = 'kb'::regnamespace AND c.cfgname = ?), 'kb.simple')`
+
 func (s *spaceStore) Create(ctx context.Context, opts options.Creator, in *model.Space) (*model.Space, error) {
 	session := opts.GetAuthOpts()
 
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Insert(spaceTable).
 		Columns(
-			"domain_id", "name", "description", "language",
+			"domain_id", "name", "description", "language", "text_search_config",
 			"embedding_model_id", "reranker_model_id",
 			"vector_search_enabled", "rerank_enabled", "chunking_strategy",
 			"home_article_id", "created_by", "updated_by",
 		).
 		Values(
 			session.GetDomainID(), in.Name, nullIfEmpty(in.Description), in.Language,
+			squirrel.Expr(searchConfigExpr, model.TextSearchDictionary(in.Language)),
 			nullIfZero(in.EmbeddingModelID), nullIfZero(in.RerankerModelID),
 			in.VectorSearchEnabled, in.RerankEnabled, defaultIfEmpty(in.ChunkingStrategy),
 			nullIfZero(in.HomeArticleID), nullIfZero(session.GetUserID()), nullIfZero(session.GetUserID()),
@@ -249,6 +258,12 @@ func (s *spaceStore) Delete(ctx context.Context, opts options.Deleter) (*model.S
 	return s.writeReturning(ctx, sql, args, opts.GetFields())
 }
 
+// errTeamUnknown reports a team id that is not a team of the space domain.
+var errTeamUnknown = errors.InvalidArgument(
+	"team is unknown in this domain",
+	errors.WithID("kb.space.team_unknown"),
+)
+
 // ReplaceTeams rewrites the binding to exactly the given set.
 func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error {
 	const deleteSQL = `DELETE FROM kb.team_space ts USING kb.space s
@@ -263,10 +278,17 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 	}
 
 	const insertSQL = `INSERT INTO kb.team_space (team_id, space_id, created_by)
-		SELECT DISTINCT unnest($1::bigint[]), s.id, $3::bigint FROM kb.space s WHERE s.id = $2 AND s.domain_id = $4`
+		SELECT t.id, s.id, $3::bigint FROM kb.space s
+		JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id
+		WHERE s.id = $2 AND s.domain_id = $4`
 
-	if _, err := s.db.Exec(ctx, insertSQL, teamIDs, spaceID, nullIfZero(userID), domainID); err != nil {
+	tag, err := s.db.Exec(ctx, insertSQL, teamIDs, spaceID, nullIfZero(userID), domainID)
+	if err != nil {
 		return ParseError(err)
+	}
+
+	if tag.RowsAffected() != int64(len(slices.Compact(slices.Sorted(slices.Values(teamIDs))))) {
+		return errTeamUnknown
 	}
 
 	return nil
@@ -275,7 +297,7 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error) {
 	const sql = `SELECT EXISTS (
 		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.space_id = $1 AND s.domain_id = $2)`
+		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL)`
 
 	var has bool
 	if err := s.db.QueryRow(ctx, sql, spaceID, domainID).Scan(&has); err != nil {
@@ -283,6 +305,30 @@ func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (
 	}
 
 	return has, nil
+}
+
+func (s *spaceStore) HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error) {
+	const sql = `SELECT EXISTS (
+		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
+		WHERE a.id = $1 AND a.space_id = $2 AND s.domain_id = $3 AND a.deleted_at IS NULL)`
+
+	var holds bool
+	if err := s.db.QueryRow(ctx, sql, articleID, spaceID, domainID).Scan(&holds); err != nil {
+		return false, ParseError(err)
+	}
+
+	return holds, nil
+}
+
+func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error {
+	const sql = `DELETE FROM kb.article a USING kb.space s
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NOT NULL`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
 }
 
 // resolveEmbeddingSelect reads spaces with their embedding model. Outer join: a
@@ -334,8 +380,8 @@ const resolveRerankersSQL = `SELECT
 const teamSpacesSQL = `SELECT s.id
 	FROM call_center.cc_team t
 	LEFT JOIN kb.team_space ts ON ts.team_id = t.id
-	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL
-	WHERE t.id = $1 AND t.dc = $2
+	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL
+	WHERE t.id = $1 AND t.domain_id = $2
 	ORDER BY s.id`
 
 func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error) {

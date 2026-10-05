@@ -29,7 +29,7 @@ func TestVectorLiteral(t *testing.T) {
 
 func TestHybridHitsLexicalOnly(t *testing.T) {
 	q := model.HybridQuery{
-		Term:   "vpn",
+		Term:   "router",
 		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2}, Tags: []string{"net"}},
 		TopK:   10,
 	}
@@ -37,17 +37,20 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 	sql, args := mustSQLArgs(t, NewHybridHits(q).WithScope(5))
 
 	for _, want := range []string{
-		"WITH lex AS (SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (",
-		"FROM kb.chunk c JOIN kb.article m ON m.published_version_id = c.version_id JOIN kb.space s ON s.id = m.space_id",
-		"ts_rank_cd(c.tsv, websearch_to_tsquery('simple', $1)) AS rank_key",
-		"c.tsv @@ websearch_to_tsquery('simple', $2)",
-		"s.domain_id = $3",
-		"m.deleted_at IS NULL",
-		"m.state = $4",
-		"m.space_id = ANY($5)",
-		"m.tags && $6",
+		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, $1) AS query FROM " +
+			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.domain_id = $2 AND s.id = ANY($3)) AS configs)",
+		", lex AS (SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (",
+		"FROM tq JOIN kb.space s ON s.text_search_config = tq.config JOIN kb.article m ON m.space_id = s.id" +
+			" JOIN kb.chunk c ON c.version_id = m.published_version_id",
+		"ts_rank_cd(c.tsv, tq.query) AS rank_key",
+		"c.tsv @@ tq.query",
+		"s.domain_id = $4",
+		"m.state = $5",
+		"s.id = ANY($6)",
+		"m.tags && $7",
 		"ORDER BY rank_key DESC, c.id LIMIT 50) t)",
-		"h AS (SELECT id, sum(1.0 / (60 + rank)) AS score FROM (SELECT * FROM lex) branches GROUP BY id ORDER BY score DESC, id LIMIT 10)",
+		"h AS (SELECT id, sum(1.0 / (60 + rank)) AS score FROM (SELECT * FROM lex) branches" +
+			" GROUP BY id ORDER BY score DESC, id LIMIT 10)",
 		"FROM h JOIN kb.chunk c ON c.id = h.id JOIN kb.article m ON m.published_version_id = c.version_id",
 		"h.score::float8 AS score",
 		"ORDER BY h.score DESC, c.id",
@@ -57,19 +60,28 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 		}
 	}
 
-	if strings.Contains(sql, "vec") {
-		t.Errorf("SQL renders a vector branch without vectors: %q", sql)
+	if strings.Contains(sql, "vec") || strings.Contains(sql, "'simple'") || strings.Contains(sql, "m.space_id = ANY") ||
+		strings.Contains(sql, "word_similarity") {
+		t.Errorf("SQL renders a vector branch or a fixed configuration: %q", sql)
 	}
 
-	// The term appears twice in the lexical branch: rank and match.
-	if len(args) != 6 || args[0] != "vpn" || args[1] != "vpn" || args[2] != int64(5) {
+	// The term is parsed once.
+	if len(args) != 7 || args[0] != "router" || args[1] != int64(5) {
 		t.Fatalf("args = %v", args)
+	}
+}
+
+func TestHybridHitsParsesTheTermPerDomainConfig(t *testing.T) {
+	sql, _ := mustSQLArgs(t, NewHybridHits(model.HybridQuery{Term: "vpn", TopK: 5}).WithScope(5))
+
+	if !strings.Contains(sql, "FROM kb.space s WHERE s.domain_id = $2) AS configs") {
+		t.Fatalf("SQL %q does not collect the configurations of the domain", sql)
 	}
 }
 
 func TestHybridHitsVectorBranches(t *testing.T) {
 	q := model.HybridQuery{
-		Term:   "vpn",
+		Term:   "router",
 		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2, 3}},
 		Vectors: []model.ModelVector{
 			{ModelID: 9, SpaceIDs: []int64{1, 2}, Vector: []float32{0.5, 0.5}},

@@ -78,6 +78,8 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.article",
 		"SELECT s.id, NULL, 1,",
+		"updated_by, search_tsv)",
+		"setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')",
 		"FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2",
 		"RETURNING *",
 	} {
@@ -105,6 +107,7 @@ func TestArticleCreateChildDerivesDepth(t *testing.T) {
 
 	for _, want := range []string{
 		"p.depth + 1",
+		"setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')",
 		"JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL",
 		"WHERE s.id = $1 AND s.domain_id = $2",
 	} {
@@ -133,7 +136,10 @@ func TestArticleUpdateRendersGuardedCAS(t *testing.T) {
 		"AND m.ver = $",
 		"ver = m.ver + 1",
 		"m.deleted_at IS NULL",
-		"EXISTS (SELECT 1 FROM kb.space s WHERE s.id = m.space_id AND s.domain_id = $",
+		"FROM kb.space s WHERE",
+		"s.id = m.space_id AND s.domain_id = $",
+		"search_tsv = setweight(to_tsvector(s.text_search_config::regconfig, $2::text), 'A')",
+		"RETURNING m.*",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
@@ -222,6 +228,9 @@ func TestArticleDeleteRendersSubtreeCascade(t *testing.T) {
 		"SELECT root.id FROM root",
 		"UNION ALL",
 		"FROM tree WHERE a.id = tree.id AND a.id <> $1",
+		// A home page inside the deleted subtree is cleared.
+		"UPDATE kb.space s SET home_article_id = NULL",
+		"FROM tree WHERE s.home_article_id = tree.id",
 		"SELECT * FROM root",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -512,7 +521,7 @@ func TestArticleTreeRefusesAnOversizedSpace(t *testing.T) {
 
 	_, err := s.Tree(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7)
 
-	if errors.Code(err) != codes.ResourceExhausted || errors.ID(err) != "kb.article.tree_too_large" {
+	if errors.Code(err) != codes.FailedPrecondition || errors.ID(err) != "kb.article.tree_too_large" {
 		t.Fatalf("error = %v, want the tree ceiling", err)
 	}
 }

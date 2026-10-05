@@ -33,6 +33,14 @@ const maxMenuItems = 100
 // queryRescore is how many vector candidates diskann re-checks exactly.
 const queryRescore = 200
 
+// wordSimilarityThreshold is how close a term must come to a stretch of text
+// to count as a trigram match; one wrong letter in a six letter word scores
+// 0.43, so the 0.6 default lets no typo through.
+const wordSimilarityThreshold = 0.4
+
+// trigramSetting scopes the threshold to the transaction of the query.
+var trigramSetting = fmt.Sprintf("SET LOCAL pg_trgm.word_similarity_threshold = %g", wordSimilarityThreshold)
+
 type retrievalStore struct {
 	db Querier
 }
@@ -76,6 +84,10 @@ func (s *retrievalStore) Search(
 	ctx context.Context, opts options.Searcher, filter model.SearchFilter,
 ) ([]*model.ArticleSummary, bool, error) {
 	term := opts.GetSearch()
+
+	if _, err := s.db.Exec(ctx, trigramSetting); err != nil {
+		return nil, false, ParseError(err)
+	}
 
 	hits, hitArgs, err := queryobject.NewSearchHits(term).
 		WithScope(opts.GetAuthOpts().GetDomainID(), filter).

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
@@ -72,11 +74,12 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 		}
 	}
 
-	// Column order: domain_id, name, description, language, embedding_model_id,
-	// reranker_model_id, vector_search_enabled, rerank_enabled,
-	// [chunking_strategy = DEFAULT expr, no arg], home_article_id,
-	// created_by, updated_by.
-	wantArgs := []any{int64(5), "docs", (*string)(nil), "uk"}
+	// Column order: domain_id, name, description, language,
+	// text_search_config (the stemmer, bound inside the fallback expression),
+	// embedding_model_id, reranker_model_id, vector_search_enabled,
+	// rerank_enabled, [chunking_strategy = DEFAULT expr, no arg],
+	// home_article_id, created_by, updated_by.
+	wantArgs := []any{int64(5), "docs", (*string)(nil), "uk", "simple"}
 	for i, want := range wantArgs {
 		if want == (*string)(nil) {
 			if got, ok := f.gotArgs[i].(*string); !ok || got != nil {
@@ -93,16 +96,54 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 
 	// Remaining columns: embedding, reranker(nil), vector, rerank,
 	// [chunking = DEFAULT, no arg], home(nil), created_by, updated_by.
-	assertPinned(t, f.gotArgs, 4, ptrTo(int64(3)))
-	assertPinned(t, f.gotArgs, 5, (*int64)(nil))
-	assertPinned(t, f.gotArgs, 6, true)
-	assertPinned(t, f.gotArgs, 7, false)
-	assertPinned(t, f.gotArgs, 8, ptrTo(int64(11)))
-	assertPinned(t, f.gotArgs, 9, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 5, ptrTo(int64(3)))
+	assertPinned(t, f.gotArgs, 6, (*int64)(nil))
+	assertPinned(t, f.gotArgs, 7, true)
+	assertPinned(t, f.gotArgs, 8, false)
+	assertPinned(t, f.gotArgs, 9, ptrTo(int64(11)))
 	assertPinned(t, f.gotArgs, 10, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 11, ptrTo(int64(9)))
 
-	if len(f.gotArgs) != 11 {
-		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
+	if len(f.gotArgs) != 12 {
+		t.Fatalf("args = %d, want 12: %v", len(f.gotArgs), f.gotArgs)
+	}
+}
+
+func TestSpaceCreateWritesTheSearchConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		language string
+		stemmer  string
+	}{
+		{"built-in stemmer", "ru", "russian"},
+		{"region keeps the stemmer", "pt-BR", "portuguese"},
+		{"no stemmer", "uk", "simple"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
+			s := &spaceStore{db: f}
+
+			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
+			if _, err := s.Create(context.Background(), opts, &model.Space{Name: "docs", Language: tt.language}); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			for _, want := range []string{
+				"language,text_search_config,",
+				"COALESCE((SELECT 'kb.' || c.cfgname FROM pg_ts_config c" +
+					" WHERE c.cfgnamespace = 'kb'::regnamespace AND c.cfgname = $5), 'kb.simple')",
+			} {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+				}
+			}
+
+			if f.gotArgs[4] != tt.stemmer {
+				t.Fatalf("stemmer arg = %v, want %q", f.gotArgs[4], tt.stemmer)
+			}
+		})
 	}
 }
 
@@ -154,7 +195,7 @@ func TestSpaceDeleteRendersScopedCTE(t *testing.T) {
 
 func TestSpaceReplaceTeams(t *testing.T) {
 	t.Run("full replace runs scoped delete then insert", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 2")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 9, []int64{1, 2}); err != nil {
@@ -174,8 +215,38 @@ func TestSpaceReplaceTeams(t *testing.T) {
 			t.Errorf("insert not domain-scoped: %s", f.sqls[1])
 		}
 
+		if !strings.Contains(f.sqls[1], "JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id") {
+			t.Errorf("insert does not check the team domain: %s", f.sqls[1])
+		}
+
 		if got, ok := f.argsList[1][0].([]int64); !ok || len(got) != 2 {
 			t.Errorf("insert args[0] = %v, want the team ids", f.argsList[1][0])
+		}
+	})
+
+	t.Run("bound rows are checked against the distinct ids", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			teamIDs  []int64
+			inserted string
+			wantID   string
+		}{
+			{name: "all bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 2"},
+			{name: "duplicates bound once", teamIDs: []int64{2, 1, 2}, inserted: "INSERT 0 2"},
+			{name: "none bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 0", wantID: "kb.space.team_unknown"},
+			{name: "one of two bound", teamIDs: []int64{1, 2}, inserted: "INSERT 0 1", wantID: "kb.space.team_unknown"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				f := &fakeQuerier{tag: pgconn.NewCommandTag(tt.inserted)}
+				s := &spaceStore{db: f}
+
+				err := s.ReplaceTeams(context.Background(), 7, 5, 9, tt.teamIDs)
+				if got := errors.ID(err); got != tt.wantID {
+					t.Fatalf("error id = %q, want %q (err %v)", got, tt.wantID, err)
+				}
+			})
 		}
 	})
 
@@ -193,28 +264,73 @@ func TestSpaceReplaceTeams(t *testing.T) {
 	})
 }
 
-func TestSpaceHasArticles(t *testing.T) {
-	f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
-	s := &spaceStore{db: f}
-
-	has, err := s.HasArticles(context.Background(), 7, 5)
-	if err != nil || !has {
-		t.Fatalf("has = %v, err %v", has, err)
+func TestSpaceArticleChecks(t *testing.T) {
+	tests := []struct {
+		name     string
+		call     func(s *spaceStore) (bool, error)
+		want     []string
+		wantArgs []any
+	}{
+		{
+			name: "has live articles",
+			call: func(s *spaceStore) (bool, error) { return s.HasArticles(context.Background(), 7, 5) },
+			want: []string{
+				"WHERE a.space_id = $1 AND s.domain_id = $2",
+				"AND a.deleted_at IS NULL",
+			},
+			wantArgs: []any{int64(7), int64(5)},
+		},
+		{
+			name: "holds a live article",
+			call: func(s *spaceStore) (bool, error) { return s.HoldsArticle(context.Background(), 7, 11, 5) },
+			want: []string{
+				"WHERE a.id = $1 AND a.space_id = $2 AND s.domain_id = $3",
+				"AND a.deleted_at IS NULL",
+			},
+			wantArgs: []any{int64(11), int64(7), int64(5)},
+		},
 	}
 
-	// ANY referencing article blocks — the same condition the schema RESTRICT
-	// enforces; a narrower filter here would surface raw FK errors.
-	for _, absent := range []string{"state", "deleted_at"} {
-		if strings.Contains(f.gotSQL, absent) {
-			t.Errorf("SQL %q must not filter by %s", f.gotSQL, absent)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
+
+			got, err := tt.call(&spaceStore{db: f})
+			if err != nil || !got {
+				t.Fatalf("got = %v, err %v", got, err)
+			}
+
+			for _, want := range tt.want {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+				}
+			}
+
+			if !slices.Equal(f.gotArgs, tt.wantArgs) {
+				t.Fatalf("args = %v, want %v", f.gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestSpacePurgeDeletedArticles(t *testing.T) {
+	f := &fakeQuerier{}
+
+	if err := (&spaceStore{db: f}).PurgeDeletedArticles(context.Background(), 7, 5); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+
+	for _, want := range []string{
+		"DELETE FROM kb.article a USING kb.space s",
+		"a.space_id = $1 AND s.domain_id = $2",
+		"AND a.deleted_at IS NOT NULL",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}
 
-	if !strings.Contains(f.gotSQL, "s.domain_id = $2") {
-		t.Errorf("SQL %q is not domain-scoped", f.gotSQL)
-	}
-
-	if f.gotArgs[0] != int64(7) || f.gotArgs[1] != int64(5) {
+	if !slices.Equal(f.gotArgs, []any{int64(7), int64(5)}) {
 		t.Fatalf("args = %v, want [space domain]", f.gotArgs)
 	}
 }
@@ -391,7 +507,7 @@ func assertPinned(t *testing.T, args []any, i int, want any) {
 
 func TestSpaceReplaceTeamsBindsArgs(t *testing.T) {
 	t.Run("scope and creator pinned", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 2")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 9, []int64{1, 2}); err != nil {
@@ -407,14 +523,14 @@ func TestSpaceReplaceTeamsBindsArgs(t *testing.T) {
 		assertPinned(t, f.argsList[1], 2, ptrTo(int64(9)))
 		assertPinned(t, f.argsList[1], 3, int64(5))
 
-		// The store guards itself against duplicate ids.
-		if !strings.Contains(f.sqls[1], "SELECT DISTINCT unnest") {
+		// The join on team ids guards against duplicates.
+		if !strings.Contains(f.sqls[1], "t.id = ANY($1::bigint[])") {
 			t.Errorf("insert does not deduplicate: %s", f.sqls[1])
 		}
 	})
 
 	t.Run("zero creator becomes NULL", func(t *testing.T) {
-		f := &fakeQuerier{}
+		f := &fakeQuerier{tag: pgconn.NewCommandTag("INSERT 0 1")}
 		s := &spaceStore{db: f}
 
 		if err := s.ReplaceTeams(context.Background(), 7, 5, 0, []int64{1}); err != nil {
@@ -650,8 +766,8 @@ func TestSpaceTeamSpaces(t *testing.T) {
 			for _, want := range []string{
 				"FROM call_center.cc_team t",
 				"LEFT JOIN kb.team_space ts ON ts.team_id = t.id",
-				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.dc AND s.deleted_at IS NULL",
-				"t.id = $1 AND t.dc = $2",
+				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL",
+				"t.id = $1 AND t.domain_id = $2",
 				"ORDER BY s.id",
 			} {
 				if !strings.Contains(f.gotSQL, want) {

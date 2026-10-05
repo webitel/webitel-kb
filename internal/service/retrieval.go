@@ -47,7 +47,7 @@ func NewRetrievalService(
 	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, log: log}
 }
 
-// Search runs full-text search over subjects and published bodies.
+// Search runs full-text and trigram search over subjects and published bodies.
 func (s *RetrievalService) Search(
 	ctx context.Context, opts options.Searcher, filter model.SearchFilter,
 ) ([]*model.ArticleSummary, bool, error) {
@@ -56,7 +56,24 @@ func (s *RetrievalService) Search(
 		return nil, false, nil
 	}
 
-	return s.uow.RetrievalStore().Search(ctx, opts, filter)
+	var (
+		items []*model.ArticleSummary
+		next  bool
+	)
+
+	// The trigram threshold is local to the transaction the query runs in.
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+		var err error
+
+		items, next, err = uow.RetrievalStore().Search(ctx, opts, filter)
+
+		return err
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return items, next, nil
 }
 
 // Resolve returns the summaries of the requested articles, in order.
@@ -182,8 +199,9 @@ func (s *RetrievalService) embedQuery(
 		}
 
 		if space.ModelID == 0 {
-			return nil, errors.Aborted(
+			return nil, errors.New(
 				"space has no embedding model",
+				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.space.model_unset"),
 			)
 		}

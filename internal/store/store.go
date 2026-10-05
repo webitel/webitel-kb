@@ -152,7 +152,7 @@ type ArticleVersionStore interface {
 	// Create appends a version to an article, numbering it after the current
 	// last one and building the search vector with the given text search
 	// configuration.
-	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion, textSearchConfig string) (*model.ArticleVersion, error)
+	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion) (*model.ArticleVersion, error)
 }
 
 // SpaceStore persists knowledge-base spaces and their team binding. Every read
@@ -178,17 +178,23 @@ type SpaceStore interface {
 	Update(ctx context.Context, opts options.Updator, in *model.Space) (*model.Space, error)
 
 	// Delete removes the space opts identify and returns its last state. The
-	// team binding goes with it; any remaining article blocks the delete.
+	// team binding goes with it; any remaining article, deleted ones included,
+	// blocks the delete.
 	Delete(ctx context.Context, opts options.Deleter) (*model.Space, error)
 
 	// ReplaceTeams rewrites the team binding of a domain's space to exactly the
 	// given set; an empty set removes the binding.
 	ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error
 
-	// HasArticles reports whether any article still references a domain's
-	// space — the same condition the schema enforces on delete, checked here
-	// so the caller can fail with a domain error instead of a raw constraint.
+	// HasArticles reports whether a domain's space still holds a live article.
 	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
+
+	// HoldsArticle reports whether a live article belongs to a domain's space.
+	HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
+
+	// PurgeDeletedArticles removes the deleted articles of a domain's space for
+	// good, with everything that cascades from them.
+	PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error
 
 	// ResolveEmbedding returns the embedding model of a space, credential
 	// included.
@@ -208,6 +214,18 @@ type SpaceStore interface {
 	TeamSpaces(ctx context.Context, domainID, teamID int64) ([]int64, bool, error)
 }
 
+// ModelValidation says what a model update does with validated_at.
+type ModelValidation int
+
+const (
+	// ValidationKeep leaves the stamp as it is.
+	ValidationKeep ModelValidation = iota
+	// ValidationReset clears it: the model must pass validation again.
+	ValidationReset
+	// ValidationStamp sets it: the update passed the probe itself.
+	ValidationStamp
+)
+
 // EmbeddingModelStore persists the embedding/reranker model registry. Reads see
 // the caller's domain and global models; writes are restricted to the caller's
 // domain, so global models stay read-only. The provider credential (config) is
@@ -226,11 +244,16 @@ type EmbeddingModelStore interface {
 	// encrypted provider credential; nil stores NULL.
 	Create(ctx context.Context, opts options.Creator, in *model.EmbeddingModel, config []byte) (*model.EmbeddingModel, error)
 
-	// Update rewrites the writable fields of the model opts identify and resets
-	// validated_at: a changed registration must pass validation again. With
-	// keepConfig the stored credential is left untouched; otherwise config
-	// replaces it.
-	Update(ctx context.Context, opts options.Updator, in *model.EmbeddingModel, config []byte, keepConfig bool) (*model.EmbeddingModel, error)
+	// Update rewrites the writable fields of the model opts identify and applies
+	// validation to validated_at. With keepConfig the stored credential is left
+	// untouched; otherwise config replaces it.
+	Update(
+		ctx context.Context, opts options.Updator, in *model.EmbeddingModel,
+		config []byte, keepConfig bool, validation ModelValidation,
+	) (*model.EmbeddingModel, error)
+
+	// InUse reports whether a live space of the domain refers to the model.
+	InUse(ctx context.Context, id, domainID int64) (bool, error)
 
 	// Delete removes the model opts identify and returns its last state.
 	Delete(ctx context.Context, opts options.Deleter) (*model.EmbeddingModel, error)

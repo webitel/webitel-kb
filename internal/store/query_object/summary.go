@@ -2,6 +2,8 @@ package queryobject
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/Masterminds/squirrel"
 
@@ -26,9 +28,50 @@ const (
 	summaryJoinVersion
 )
 
-// tsQuery renders the parsed form of a search term.
-func tsQuery() string {
-	return fmt.Sprintf("websearch_to_tsquery('%s', ?)", model.TextSearchDefault)
+// searchFrom enters the articles of the spaces a text query was parsed for.
+const searchFrom = "tq JOIN kb.space s ON s.text_search_config = tq.config JOIN kb.article m ON m.space_id = s.id"
+
+// newSpaceConfigs starts the search configurations of the spaces a query reaches.
+func newSpaceConfigs() squirrel.SelectBuilder {
+	return squirrel.Select("DISTINCT s.text_search_config AS config").From("kb.space s")
+}
+
+// scopeSpaceConfigs keeps the configurations of the spaces in scope; no spaces
+// means the whole domain.
+func scopeSpaceConfigs(configs squirrel.SelectBuilder, domainID int64, spaceIDs []int64) squirrel.SelectBuilder {
+	configs = configs.Where("s.domain_id = ?", domainID)
+
+	if len(spaceIDs) > 0 {
+		configs = configs.Where("s.id = ANY(?)", spaceIDs)
+	}
+
+	return configs
+}
+
+// textQueries parses the term once per configuration.
+func textQueries(term string, configs squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return squirrel.Select("config").
+		Column("websearch_to_tsquery(config::regconfig, ?) AS query", term).
+		FromSelect(configs, "configs")
+}
+
+// The trigram list serves keyword terms: a shorter term resembles half the
+// vocabulary, and a whole message resembles no subject.
+const (
+	MinTrigramRunes = 4
+	MaxTrigramRunes = 64
+)
+
+// trigramTerm reports whether the term is a keyword the trigram list serves.
+func trigramTerm(term string) bool {
+	n := utf8.RuneCountInString(strings.TrimSpace(term))
+
+	return n >= MinTrigramRunes && n <= MaxTrigramRunes
+}
+
+// rankedList numbers the rows of one ranking for the fusion.
+func rankedList(sql string) string {
+	return fmt.Sprintf("SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (%s) t", sql)
 }
 
 // The predicates below are shared by the summary projection and a search.
@@ -50,6 +93,16 @@ func whereSpaces(builder squirrel.SelectBuilder, spaceIDs []int64) squirrel.Sele
 	return builder.Where("m.space_id = ANY(?)", spaceIDs)
 }
 
+// whereScopeSpaces keeps the rows of the given spaces through the joined space,
+// which the planner estimates from the space alone; empty means any.
+func whereScopeSpaces(builder squirrel.SelectBuilder, spaceIDs []int64) squirrel.SelectBuilder {
+	if len(spaceIDs) == 0 {
+		return builder
+	}
+
+	return builder.Where("s.id = ANY(?)", spaceIDs)
+}
+
 // whereTags keeps articles carrying the given tags.
 func whereTags(builder squirrel.SelectBuilder, tags []string, matchAll bool) squirrel.SelectBuilder {
 	switch {
@@ -62,39 +115,61 @@ func whereTags(builder squirrel.SelectBuilder, tags []string, matchAll bool) squ
 	}
 }
 
-// SearchHits ranks the articles a query matches, one branch per lexical side.
+// SearchHits ranks the articles a query matches: the subject and body vectors
+// and, for a keyword, the trigram similarity of the subject, fused by
+// reciprocal rank. Bodies are too long to compare by trigrams row by row.
 type SearchHits struct {
+	term    string
+	configs squirrel.SelectBuilder
 	subject squirrel.SelectBuilder
 	body    squirrel.SelectBuilder
+	similar []squirrel.SelectBuilder
 	size    int
 	page    int
 }
 
 // NewSearchHits starts the ranked query of a term.
 func NewSearchHits(term string) *SearchHits {
-	query := tsQuery()
-
-	return &SearchHits{
-		subject: squirrel.Select("m.id").
-			Column(fmt.Sprintf("ts_rank_cd(m.search_tsv, %s) AS rank", query), term).
-			From(SummaryFrom).
-			Join("kb.space s ON s.id = m.space_id").
-			Where(fmt.Sprintf("m.search_tsv @@ %s", query), term),
-		body: squirrel.Select("m.id").
-			Column(fmt.Sprintf("ts_rank_cd(v.tsv, %s) AS rank", query), term).
-			From(SummaryFrom).
-			Join("kb.space s ON s.id = m.space_id").
+	h := &SearchHits{
+		term:    term,
+		configs: newSpaceConfigs(),
+		subject: squirrel.Select("m.id", "ts_rank_cd(m.search_tsv, tq.query) AS rank_key").
+			From(searchFrom).
+			Where("m.search_tsv @@ tq.query"),
+		body: squirrel.Select("m.id", "ts_rank_cd(v.tsv, tq.query) AS rank_key").
+			From(searchFrom).
 			Join("kb.article_version v ON v.id = m.published_version_id").
-			Where(fmt.Sprintf("v.tsv @@ %s", query), term),
+			Where("v.tsv @@ tq.query"),
 	}
+
+	if trigramTerm(term) {
+		h.similar = []squirrel.SelectBuilder{
+			squirrel.Select("m.id").
+				Column("word_similarity(?, m.subject) AS rank_key", term).
+				From(SummaryFrom).
+				Join("kb.space s ON s.id = m.space_id").
+				Where("? <% m.subject", term),
+		}
+	}
+
+	return h
 }
 
-// WithScope applies the criteria both branches share.
+// WithScope applies the criteria every list shares.
 func (h *SearchHits) WithScope(domainID int64, filter model.SearchFilter) *SearchHits {
-	for _, branch := range []*squirrel.SelectBuilder{&h.subject, &h.body} {
+	h.configs = scopeSpaceConfigs(h.configs, domainID, filter.SpaceIDs)
+
+	branches := make([]*squirrel.SelectBuilder, 0, 2+len(h.similar))
+	branches = append(branches, &h.subject, &h.body)
+
+	for i := range h.similar {
+		branches = append(branches, &h.similar[i])
+	}
+
+	for _, branch := range branches {
 		scoped := whereDomainScope(*branch, domainID)
 		scoped = whereRetrievable(scoped)
-		scoped = whereSpaces(scoped, filter.SpaceIDs)
+		scoped = whereScopeSpaces(scoped, filter.SpaceIDs)
 		*branch = whereTags(scoped, filter.Tags, filter.TagsMatchAll)
 	}
 
@@ -108,25 +183,33 @@ func (h *SearchHits) WithPaging(size, page int) *SearchHits {
 	return h
 }
 
-// ToSQL renders the ranked query as a common table expression named h.
+// ToSQL renders the ranked query as common table expressions tq and h.
 func (h *SearchHits) ToSQL() (string, []any, error) {
-	subject, subjectArgs, err := h.subject.ToSql()
+	queries, args, err := textQueries(h.term, h.configs).ToSql()
 	if err != nil {
 		return "", nil, err
 	}
 
-	body, bodyArgs, err := h.body.ToSql()
-	if err != nil {
-		return "", nil, err
+	branches := append([]squirrel.SelectBuilder{h.subject, h.body}, h.similar...)
+	lists := make([]string, 0, len(branches))
+
+	for _, branch := range branches {
+		sql, branchArgs, err := branch.ToSql()
+		if err != nil {
+			return "", nil, err
+		}
+
+		lists = append(lists, rankedList(sql))
+		args = append(args, branchArgs...)
 	}
 
 	hits := fmt.Sprintf(
-		"WITH h AS (SELECT id, sum(rank) AS rank FROM (%s UNION ALL %s) branches"+
+		"WITH tq AS MATERIALIZED (%s), h AS (SELECT id, sum(1.0 / (%d + rank)) AS rank FROM (%s) branches"+
 			" GROUP BY id ORDER BY rank DESC, id%s)",
-		subject, body, pagingClause(h.size, h.page),
+		queries, RRFK, strings.Join(lists, " UNION ALL "), pagingClause(h.size, h.page),
 	)
 
-	return hits, append(subjectArgs, bodyArgs...), nil
+	return hits, args, nil
 }
 
 // pagingClause renders the page as literals.
@@ -223,13 +306,14 @@ func (q *SummaryQuery) WithIDs(ids []int64) *SummaryQuery {
 	return q
 }
 
-// WithHeadline returns the fragment the term matched as the snippet.
+// WithHeadline returns the fragment the term matched as the snippet, cut
+// under the configuration of the article space.
 func (q *SummaryQuery) WithHeadline(term string) *SummaryQuery {
-	q.ensureJoins(summaryJoinVersion)
+	q.ensureJoins(summaryJoinSpace | summaryJoinVersion)
 	q.compact = false
 	q.builder = q.builder.Column(
-		fmt.Sprintf("COALESCE(ts_headline('%s', v.body_plain, %s, '%s'), '') AS snippet",
-			model.TextSearchDefault, tsQuery(), headlineOptions),
+		fmt.Sprintf("COALESCE(ts_headline(s.text_search_config::regconfig, v.body_plain,"+
+			" websearch_to_tsquery(s.text_search_config::regconfig, ?), '%s'), '') AS snippet", headlineOptions),
 		term,
 	)
 

@@ -3,12 +3,14 @@ package relay
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -41,9 +43,6 @@ func (b *fakeBroker) Publish(
 func (b *fakeBroker) Close() error { return nil }
 
 type fakeOutbox struct {
-	failed []int64
-	err    error
-
 	backlog      int64
 	oldest       time.Duration
 	indexStates  map[int32]int64
@@ -62,12 +61,6 @@ func (o *fakeOutbox) Backlog(context.Context) (int64, time.Duration, error) {
 
 func (o *fakeOutbox) CountIndexStates(context.Context) (map[int32]int64, error) {
 	return o.indexStates, o.observeError
-}
-
-func (o *fakeOutbox) MarkIndexFailed(_ context.Context, articleID int64) error {
-	o.failed = append(o.failed, articleID)
-
-	return o.err
 }
 
 func testForwarder(broker Broker, store Outbox) *Forwarder {
@@ -121,8 +114,8 @@ func TestForwardRejectsAMessageWithoutRoutingKey(t *testing.T) {
 	broker := &fakeBroker{}
 
 	publish := testForwarder(broker, &fakeOutbox{})
-	if err := publish.forward(publish.publisherFor(event.ReindexExchange))(reindexMessage("")); err == nil {
-		t.Fatal("forward accepted a message with no routing key")
+	if err := publish.forward(publish.publisherFor(event.ReindexExchange))(reindexMessage("")); !errors.Is(err, errUndeliverable) {
+		t.Fatalf("error = %v, want an undeliverable message", err)
 	}
 
 	if len(broker.published) != 0 {
@@ -130,38 +123,28 @@ func TestForwardRejectsAMessageWithoutRoutingKey(t *testing.T) {
 	}
 }
 
-// The poison queue acknowledges the row right after this middleware, so the
-// article has to be marked here or it stays pending with nothing to deliver it.
-func TestMarkFailedRecordsTheArticle(t *testing.T) {
-	store := &fakeOutbox{}
-	handlerErr := errors.New("broker is gone")
+func TestPoisonAndRetryFilters(t *testing.T) {
+	undeliverable := fmt.Errorf("%w: bad envelope", errUndeliverable)
 
-	handler := testForwarder(&fakeBroker{}, store).markFailed(
-		func(*message.Message) ([]*message.Message, error) { return nil, handlerErr },
-	)
-
-	_, err := handler(reindexMessage("42"))
-	if !errors.Is(err, handlerErr) {
-		t.Fatalf("error = %v, want the handler error to survive", err)
+	tests := []struct {
+		name       string
+		err        error
+		wantPoison bool
+		wantRetry  bool
+	}{
+		{name: "broker failure", err: errors.New("rabbitmq connection not available"), wantRetry: true},
+		{name: "undeliverable", err: undeliverable, wantPoison: true},
 	}
 
-	if len(store.failed) != 1 || store.failed[0] != 42 {
-		t.Fatalf("marked %v, want [42]", store.failed)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := poisoned(tt.err); got != tt.wantPoison {
+				t.Errorf("poisoned = %v, want %v", got, tt.wantPoison)
+			}
 
-func TestMarkFailedLeavesASucceedingMessageAlone(t *testing.T) {
-	store := &fakeOutbox{}
-
-	handler := testForwarder(&fakeBroker{}, store).markFailed(
-		func(*message.Message) ([]*message.Message, error) { return nil, nil },
-	)
-
-	if _, err := handler(reindexMessage("42")); err != nil {
-		t.Fatalf("handler: %v", err)
-	}
-
-	if len(store.failed) != 0 {
-		t.Fatalf("marked %v on success", store.failed)
+			if got := retryable(middleware.RetryParams{Err: tt.err}); got != tt.wantRetry {
+				t.Errorf("retryable = %v, want %v", got, tt.wantRetry)
+			}
+		})
 	}
 }

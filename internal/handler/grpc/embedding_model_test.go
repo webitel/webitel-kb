@@ -66,9 +66,13 @@ func (f *modelStoreFake) Create(
 }
 
 func (f *modelStoreFake) Update(
-	context.Context, options.Updator, *model.EmbeddingModel, []byte, bool,
+	context.Context, options.Updator, *model.EmbeddingModel, []byte, bool, store.ModelValidation,
 ) (*model.EmbeddingModel, error) {
 	return nil, errors.Internal("not implemented in fake")
+}
+
+func (f *modelStoreFake) InUse(context.Context, int64, int64) (bool, error) {
+	return false, errors.Internal("not implemented in fake")
 }
 
 func (f *modelStoreFake) Delete(context.Context, options.Deleter) (*model.EmbeddingModel, error) {
