@@ -5,14 +5,21 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/webitel/webitel-go-kit/infra/health"
+
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/internal/store"
 )
 
 var Module = fx.Module("store",
 	fx.Provide(ProvideStore, ProvideUnitOfWork),
-	fx.Invoke(func(*Store) {}),
+	fx.Invoke(registerHealth),
 )
+
+// registerHealth adds the database as an informational check.
+func registerHealth(s *Store, h *health.Registry) {
+	h.Informational("postgres", s.Ping)
+}
 
 // ProvideUnitOfWork exposes the unit of work over the store. The store resolves
 // its pool per call, so providing before the pool exists is safe.

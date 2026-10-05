@@ -9,6 +9,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
 	"github.com/webitel/webitel-go-kit/infra/discovery/consul"
+	"github.com/webitel/webitel-go-kit/infra/health"
 
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -30,7 +31,7 @@ const (
 // forwarder part of every server start: the relay is not optional.
 var Module = fx.Module("relay",
 	fx.Provide(provideBroker, provideElector, provideForwarder),
-	fx.Invoke(registerForwarder),
+	fx.Invoke(registerForwarder, registerHealth),
 )
 
 func provideBroker(cfg *config.Config, log *slog.Logger) (Broker, error) {
@@ -78,4 +79,9 @@ func registerForwarder(p *Forwarder, lc fx.Lifecycle) {
 			return p.Stop(ctx)
 		},
 	})
+}
+
+// registerHealth adds the broker as an informational check.
+func registerHealth(b Broker, h *health.Registry) {
+	h.Informational("rabbitmq", b.Ping)
 }

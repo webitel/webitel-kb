@@ -24,7 +24,9 @@ require (
 	github.com/webitel/crypto/cryptostore v0.2.1
 	github.com/webitel/webitel-go-kit/appconfig v0.0.0-20260803090450-fac61ca3df42
 	github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel v0.0.0-20240829153325-0ae7f6059b52
-	github.com/webitel/webitel-go-kit/infra/otel v0.3.0
+	github.com/webitel/webitel-go-kit/infra/health v0.2.0
+	github.com/webitel/webitel-go-kit/infra/health/fx v0.0.0-20261001011034-d631118fa669
+	github.com/webitel/webitel-go-kit/infra/otel v0.3.1
 	github.com/webitel/webitel-go-kit/infra/pubsub/rabbitmq v0.0.0-20260826083159-429f167cb300
 	github.com/webitel/webitel-go-kit/infra/transport v0.0.0-20260901092450-f7cbb06aceb5
 	github.com/webitel/webitel-go-kit/pkg/errors v0.1.0
@@ -121,7 +123,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20260826083159-429f167cb300
+	github.com/webitel/webitel-go-kit/infra/discovery v0.0.0-20261001011034-d631118fa669
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

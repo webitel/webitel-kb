@@ -4,6 +4,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	healthfx "github.com/webitel/webitel-go-kit/infra/health/fx"
 
 	"github.com/webitel/webitel-kb/config"
 	"github.com/webitel/webitel-kb/infra/crypto"
@@ -29,7 +30,9 @@ func NewApp(cfg *config.Config) *fx.App {
 		),
 		fx.Invoke(func(discovery.DiscoveryProvider) error { return nil }),
 		fx.Invoke(func(crypto.Encryptor) {}),
+		fx.Invoke(registerHealthMetrics),
 
+		healthfx.Module(healthfx.Config{HTTPAddr: cfg.Health.Addr}),
 		pubsub.Module,
 		tls.Module,
 		postgres.Module,
@@ -37,5 +40,7 @@ func NewApp(cfg *config.Config) *fx.App {
 		service.Module,
 		grpcsrv.Module,
 		grpchandler.Module,
+
+		healthfx.Shutdown(),
 	)
 }

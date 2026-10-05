@@ -114,6 +114,16 @@ func (s *Store) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return pool.QueryRow(ctx, sql, args...)
 }
 
+// Ping checks the database is reachable; it backs the health check.
+func (s *Store) Ping(ctx context.Context) error {
+	pool, err := s.Database()
+	if err != nil {
+		return err
+	}
+
+	return pool.Ping(ctx)
+}
+
 // errRow delivers a row-acquisition error through the pgx.Row contract.
 type errRow struct{ err error }
 

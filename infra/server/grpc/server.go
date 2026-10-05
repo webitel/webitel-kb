@@ -33,6 +33,7 @@ var Module = fx.Module("grpc_server",
 			ProvideServer,
 		),
 	),
+	fx.Invoke(registerHealth),
 )
 
 func ProvideServer(conf *config.Config, logger *slog.Logger, tls *infratls.Config, authManager auth.Manager, lc fx.Lifecycle) (*Server, error) {
@@ -214,6 +215,11 @@ func (s *Server) Host() string {
 
 func (s *Server) Port() int {
 	return s.port
+}
+
+// Listener returns the socket the server accepts connections on.
+func (s *Server) Listener() net.Listener {
+	return s.listener
 }
 
 func publicAddr() string {

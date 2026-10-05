@@ -18,6 +18,9 @@ import (
 	"github.com/webitel/crypto/cryptobox"
 	"github.com/webitel/crypto/cryptostore"
 	"github.com/webitel/webitel-go-kit/infra/discovery"
+	"github.com/webitel/webitel-go-kit/infra/discovery/consul"
+	"github.com/webitel/webitel-go-kit/infra/health"
+	otelhealth "github.com/webitel/webitel-go-kit/infra/otel/instrumentation/health"
 	otelsdk "github.com/webitel/webitel-go-kit/infra/otel/sdk"
 
 	"github.com/webitel/webitel-kb/config"
@@ -30,8 +33,6 @@ import (
 
 	// Register the consul:// gRPC resolver used by ProvideAuthManager.
 	_ "github.com/mbobakov/grpc-consul-resolver"
-	// Register the consul provider in the discovery factory used by ProvideSD.
-	_ "github.com/webitel/webitel-go-kit/infra/discovery/consul"
 	// Register the OTel exporters selected by OTEL_*_EXPORTER.
 	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/otlp"
 	_ "github.com/webitel/webitel-go-kit/infra/otel/sdk/log/stdout"
@@ -260,13 +261,16 @@ func ProvideStorageFiles(dp discovery.DiscoveryProvider, lc fx.Lifecycle) (stora
 	return client, nil
 }
 
-func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery.DiscoveryProvider, error) {
+func ProvideSD(
+	cfg *config.Config, log *slog.Logger, h *health.Registry, lc fx.Lifecycle,
+) (discovery.DiscoveryProvider, error) {
 	provider, err := discovery.DefaultFactory.CreateProvider(
 		discovery.ProviderConsul,
 		log,
 		cfg.Consul.Addr,
 		discovery.WithHeartbeat[discovery.DiscoveryProvider](true),
 		discovery.WithTimeout[discovery.DiscoveryProvider](time.Second*30),
+		consul.WithReadiness(h.ReadyFunc()),
 	)
 	if err != nil {
 		return nil, err
@@ -304,4 +308,20 @@ func ProvideSD(cfg *config.Config, log *slog.Logger, lc fx.Lifecycle) (discovery
 	})
 
 	return provider, nil
+}
+
+// registerHealthMetrics exports the health verdict and every check as metrics.
+func registerHealthMetrics(h *health.Registry, lc fx.Lifecycle) error {
+	reg, err := otelhealth.Start(h)
+	if err != nil {
+		return err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			return reg.Unregister()
+		},
+	})
+
+	return nil
 }

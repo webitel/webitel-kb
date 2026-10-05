@@ -40,6 +40,8 @@ func (b *fakeBroker) Publish(
 	return b.err
 }
 
+func (b *fakeBroker) Ping(context.Context) error { return nil }
+
 func (b *fakeBroker) Close() error { return nil }
 
 type fakeOutbox struct {

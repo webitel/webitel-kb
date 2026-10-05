@@ -20,6 +20,7 @@ type Config struct {
 	Consul   appconfig.Consul   `mapstructure:"consul"`
 	Pubsub   appconfig.Pubsub   `mapstructure:"pubsub"`
 	Relay    RelayConfig        `mapstructure:"relay"`
+	Health   HealthConfig       `mapstructure:"health"`
 }
 
 type ServiceConfig struct {
@@ -44,6 +45,12 @@ type RelayConfig struct {
 	Retention       time.Duration `mapstructure:"retention"`
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
 	CleanupBatch    int           `mapstructure:"cleanup_batch"`
+}
+
+// HealthConfig exposes the health probes.
+type HealthConfig struct {
+	// Addr of the /livez /readyz /healthz server. Empty disables it.
+	Addr string `mapstructure:"addr"`
 }
 
 // LoadServerConfig loads the full configuration required by the gRPC server.
@@ -122,6 +129,7 @@ func registerServiceFlags() {
 	pflag.Duration("relay.retention", 72*time.Hour, "how long a relayed outbox row is kept")
 	pflag.Duration("relay.cleanup_interval", 24*time.Hour, "how often relayed outbox rows are removed")
 	pflag.Int("relay.cleanup_batch", 5000, "how many outbox rows one cleanup statement removes")
+	pflag.String("health.addr", "", "listen address of the health probes (empty disables them)")
 }
 
 func (c *Config) validate() error {
