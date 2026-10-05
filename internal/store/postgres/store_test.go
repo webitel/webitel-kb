@@ -28,4 +28,8 @@ func TestStoreQuerierBeforeOpen(t *testing.T) {
 	if err := s.QueryRow(ctx, "SELECT 1").Scan(); err == nil {
 		t.Error("QueryRow.Scan must surface the error")
 	}
+
+	if err := s.Ping(ctx); err == nil {
+		t.Error("Ping must fail before Open")
+	}
 }

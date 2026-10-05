@@ -36,3 +36,6 @@ relay:
   retention: 72h
   cleanup_interval: 24h
   cleanup_batch: 5000
+
+health:
+  addr: ""

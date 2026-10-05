@@ -22,6 +22,7 @@ const writeTimeout = 30 * time.Second
 type Broker interface {
 	Declare(ctx context.Context) error
 	Publish(ctx context.Context, exchange, routingKey string, body []byte, headers amqp.Table) error
+	Ping(ctx context.Context) error
 	Close() error
 }
 
@@ -128,6 +129,13 @@ func (b *broker) Publish(
 	ctx context.Context, exchange, routingKey string, body []byte, headers amqp.Table,
 ) error {
 	return b.publisher.Publish(ctx, exchange, routingKey, body, headers)
+}
+
+// Ping reports whether the connection is up.
+func (b *broker) Ping(ctx context.Context) error {
+	_, err := b.conn.Channel(ctx)
+
+	return err
 }
 
 func (b *broker) Close() error {
