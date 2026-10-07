@@ -31,7 +31,7 @@ var probeDocuments = []string{
 
 // Provider groups. Registration rules are driven by the group, not by the
 // self-hosted flag: cloud providers authenticate with an API key, embedded
-// ones serve the canonical HTTP contract and take no credential at all.
+// ones are reached at the registered endpoint and take no credential at all.
 var (
 	cloudProviders = map[string]struct{}{
 		embedding.ProviderGemini: {},
@@ -45,6 +45,17 @@ var (
 		embedding.ProviderE5:          {},
 		embedding.ProviderBGEReranker: {},
 		embedding.ProviderBYOM:        {},
+	}
+
+	rerankerProviders = map[string]struct{}{
+		embedding.ProviderCohere:      {},
+		embedding.ProviderBGEReranker: {},
+		embedding.ProviderBYOM:        {},
+	}
+
+	// rerankerOnlyProviders serve no embeddings.
+	rerankerOnlyProviders = map[string]struct{}{
+		embedding.ProviderBGEReranker: {},
 	}
 )
 
@@ -156,18 +167,18 @@ func (s *EmbeddingModelService) Update(
 
 	merged := found.Merge(in, mask)
 
-	if err := validateInput(merged, apiKey, false); err != nil {
-		return nil, err
-	}
-
-	setStorageDimensions(merged)
-
 	if found.Type != merged.Type {
 		return nil, errors.InvalidArgument(
 			"model type is immutable",
 			errors.WithID("kb.model.type_immutable"),
 		)
 	}
+
+	if err := validateInput(merged, apiKey, false); err != nil {
+		return nil, err
+	}
+
+	setStorageDimensions(merged)
 
 	inUse, err := s.uow.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
 	if err != nil {
@@ -502,7 +513,27 @@ func validateProvider(in *model.EmbeddingModel) error {
 		)
 	}
 
+	if !providerServes(in.Provider, in.Type) {
+		return errors.InvalidArgument(
+			"provider does not serve this model type",
+			errors.WithID("kb.model.provider_type_mismatch"),
+		)
+	}
+
 	return nil
+}
+
+// providerServes reports whether the provider has models of the type.
+func providerServes(provider, typ string) bool {
+	if typ == model.ModelTypeReranker {
+		_, ok := rerankerProviders[provider]
+
+		return ok
+	}
+
+	_, rerankerOnly := rerankerOnlyProviders[provider]
+
+	return !rerankerOnly
 }
 
 func validateKey(in *model.EmbeddingModel, apiKey string, create bool) error {

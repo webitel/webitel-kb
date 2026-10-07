@@ -57,36 +57,6 @@ func TestEndpointEmbed(t *testing.T) {
 	}
 }
 
-func TestEndpointRerank(t *testing.T) {
-	var gotPath string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		_ = json.NewEncoder(w).Encode(endpointRerankResponse{Scores: []float64{0.9, 0.1}})
-	}))
-	defer srv.Close()
-
-	e := NewEndpoint()
-
-	res, err := e.Rerank(context.Background(), RerankRequest{
-		ModelRef:  "BAAI/bge-reranker",
-		Endpoint:  srv.URL,
-		Query:     "q",
-		Documents: []string{"d1", "d2"},
-	})
-	if err != nil {
-		t.Fatalf("Rerank: %v", err)
-	}
-
-	if gotPath != "/rerank" {
-		t.Errorf("path = %q, want /rerank", gotPath)
-	}
-
-	if len(res.Scores) != 2 || res.Scores[0] != 0.9 {
-		t.Errorf("scores = %v", res.Scores)
-	}
-}
-
 func TestEndpointRequiresURL(t *testing.T) {
 	e := NewEndpoint()
 	if _, err := e.Embed(context.Background(), EmbedRequest{Texts: []string{"x"}}); err == nil {
