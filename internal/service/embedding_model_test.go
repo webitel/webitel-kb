@@ -347,6 +347,61 @@ func TestValidateInput(t *testing.T) {
 			create: true,
 		},
 		{
+			name: "cohere reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderCohere
+				in.ModelRef = "rerank-v3.5"
+			},
+			apiKey: "k", create: true,
+		},
+		{
+			name: "byom reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderBYOM
+			},
+			create: true,
+		},
+		{
+			name: "byom embedding",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Provider = embedding.ProviderBYOM
+			},
+			create: true,
+		},
+		{
+			name:   "gemini reranker",
+			mutate: func(in *model.EmbeddingModel) { in.Type = model.ModelTypeReranker },
+			apiKey: "k", create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
+			name: "openai reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderOpenAI
+			},
+			apiKey: "k", create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
+			name: "self-hosted embedding provider as reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+			},
+			create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
+			name: "reranker provider as embedding",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Provider = embedding.ProviderBGEReranker
+			},
+			create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
 			name:   "relative endpoint",
 			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "embedder:8080" },
 			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
@@ -588,31 +643,50 @@ func TestUpdateAppliesMask(t *testing.T) {
 }
 
 func TestUpdateTypeImmutable(t *testing.T) {
-	models := &fakeModelStore{
-		located: &model.EmbeddingModel{ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding},
+	tests := []struct {
+		name   string
+		stored string
+		flip   *model.EmbeddingModel
+	}{
+		{
+			name:   "embedding to reranker",
+			stored: model.ModelTypeEmbedding,
+			flip: &model.EmbeddingModel{
+				Type: model.ModelTypeReranker, Name: "bge local", Provider: embedding.ProviderBGEReranker,
+				IsSelfHosted: true, ModelRef: "BAAI/bge-reranker-v2-m3",
+			},
+		},
+		{
+			name:   "reranker to embedding of a reranker-only provider",
+			stored: model.ModelTypeReranker,
+			flip: &model.EmbeddingModel{
+				Type: model.ModelTypeEmbedding, Name: "bge local", Provider: embedding.ProviderBGEReranker,
+				IsSelfHosted: true, ModelRef: "BAAI/bge-reranker-v2-m3",
+			},
+		},
 	}
-	svc := newModelService(models, fakeSealer{}, &fakeResolver{})
-	opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1}
 
-	flip := &model.EmbeddingModel{
-		Type:         model.ModelTypeReranker,
-		Name:         "bge local",
-		Provider:     embedding.ProviderBGEReranker,
-		IsSelfHosted: true,
-		ModelRef:     "BAAI/bge-reranker-v2-m3",
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{
+				located: &model.EmbeddingModel{ID: 1, DomainID: 1, Type: tt.stored},
+			}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1}
 
-	_, err := svc.Update(context.Background(), opts, flip, "")
-	if err == nil || errors.ID(err) != "kb.model.type_immutable" || errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("err = %v, want kb.model.type_immutable InvalidArgument", err)
-	}
+			_, err := svc.Update(context.Background(), opts, tt.flip, "")
+			if err == nil || errors.ID(err) != "kb.model.type_immutable" || errors.Code(err) != codes.InvalidArgument {
+				t.Fatalf("err = %v, want kb.model.type_immutable InvalidArgument", err)
+			}
 
-	if models.updateCalls != 0 {
-		t.Fatalf("update calls = %d, want none after a rejected type flip", models.updateCalls)
-	}
+			if models.updateCalls != 0 {
+				t.Fatalf("update calls = %d, want none after a rejected type flip", models.updateCalls)
+			}
 
-	if !slices.Contains(models.locateFields, "type") {
-		t.Fatalf("current-read fields = %v, must request type", models.locateFields)
+			if !slices.Contains(models.locateFields, "type") {
+				t.Fatalf("current-read fields = %v, must request type", models.locateFields)
+			}
+		})
 	}
 }
 

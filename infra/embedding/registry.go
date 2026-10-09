@@ -23,6 +23,7 @@ const (
 // Registry maps a provider key to its Provider implementation.
 type Registry struct {
 	gemini   Provider
+	cohere   Provider
 	endpoint Provider
 	metrics  *clientMetrics
 }
@@ -33,6 +34,7 @@ type RegistryOption func(*registryConfig)
 type registryConfig struct {
 	httpClient    *http.Client
 	geminiBaseURL string
+	cohereBaseURL string
 	meterProvider metric.MeterProvider
 }
 
@@ -44,6 +46,11 @@ func WithHTTPClient(hc *http.Client) RegistryOption {
 // WithGeminiBaseURLOption overrides the Gemini base URL (used in tests).
 func WithGeminiBaseURLOption(url string) RegistryOption {
 	return func(c *registryConfig) { c.geminiBaseURL = url }
+}
+
+// WithCohereBaseURLOption overrides the Cohere base URL (used in tests).
+func WithCohereBaseURLOption(url string) RegistryOption {
+	return func(c *registryConfig) { c.cohereBaseURL = url }
 }
 
 // WithMeterProvider sets where the provider calls are recorded; the global
@@ -68,6 +75,15 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 		geminiOpts = append(geminiOpts, WithGeminiBaseURL(cfg.geminiBaseURL))
 	}
 
+	cohereOpts := make([]CohereOption, 0, 2)
+	if cfg.httpClient != nil {
+		cohereOpts = append(cohereOpts, WithCohereHTTPClient(cfg.httpClient))
+	}
+
+	if cfg.cohereBaseURL != "" {
+		cohereOpts = append(cohereOpts, WithCohereBaseURL(cfg.cohereBaseURL))
+	}
+
 	endpointOpts := make([]EndpointOption, 0, 1)
 	if cfg.httpClient != nil {
 		endpointOpts = append(endpointOpts, WithEndpointHTTPClient(cfg.httpClient))
@@ -75,6 +91,7 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 
 	return &Registry{
 		gemini:   NewGemini(geminiOpts...),
+		cohere:   NewCohere(cohereOpts...),
 		endpoint: NewEndpoint(endpointOpts...),
 		metrics:  newClientMetrics(cfg.meterProvider),
 	}
@@ -86,6 +103,8 @@ func (r *Registry) ForModel(provider string) (Provider, error) {
 	switch provider {
 	case ProviderGemini:
 		return measured{Provider: r.gemini, key: provider, metrics: r.metrics}, nil
+	case ProviderCohere:
+		return measured{Provider: r.cohere, key: provider, metrics: r.metrics}, nil
 	case ProviderBGEM3, ProviderE5, ProviderBGEReranker, ProviderBYOM:
 		return measured{Provider: r.endpoint, key: provider, metrics: r.metrics}, nil
 	default:

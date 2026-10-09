@@ -14,12 +14,12 @@ func TestRegistryForModel(t *testing.T) {
 		wantErr  bool
 	}{
 		{ProviderGemini, r.gemini, false},
+		{ProviderCohere, r.cohere, false},
 		{ProviderBGEM3, r.endpoint, false},
 		{ProviderE5, r.endpoint, false},
 		{ProviderBGEReranker, r.endpoint, false},
 		{ProviderBYOM, r.endpoint, false},
 		{ProviderOpenAI, nil, true},
-		{ProviderCohere, nil, true},
 		{ProviderAzure, nil, true},
 		{"unknown", nil, true},
 	}

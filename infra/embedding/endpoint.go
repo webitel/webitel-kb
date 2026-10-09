@@ -42,16 +42,6 @@ type endpointEmbedResponse struct {
 	Embeddings [][]float32 `json:"embeddings"`
 }
 
-type endpointRerankRequest struct {
-	Model     string   `json:"model"`
-	Query     string   `json:"query"`
-	Documents []string `json:"documents"`
-}
-
-type endpointRerankResponse struct {
-	Scores []float64 `json:"scores"`
-}
-
 func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, error) {
 	if req.Endpoint == "" {
 		return EmbedResult{}, errors.New("embedding: endpoint url is required")
@@ -80,27 +70,13 @@ func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, er
 	return EmbedResult{Vectors: out.Embeddings}, nil
 }
 
+// Rerank speaks the Cohere rerank contract, as vLLM and llama.cpp server do.
 func (e *Endpoint) Rerank(ctx context.Context, req RerankRequest) (RerankResult, error) {
 	if req.Endpoint == "" {
 		return RerankResult{}, errors.New("embedding: endpoint url is required")
 	}
 
-	body := endpointRerankRequest{
-		Model:     req.ModelRef,
-		Query:     req.Query,
-		Documents: req.Documents,
-	}
-
-	var out endpointRerankResponse
-	if err := e.client.doJSON(ctx, http.MethodPost, endpointURL(req.Endpoint, "rerank"), nil, body, &out); err != nil {
-		return RerankResult{}, err
-	}
-
-	if len(out.Scores) != len(req.Documents) {
-		return RerankResult{}, fmt.Errorf("embedding: endpoint returned %d scores for %d documents", len(out.Scores), len(req.Documents))
-	}
-
-	return RerankResult(out), nil
+	return rerank(ctx, e.client, req.Endpoint, nil, req)
 }
 
 func endpointTask(t TaskType) string {
