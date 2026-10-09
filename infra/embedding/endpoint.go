@@ -36,7 +36,7 @@ func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, er
 		return EmbedResult{}, errors.New("embedding: endpoint url is required")
 	}
 
-	return embed(ctx, e.client, req.Endpoint, nil, req, 0)
+	return embed(ctx, e.client, req.Endpoint, openAIRoute, nil, req, 0)
 }
 
 // Rerank speaks the Cohere rerank contract, as vLLM and llama.cpp server do.

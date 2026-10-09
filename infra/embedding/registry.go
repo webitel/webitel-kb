@@ -25,6 +25,7 @@ type Registry struct {
 	gemini   Provider
 	cohere   Provider
 	openai   Provider
+	azure    Provider
 	endpoint Provider
 	e5       Provider
 	metrics  *clientMetrics
@@ -101,6 +102,11 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 		openAIOpts = append(openAIOpts, WithOpenAIBaseURL(cfg.openAIBaseURL))
 	}
 
+	azureOpts := make([]AzureOption, 0, 1)
+	if cfg.httpClient != nil {
+		azureOpts = append(azureOpts, WithAzureHTTPClient(cfg.httpClient))
+	}
+
 	endpointOpts := make([]EndpointOption, 0, 1)
 	if cfg.httpClient != nil {
 		endpointOpts = append(endpointOpts, WithEndpointHTTPClient(cfg.httpClient))
@@ -112,6 +118,7 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 		gemini:   NewGemini(geminiOpts...),
 		cohere:   NewCohere(cohereOpts...),
 		openai:   NewOpenAI(openAIOpts...),
+		azure:    NewAzure(azureOpts...),
 		endpoint: endpoint,
 		e5:       prefixed{Provider: endpoint, query: "query: ", document: "passage: "},
 		metrics:  newClientMetrics(cfg.meterProvider),
@@ -128,6 +135,8 @@ func (r *Registry) ForModel(provider string) (Provider, error) {
 		return measured{Provider: r.cohere, key: provider, metrics: r.metrics}, nil
 	case ProviderOpenAI:
 		return measured{Provider: r.openai, key: provider, metrics: r.metrics}, nil
+	case ProviderAzure:
+		return measured{Provider: r.azure, key: provider, metrics: r.metrics}, nil
 	case ProviderE5:
 		return measured{Provider: r.e5, key: provider, metrics: r.metrics}, nil
 	case ProviderBGEM3, ProviderBGEReranker, ProviderBYOM:

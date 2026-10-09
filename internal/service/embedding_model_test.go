@@ -451,6 +451,51 @@ func TestValidateInput(t *testing.T) {
 			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
 		},
 		{
+			name: "azure at its resource",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+				in.Endpoint = "https://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true,
+		},
+		{
+			name: "azure without its resource",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "azure over plain http",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+				in.Endpoint = "http://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name: "azure reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderAzure
+				in.Dimensions = 0
+				in.Endpoint = "https://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
+			name: "cohere embedding",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderCohere
+				in.ModelRef = "embed-multilingual-v3.0"
+				in.Dimensions = 1024
+			},
+			apiKey: "k", create: true,
+		},
+		{
 			name:   "cloud create without key",
 			mutate: func(*model.EmbeddingModel) {},
 			create: true, wantID: "kb.model.api_key_required",
@@ -618,6 +663,74 @@ func TestUpdateCredentialFlow(t *testing.T) {
 
 			if string(models.updateConfig) != tt.wantConfig {
 				t.Fatalf("config = %q, want %q", models.updateConfig, tt.wantConfig)
+			}
+		})
+	}
+}
+
+func TestUpdateKeyFollowsTheResource(t *testing.T) {
+	azure := &model.EmbeddingModel{
+		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "azure prod",
+		Provider: embedding.ProviderAzure, ModelRef: "kb-embeddings", Dimensions: 768,
+		Endpoint: "https://kb.openai.azure.com",
+	}
+	openai := &model.EmbeddingModel{
+		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "openai prod",
+		Provider: embedding.ProviderOpenAI, ModelRef: "kb-embeddings", Dimensions: 768,
+		Endpoint: "https://kb.openai.azure.com",
+	}
+
+	tests := []struct {
+		name      string
+		stored    *model.EmbeddingModel
+		in        *model.EmbeddingModel
+		apiKey    string
+		mask      []string
+		wantErrID string
+	}{
+		{
+			name: "another resource without a key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, mask: []string{"endpoint"},
+			wantErrID: "kb.model.api_key_required",
+		},
+		{
+			name: "another resource with an unmasked key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, apiKey: "next", mask: []string{"endpoint"},
+			wantErrID: "kb.model.api_key_required",
+		},
+		{
+			name: "another resource with its key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, apiKey: "next", mask: []string{"endpoint", "api_key"},
+		},
+		{
+			name: "same resource keeps the stored key", stored: azure,
+			in: &model.EmbeddingModel{Name: "renamed"}, mask: []string{"name"},
+		},
+		{
+			name: "another provider's key does not move to azure", stored: openai,
+			in: &model.EmbeddingModel{Provider: embedding.ProviderAzure}, mask: []string{"provider"},
+			wantErrID: "kb.model.api_key_required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{located: tt.stored, written: &model.EmbeddingModel{ID: 1}}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1, mask: tt.mask}
+
+			_, err := svc.Update(context.Background(), opts, tt.in, tt.apiKey)
+
+			if tt.wantErrID == "" {
+				if err != nil || models.updateCalls != 1 {
+					t.Fatalf("Update: err = %v, writes = %d", err, models.updateCalls)
+				}
+
+				return
+			}
+
+			if errors.ID(err) != tt.wantErrID || models.updateCalls != 0 {
+				t.Fatalf("Update: err = %v, writes = %d; want %q and no write", err, models.updateCalls, tt.wantErrID)
 			}
 		})
 	}

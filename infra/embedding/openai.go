@@ -30,10 +30,11 @@ type embedData struct {
 	Embedding []float32 `json:"embedding"`
 }
 
-// embed vectorizes the texts over the OpenAI embeddings contract at root.
-// dimensions is sent only when non-zero.
+// embed vectorizes the texts over the OpenAI embeddings contract at the route of
+// root. dimensions is sent only when non-zero.
 func embed(
-	ctx context.Context, client *httpClient, root string, headers map[string]string, req EmbedRequest, dimensions int,
+	ctx context.Context, client *httpClient, root, route string, headers map[string]string, req EmbedRequest,
+	dimensions int,
 ) (EmbedResult, error) {
 	if len(req.Texts) == 0 {
 		return EmbedResult{Vectors: make([][]float32, 0)}, nil
@@ -41,7 +42,7 @@ func embed(
 
 	body := embedRequest{Model: req.ModelRef, Input: req.Texts, Dimensions: dimensions}
 
-	target, err := serviceURL(root, openAIRoute)
+	target, err := serviceURL(root, route)
 	if err != nil {
 		return EmbedResult{}, err
 	}
@@ -96,7 +97,7 @@ func NewOpenAI(opts ...OpenAIOption) *OpenAI {
 func (o *OpenAI) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, error) {
 	headers := map[string]string{"Authorization": "Bearer " + req.APIKey}
 
-	return embed(ctx, o.client, o.baseURL, headers, req, req.Dimensions)
+	return embed(ctx, o.client, o.baseURL, openAIRoute, headers, req, req.Dimensions)
 }
 
 func (o *OpenAI) Rerank(context.Context, RerankRequest) (RerankResult, error) {

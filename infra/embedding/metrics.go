@@ -30,6 +30,8 @@ var durationBuckets = func() []float64 {
 var genAIProviders = map[string]genaiconv.ProviderNameAttr{
 	ProviderGemini: genaiconv.ProviderNameGCPGemini,
 	ProviderOpenAI: genaiconv.ProviderNameOpenAI,
+	ProviderCohere: genaiconv.ProviderNameCohere,
+	ProviderAzure:  genaiconv.ProviderNameAzureAIOpenAI,
 }
 
 // clientMetrics records the calls to model providers.

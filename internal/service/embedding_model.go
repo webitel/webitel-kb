@@ -30,8 +30,9 @@ var probeDocuments = []string{
 }
 
 // Provider groups. Registration rules are driven by the group, not by the
-// self-hosted flag: cloud providers authenticate with an API key, embedded
-// ones are reached at the registered endpoint and take no credential at all.
+// self-hosted flag: cloud providers authenticate with an API key (azure at the
+// registered resource, the others at their fixed address), embedded ones are
+// reached at the registered endpoint and take no credential at all.
 var (
 	cloudProviders = map[string]struct{}{
 		embedding.ProviderGemini: {},
@@ -176,6 +177,10 @@ func (s *EmbeddingModelService) Update(
 		return nil, err
 	}
 
+	if err := keyFollowsResource(found, merged, apiKey); err != nil {
+		return nil, err
+	}
+
 	inUse, err := s.uow.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
 	if err != nil {
 		return nil, err
@@ -220,6 +225,28 @@ func (s *EmbeddingModelService) Update(
 	}
 
 	return updated, nil
+}
+
+// errResourceKeyRequired refuses to send a stored key to a resource it was not
+// given for.
+var errResourceKeyRequired = errors.InvalidArgument(
+	"a new resource address requires its api_key",
+	errors.WithID("kb.model.api_key_required"),
+)
+
+// keyFollowsResource requires a new key when a model moves to another resource
+// of a provider reached at the registered address (azure): the stored key
+// belongs to the old one.
+func keyFollowsResource(found, merged *model.EmbeddingModel, apiKey string) error {
+	if merged.Provider != embedding.ProviderAzure || apiKey != "" {
+		return nil
+	}
+
+	if found.Provider == merged.Provider && found.Endpoint == merged.Endpoint {
+		return nil
+	}
+
+	return errResourceKeyRequired
 }
 
 // revalidate decides what the update does with the validation stamp.
@@ -482,7 +509,35 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 		)
 	}
 
+	if err := validateResourceEndpoint(in); err != nil {
+		return err
+	}
+
 	return validateKey(in, apiKey, create)
+}
+
+// validateResourceEndpoint requires the resource of a cloud provider reached at
+// the registered address (azure): the key travels there, so only over https.
+func validateResourceEndpoint(in *model.EmbeddingModel) error {
+	if in.Provider != embedding.ProviderAzure {
+		return nil
+	}
+
+	if in.Endpoint == "" {
+		return errors.InvalidArgument(
+			"endpoint is required for this provider",
+			errors.WithID("kb.model.endpoint_required"),
+		)
+	}
+
+	if u, err := url.Parse(in.Endpoint); err != nil || u.Scheme != "https" {
+		return errors.InvalidArgument(
+			"endpoint of a cloud resource must use https",
+			errors.WithID("kb.model.endpoint_invalid"),
+		)
+	}
+
+	return nil
 }
 
 // validateDimensions requires an embedding model to produce a vector size the

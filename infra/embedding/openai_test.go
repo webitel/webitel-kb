@@ -14,9 +14,10 @@ import (
 
 // embedCall is what a fake embeddings server saw.
 type embedCall struct {
-	path string
-	auth string
-	body embedRequest
+	path   string
+	auth   string
+	apiKey string
+	body   embedRequest
 }
 
 // embedServer answers input i with the vector [i, i] and lists the vectors in
@@ -25,7 +26,7 @@ func embedServer(t *testing.T, calls *[]embedCall) *httptest.Server {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		call := embedCall{path: r.URL.Path, auth: r.Header.Get("Authorization")}
+		call := embedCall{path: r.URL.Path, auth: r.Header.Get("Authorization"), apiKey: r.Header.Get("api-key")}
 		_ = json.NewDecoder(r.Body).Decode(&call.body)
 		*calls = append(*calls, call)
 
@@ -49,6 +50,7 @@ func TestEmbedProviders(t *testing.T) {
 		apiKey   string
 		wantPath string
 		wantAuth string
+		wantKey  string
 		wantDims int
 	}{
 		{
@@ -81,6 +83,24 @@ func TestEmbedProviders(t *testing.T) {
 			wantAuth: "Bearer secret",
 			wantDims: 768,
 		},
+		{
+			name:     "azure at the root of its resource",
+			provider: func(string) Provider { return NewAzure() },
+			endpoint: func(base string) string { return base },
+			apiKey:   "secret",
+			wantPath: "/openai/v1/embeddings",
+			wantKey:  "secret",
+			wantDims: 768,
+		},
+		{
+			name:     "azure registered with the v1 base",
+			provider: func(string) Provider { return NewAzure() },
+			endpoint: func(base string) string { return base + "/openai/v1/" },
+			apiKey:   "secret",
+			wantPath: "/openai/v1/embeddings",
+			wantKey:  "secret",
+			wantDims: 768,
+		},
 	}
 
 	for _, tt := range tests {
@@ -105,8 +125,9 @@ func TestEmbedProviders(t *testing.T) {
 			}
 
 			got := calls[0]
-			if got.path != tt.wantPath || got.auth != tt.wantAuth {
-				t.Errorf("path = %q, authorization = %q; want %q, %q", got.path, got.auth, tt.wantPath, tt.wantAuth)
+			if got.path != tt.wantPath || got.auth != tt.wantAuth || got.apiKey != tt.wantKey {
+				t.Errorf("path = %q, authorization = %q, api-key = %q; want %q, %q, %q",
+					got.path, got.auth, got.apiKey, tt.wantPath, tt.wantAuth, tt.wantKey)
 			}
 
 			if got.body.Model != "m" || !slices.Equal(got.body.Input, []string{"a", "b", "c"}) || got.body.Dimensions != tt.wantDims {

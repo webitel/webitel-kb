@@ -20,7 +20,7 @@ func TestRegistryForModel(t *testing.T) {
 		{ProviderE5, r.e5, false},
 		{ProviderBGEReranker, r.endpoint, false},
 		{ProviderBYOM, r.endpoint, false},
-		{ProviderAzure, nil, true},
+		{ProviderAzure, r.azure, false},
 		{"unknown", nil, true},
 	}
 
