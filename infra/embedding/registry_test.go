@@ -15,11 +15,11 @@ func TestRegistryForModel(t *testing.T) {
 	}{
 		{ProviderGemini, r.gemini, false},
 		{ProviderCohere, r.cohere, false},
+		{ProviderOpenAI, r.openai, false},
 		{ProviderBGEM3, r.endpoint, false},
-		{ProviderE5, r.endpoint, false},
+		{ProviderE5, r.e5, false},
 		{ProviderBGEReranker, r.endpoint, false},
 		{ProviderBYOM, r.endpoint, false},
-		{ProviderOpenAI, nil, true},
 		{ProviderAzure, nil, true},
 		{"unknown", nil, true},
 	}

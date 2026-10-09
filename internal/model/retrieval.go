@@ -42,9 +42,10 @@ type SemanticQuery struct {
 
 // ModelVector is the query embedded under one model, with the spaces that model serves.
 type ModelVector struct {
-	ModelID  int64
-	SpaceIDs []int64
-	Vector   []float32
+	ModelID    int64
+	Dimensions int32
+	SpaceIDs   []int64
+	Vector     []float32
 }
 
 // HybridQuery is what the store fuses: the lexical term and one vector per model.

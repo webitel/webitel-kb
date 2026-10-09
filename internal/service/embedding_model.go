@@ -99,8 +99,6 @@ func (s *EmbeddingModelService) Create(
 		return nil, err
 	}
 
-	setStorageDimensions(in)
-
 	config, err := s.sealKey(ctx, apiKey)
 	if err != nil {
 		return nil, err
@@ -111,7 +109,7 @@ func (s *EmbeddingModelService) Create(
 
 // modelMergeFields is what the locked read must carry for the merge.
 var modelMergeFields = []string{
-	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "endpoint",
+	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint",
 }
 
 // errGlobalReadOnly refuses a write to a model seeded for every domain.
@@ -122,7 +120,7 @@ var errGlobalReadOnly = errors.InvalidArgument(
 
 // errModelInUse refuses an identity change of a model a space relies on.
 var errModelInUse = errors.New(
-	"a model used by a space cannot change its provider or model",
+	"a model used by a space cannot change its provider, model or dimensions",
 	errors.WithCode(codes.FailedPrecondition),
 	errors.WithID("kb.model.in_use"),
 )
@@ -178,8 +176,6 @@ func (s *EmbeddingModelService) Update(
 		return nil, err
 	}
 
-	setStorageDimensions(merged)
-
 	inUse, err := s.uow.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
 	if err != nil {
 		return nil, err
@@ -231,7 +227,7 @@ func (s *EmbeddingModelService) revalidate(
 	ctx context.Context, found, merged *model.EmbeddingModel, apiKey string, domainID int64, inUse bool,
 ) (store.ModelValidation, error) {
 	identity := found.Provider != merged.Provider || found.ModelRef != merged.ModelRef ||
-		found.IsSelfHosted != merged.IsSelfHosted
+		found.IsSelfHosted != merged.IsSelfHosted || found.Dimensions != merged.Dimensions
 	connection := found.Endpoint != merged.Endpoint || apiKey != ""
 
 	switch {
@@ -268,7 +264,8 @@ func (s *EmbeddingModelService) revalidate(
 // sameRegistration reports whether a model kept the fields the update read.
 func sameRegistration(a, b *model.EmbeddingModel) bool {
 	return a.Type == b.Type && a.Name == b.Name && a.Provider == b.Provider &&
-		a.IsSelfHosted == b.IsSelfHosted && a.ModelRef == b.ModelRef && a.Endpoint == b.Endpoint
+		a.IsSelfHosted == b.IsSelfHosted && a.ModelRef == b.ModelRef &&
+		a.Dimensions == b.Dimensions && a.Endpoint == b.Endpoint
 }
 
 func (s *EmbeddingModelService) Delete(
@@ -474,9 +471,13 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 		)
 	}
 
+	if err := validateDimensions(in); err != nil {
+		return err
+	}
+
 	if in.Endpoint != "" && !validEndpointURL(in.Endpoint) {
 		return errors.InvalidArgument(
-			"endpoint must be an absolute http(s) URL",
+			"endpoint must be an absolute http(s) URL without a query or fragment",
 			errors.WithID("kb.model.endpoint_invalid"),
 		)
 	}
@@ -484,15 +485,29 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 	return validateKey(in, apiKey, create)
 }
 
-// setStorageDimensions assigns the vector size the schema stores.
-func setStorageDimensions(in *model.EmbeddingModel) {
-	if in.Type == model.ModelTypeEmbedding {
-		in.Dimensions = model.EmbeddingStorageDimensions
+// validateDimensions requires an embedding model to produce a vector size the
+// schema stores; a reranker produces none.
+func validateDimensions(in *model.EmbeddingModel) error {
+	if in.Type == model.ModelTypeReranker {
+		if in.Dimensions != 0 {
+			return errors.InvalidArgument(
+				"dimensions apply to embedding models only",
+				errors.WithID("kb.model.dimensions_not_applicable"),
+			)
+		}
 
-		return
+		return nil
 	}
 
-	in.Dimensions = 0
+	if !model.StoresEmbeddingDimensions(in.Dimensions) {
+		return errors.InvalidArgument(
+			"dimensions must be one of the stored vector sizes",
+			errors.WithID("kb.model.dimensions_unsupported"),
+			errors.WithValue("supported", model.EmbeddingDimensions),
+		)
+	}
+
+	return nil
 }
 
 func validateProvider(in *model.EmbeddingModel) error {
@@ -567,5 +582,6 @@ func isEmbedded(provider string) bool {
 func validEndpointURL(raw string) bool {
 	u, err := url.Parse(raw)
 
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" &&
+		u.RawQuery == "" && u.Fragment == ""
 }

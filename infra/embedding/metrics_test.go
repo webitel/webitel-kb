@@ -88,6 +88,19 @@ func TestProviderCallsAreRecorded(t *testing.T) {
 			},
 		},
 		{
+			name: "openai named as the conventions know it",
+			key:  ProviderOpenAI,
+			call: func(p Provider) {
+				_, _ = p.Embed(context.Background(), EmbedRequest{ModelRef: "text-embedding-3-small"})
+			},
+			metric: genaiconv.ClientOperationDuration{}.Name(),
+			want: map[attribute.Key]string{
+				genaisemconv.GenAIOperationNameKey: "embeddings",
+				genaisemconv.GenAIProviderNameKey:  "openai",
+				genaisemconv.GenAIRequestModelKey:  "text-embedding-3-small",
+			},
+		},
+		{
 			name: "embedding failed",
 			key:  ProviderE5,
 			err:  providerErr,

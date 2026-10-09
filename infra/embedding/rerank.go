@@ -2,9 +2,7 @@ package embedding
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 // rerankRequest is the Cohere rerank request, also served by vLLM and
@@ -41,11 +39,13 @@ func rerank(
 		TopN:      len(req.Documents),
 	}
 
-	// A base registered with the path already on it still means the same route.
-	base = strings.TrimSuffix(strings.TrimRight(base, "/"), "/rerank")
+	target, err := serviceURL(base, "rerank")
+	if err != nil {
+		return RerankResult{}, err
+	}
 
 	var out rerankResponse
-	if err := client.doJSON(ctx, http.MethodPost, endpointURL(base, "rerank"), headers, body, &out); err != nil {
+	if err := client.doJSON(ctx, http.MethodPost, target, headers, body, &out); err != nil {
 		return RerankResult{}, err
 	}
 
@@ -57,27 +57,16 @@ func rerank(
 	return RerankResult{Scores: scores}, nil
 }
 
-// scoresInOrder puts the scores back in document order; every document must be
-// scored exactly once.
+// scoresInOrder puts the scores back in document order.
 func scoresInOrder(results []rerankResult, documents int) ([]float64, error) {
-	if len(results) != documents {
-		return nil, fmt.Errorf("embedding: reranker scored %d of %d documents", len(results), documents)
+	ordered, err := byIndex(results, documents, func(r rerankResult) int { return r.Index })
+	if err != nil {
+		return nil, err
 	}
 
 	scores := make([]float64, documents)
-	seen := make([]bool, documents)
-
-	for _, r := range results {
-		if r.Index < 0 || r.Index >= documents {
-			return nil, fmt.Errorf("embedding: reranker scored unknown document %d", r.Index)
-		}
-
-		if seen[r.Index] {
-			return nil, fmt.Errorf("embedding: reranker scored document %d twice", r.Index)
-		}
-
-		seen[r.Index] = true
-		scores[r.Index] = r.RelevanceScore
+	for i, r := range ordered {
+		scores[i] = r.RelevanceScore
 	}
 
 	return scores, nil
