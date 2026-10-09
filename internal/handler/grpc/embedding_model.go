@@ -139,6 +139,7 @@ func modelFromInput(in *kb.InputEmbeddingModel) *model.EmbeddingModel {
 		Provider:     in.GetProvider(),
 		IsSelfHosted: in.GetIsSelfHosted(),
 		ModelRef:     in.GetModelRef(),
+		Dimensions:   in.GetDimensions(),
 		Endpoint:     in.GetEndpoint(),
 	}
 }

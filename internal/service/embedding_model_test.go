@@ -258,10 +258,11 @@ func newModelService(models *fakeModelStore, sealer fakeSealer, resolver *fakeRe
 
 func cloudInput() *model.EmbeddingModel {
 	return &model.EmbeddingModel{
-		Type:     model.ModelTypeEmbedding,
-		Name:     "gemini prod",
-		Provider: embedding.ProviderGemini,
-		ModelRef: "gemini-embedding-001",
+		Type:       model.ModelTypeEmbedding,
+		Name:       "gemini prod",
+		Provider:   embedding.ProviderGemini,
+		ModelRef:   "gemini-embedding-001",
+		Dimensions: 768,
 	}
 }
 
@@ -272,6 +273,7 @@ func embeddedInput() *model.EmbeddingModel {
 		Provider:     embedding.ProviderE5,
 		IsSelfHosted: true,
 		ModelRef:     "intfloat/multilingual-e5-base",
+		Dimensions:   768,
 		Endpoint:     "http://embedder:8080",
 	}
 }
@@ -343,6 +345,7 @@ func TestValidateInput(t *testing.T) {
 				*in = *embeddedInput()
 				in.Type = model.ModelTypeReranker
 				in.Provider = embedding.ProviderBGEReranker
+				in.Dimensions = 0
 			},
 			create: true,
 		},
@@ -352,6 +355,7 @@ func TestValidateInput(t *testing.T) {
 				in.Type = model.ModelTypeReranker
 				in.Provider = embedding.ProviderCohere
 				in.ModelRef = "rerank-v3.5"
+				in.Dimensions = 0
 			},
 			apiKey: "k", create: true,
 		},
@@ -361,6 +365,7 @@ func TestValidateInput(t *testing.T) {
 				*in = *embeddedInput()
 				in.Type = model.ModelTypeReranker
 				in.Provider = embedding.ProviderBYOM
+				in.Dimensions = 0
 			},
 			create: true,
 		},
@@ -402,14 +407,93 @@ func TestValidateInput(t *testing.T) {
 			create: true, wantID: "kb.model.provider_type_mismatch",
 		},
 		{
+			name:   "embedding of the second stored size",
+			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 1024 },
+			apiKey: "k", create: true,
+		},
+		{
+			name:   "embedding without dimensions",
+			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 0 },
+			apiKey: "k", create: true, wantID: "kb.model.dimensions_unsupported",
+		},
+		{
+			name:   "embedding of a size the schema does not store",
+			mutate: func(in *model.EmbeddingModel) { in.Dimensions = 1536 },
+			apiKey: "k", create: true, wantID: "kb.model.dimensions_unsupported",
+		},
+		{
+			name: "reranker with dimensions",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderBGEReranker
+			},
+			create: true, wantID: "kb.model.dimensions_not_applicable",
+		},
+		{
 			name:   "relative endpoint",
 			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "embedder:8080" },
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name:   "endpoint with a query",
+			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "http://embedder:8080/v1?api-version=1" },
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name:   "endpoint with a fragment",
+			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "http://embedder:8080/#v1" },
 			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
 		},
 		{
 			name:   "non-http endpoint",
 			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "ftp://embedder" },
 			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name: "azure at its resource",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+				in.Endpoint = "https://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true,
+		},
+		{
+			name: "azure without its resource",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "azure over plain http",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderAzure
+				in.ModelRef = "text-embedding-3-small"
+				in.Endpoint = "http://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name: "azure reranker",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderAzure
+				in.Dimensions = 0
+				in.Endpoint = "https://kb.openai.azure.com"
+			},
+			apiKey: "k", create: true, wantID: "kb.model.provider_type_mismatch",
+		},
+		{
+			name: "cohere embedding",
+			mutate: func(in *model.EmbeddingModel) {
+				in.Provider = embedding.ProviderCohere
+				in.ModelRef = "embed-multilingual-v3.0"
+				in.Dimensions = 1024
+			},
+			apiKey: "k", create: true,
 		},
 		{
 			name:   "cloud create without key",
@@ -454,28 +538,31 @@ func TestValidateInput(t *testing.T) {
 	}
 }
 
-func TestStorageDimensionsAreAssigned(t *testing.T) {
+func TestDimensionsAreStoredAsRegistered(t *testing.T) {
 	rerankerInput := func() *model.EmbeddingModel {
 		in := embeddedInput()
 		in.Type = model.ModelTypeReranker
 		in.Provider = embedding.ProviderBGEReranker
+		in.Dimensions = 0
+
+		return in
+	}
+
+	resized := func(dims int32) *model.EmbeddingModel {
+		in := cloudInput()
+		in.Dimensions = dims
 
 		return in
 	}
 
 	tests := []struct {
-		name  string
-		in    *model.EmbeddingModel
-		asked int32
-		want  int32
+		name string
+		in   *model.EmbeddingModel
+		want int32
 	}{
-		{name: "embedding takes the storage size", in: cloudInput(), want: model.EmbeddingStorageDimensions},
-		{
-			name: "embedding ignores the asked size", in: cloudInput(),
-			asked: 1024, want: model.EmbeddingStorageDimensions,
-		},
-		{name: "reranker takes none", in: rerankerInput()},
-		{name: "reranker ignores the asked size", in: rerankerInput(), asked: 768},
+		{name: "embedding of 768", in: resized(768), want: 768},
+		{name: "embedding of 1024", in: resized(1024), want: 1024},
+		{name: "reranker of none", in: rerankerInput()},
 	}
 
 	for _, tt := range tests {
@@ -492,10 +579,7 @@ func TestStorageDimensionsAreAssigned(t *testing.T) {
 				apiKey = "k"
 			}
 
-			in := *tt.in
-			in.Dimensions = tt.asked
-
-			if _, err := svc.Create(context.Background(), opts, &in, apiKey); err != nil {
+			if _, err := svc.Create(context.Background(), opts, tt.in, apiKey); err != nil {
 				t.Fatalf("Create: %v", err)
 			}
 
@@ -503,10 +587,7 @@ func TestStorageDimensionsAreAssigned(t *testing.T) {
 				t.Fatalf("created dimensions = %d, want %d", models.createIn.Dimensions, tt.want)
 			}
 
-			in = *tt.in
-			in.Dimensions = tt.asked
-
-			if _, err := svc.Update(context.Background(), opts, &in, ""); err != nil {
+			if _, err := svc.Update(context.Background(), opts, tt.in, ""); err != nil {
 				t.Fatalf("Update: %v", err)
 			}
 
@@ -587,10 +668,78 @@ func TestUpdateCredentialFlow(t *testing.T) {
 	}
 }
 
+func TestUpdateKeyFollowsTheResource(t *testing.T) {
+	azure := &model.EmbeddingModel{
+		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "azure prod",
+		Provider: embedding.ProviderAzure, ModelRef: "kb-embeddings", Dimensions: 768,
+		Endpoint: "https://kb.openai.azure.com",
+	}
+	openai := &model.EmbeddingModel{
+		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "openai prod",
+		Provider: embedding.ProviderOpenAI, ModelRef: "kb-embeddings", Dimensions: 768,
+		Endpoint: "https://kb.openai.azure.com",
+	}
+
+	tests := []struct {
+		name      string
+		stored    *model.EmbeddingModel
+		in        *model.EmbeddingModel
+		apiKey    string
+		mask      []string
+		wantErrID string
+	}{
+		{
+			name: "another resource without a key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, mask: []string{"endpoint"},
+			wantErrID: "kb.model.api_key_required",
+		},
+		{
+			name: "another resource with an unmasked key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, apiKey: "next", mask: []string{"endpoint"},
+			wantErrID: "kb.model.api_key_required",
+		},
+		{
+			name: "another resource with its key", stored: azure,
+			in: &model.EmbeddingModel{Endpoint: "https://elsewhere.example"}, apiKey: "next", mask: []string{"endpoint", "api_key"},
+		},
+		{
+			name: "same resource keeps the stored key", stored: azure,
+			in: &model.EmbeddingModel{Name: "renamed"}, mask: []string{"name"},
+		},
+		{
+			name: "another provider's key does not move to azure", stored: openai,
+			in: &model.EmbeddingModel{Provider: embedding.ProviderAzure}, mask: []string{"provider"},
+			wantErrID: "kb.model.api_key_required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{located: tt.stored, written: &model.EmbeddingModel{ID: 1}}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+			opts := &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 1, mask: tt.mask}
+
+			_, err := svc.Update(context.Background(), opts, tt.in, tt.apiKey)
+
+			if tt.wantErrID == "" {
+				if err != nil || models.updateCalls != 1 {
+					t.Fatalf("Update: err = %v, writes = %d", err, models.updateCalls)
+				}
+
+				return
+			}
+
+			if errors.ID(err) != tt.wantErrID || models.updateCalls != 0 {
+				t.Fatalf("Update: err = %v, writes = %d; want %q and no write", err, models.updateCalls, tt.wantErrID)
+			}
+		})
+	}
+}
+
 func TestUpdateAppliesMask(t *testing.T) {
 	stored := &model.EmbeddingModel{
 		ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
-		Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001",
+		Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001", Dimensions: 768,
 	}
 
 	tests := []struct {
@@ -694,10 +843,10 @@ func TestUpdateRevalidation(t *testing.T) {
 	stored := func() *model.EmbeddingModel {
 		return &model.EmbeddingModel{
 			ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
-			Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001",
+			Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-001", Dimensions: 768,
 		}
 	}
-	vector := embedding.EmbedResult{Vectors: [][]float32{make([]float32, model.EmbeddingStorageDimensions)}}
+	vector := embedding.EmbedResult{Vectors: [][]float32{make([]float32, 768)}}
 
 	tests := []struct {
 		name      string
@@ -731,6 +880,14 @@ func TestUpdateRevalidation(t *testing.T) {
 			wantErrID: "kb.model.in_use",
 		},
 		{
+			name: "unused model changes its dimensions", in: &model.EmbeddingModel{Dimensions: 1024},
+			mask: []string{"dimensions"}, want: store.ValidationReset,
+		},
+		{
+			name: "used model keeps its dimensions", inUse: true, in: &model.EmbeddingModel{Dimensions: 1024},
+			mask: []string{"dimensions"}, wantErrID: "kb.model.in_use",
+		},
+		{
 			name: "used model rename keeps the stamp", inUse: true, in: &model.EmbeddingModel{Name: "renamed"},
 			mask: []string{"name"}, want: store.ValidationKeep,
 		},
@@ -748,7 +905,7 @@ func TestUpdateRevalidation(t *testing.T) {
 			apiKey: "next", mask: []string{"api_key"}, wantProbe: true, wantKey: "next",
 			locked: &model.EmbeddingModel{
 				ID: 1, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "gemini prod",
-				Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-002",
+				Provider: embedding.ProviderGemini, ModelRef: "gemini-embedding-002", Dimensions: 768,
 			},
 			wantErrID: "kb.model.version_conflict",
 		},

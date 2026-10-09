@@ -94,12 +94,12 @@ func TestSemanticSearchGuards(t *testing.T) {
 func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 	svc, uow, provider := semanticServiceWithFakes()
 	uow.spaces.resolvedMany = []*model.SpaceEmbedding{
-		{SpaceID: 1, VectorSearchEnabled: true, ModelID: 9, Provider: "gemini", ModelRef: "a", Dimensions: 768, Config: []byte("enc:k1")},
-		{SpaceID: 2, VectorSearchEnabled: true, ModelID: 9, Provider: "gemini", ModelRef: "a", Dimensions: 768, Config: []byte("enc:k1")},
-		{SpaceID: 3, VectorSearchEnabled: true, ModelID: 11, Provider: "bge-m3", ModelRef: "b", Dimensions: 768, Endpoint: "http://embed"},
+		{SpaceID: 1, VectorSearchEnabled: true, ModelID: 9, Provider: "gemini", ModelRef: "a", Dimensions: 1, Config: []byte("enc:k1")},
+		{SpaceID: 2, VectorSearchEnabled: true, ModelID: 9, Provider: "gemini", ModelRef: "a", Dimensions: 1, Config: []byte("enc:k1")},
+		{SpaceID: 3, VectorSearchEnabled: true, ModelID: 11, Provider: "bge-m3", ModelRef: "b", Dimensions: 2, Endpoint: "http://embed"},
 		{SpaceID: 4, VectorSearchEnabled: false},
 	}
-	provider.vectors = map[string][]float32{"a": {0.1}, "b": {0.2}}
+	provider.vectors = map[string][]float32{"a": {0.1}, "b": {0.2, 0.3}}
 
 	_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
 		Query: "vpn", SpaceIDs: []int64{1, 2, 3, 4, 99}, Tags: []string{"net"},
@@ -117,8 +117,12 @@ func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 	}
 
 	for _, req := range provider.requests {
-		if req.Task != embedding.TaskQuery || req.Dimensions != 768 || !reflect.DeepEqual(req.Texts, []string{"vpn"}) {
+		if req.Task != embedding.TaskQuery || !reflect.DeepEqual(req.Texts, []string{"vpn"}) {
 			t.Errorf("embed request = %+v", req)
+		}
+
+		if (req.ModelRef == "a" && req.Dimensions != 1) || (req.ModelRef == "b" && req.Dimensions != 2) {
+			t.Errorf("dimensions = %d, want the model's", req.Dimensions)
 		}
 
 		if req.ModelRef == "a" && req.APIKey != "k1" {
@@ -135,8 +139,8 @@ func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 		Term:   "vpn",
 		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2, 3, 4, 99}, Tags: []string{"net"}},
 		Vectors: []model.ModelVector{
-			{ModelID: 9, SpaceIDs: []int64{1, 2}, Vector: []float32{0.1}},
-			{ModelID: 11, SpaceIDs: []int64{3}, Vector: []float32{0.2}},
+			{ModelID: 9, Dimensions: 1, SpaceIDs: []int64{1, 2}, Vector: []float32{0.1}},
+			{ModelID: 11, Dimensions: 2, SpaceIDs: []int64{3}, Vector: []float32{0.2, 0.3}},
 		},
 		TopK: 10,
 	}
@@ -147,6 +151,23 @@ func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 
 	if uow.txCalls != 1 {
 		t.Fatalf("transactions = %d, want 1", uow.txCalls)
+	}
+}
+
+func TestSemanticSearchRefusesAVectorOfAnotherSize(t *testing.T) {
+	svc, uow, provider := semanticServiceWithFakes()
+	uow.spaces.resolvedMany = []*model.SpaceEmbedding{
+		{SpaceID: 1, VectorSearchEnabled: true, ModelID: 9, Provider: "bge-m3", ModelRef: "a", Dimensions: 3, Endpoint: "http://embed"},
+	}
+	provider.vectors = map[string][]float32{"a": {0.1, 0.2}}
+
+	_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}})
+	if errors.ID(err) != "kb.model.dimensions_mismatch" || errors.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("err = %v, want kb.model.dimensions_mismatch", err)
+	}
+
+	if uow.retrieval.hybrid.Vectors != nil {
+		t.Fatalf("a vector of another size reached the store: %+v", uow.retrieval.hybrid)
 	}
 }
 

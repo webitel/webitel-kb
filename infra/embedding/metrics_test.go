@@ -88,6 +88,45 @@ func TestProviderCallsAreRecorded(t *testing.T) {
 			},
 		},
 		{
+			name: "openai named as the conventions know it",
+			key:  ProviderOpenAI,
+			call: func(p Provider) {
+				_, _ = p.Embed(context.Background(), EmbedRequest{ModelRef: "text-embedding-3-small"})
+			},
+			metric: genaiconv.ClientOperationDuration{}.Name(),
+			want: map[attribute.Key]string{
+				genaisemconv.GenAIOperationNameKey: "embeddings",
+				genaisemconv.GenAIProviderNameKey:  "openai",
+				genaisemconv.GenAIRequestModelKey:  "text-embedding-3-small",
+			},
+		},
+		{
+			name: "cohere named as the conventions know it",
+			key:  ProviderCohere,
+			call: func(p Provider) {
+				_, _ = p.Embed(context.Background(), EmbedRequest{ModelRef: "embed-v4.0"})
+			},
+			metric: genaiconv.ClientOperationDuration{}.Name(),
+			want: map[attribute.Key]string{
+				genaisemconv.GenAIOperationNameKey: "embeddings",
+				genaisemconv.GenAIProviderNameKey:  "cohere",
+				genaisemconv.GenAIRequestModelKey:  "embed-v4.0",
+			},
+		},
+		{
+			name: "azure named as the conventions know it",
+			key:  ProviderAzure,
+			call: func(p Provider) {
+				_, _ = p.Embed(context.Background(), EmbedRequest{ModelRef: "text-embedding-3-small"})
+			},
+			metric: genaiconv.ClientOperationDuration{}.Name(),
+			want: map[attribute.Key]string{
+				genaisemconv.GenAIOperationNameKey: "embeddings",
+				genaisemconv.GenAIProviderNameKey:  "azure.ai.openai",
+				genaisemconv.GenAIRequestModelKey:  "text-embedding-3-small",
+			},
+		},
+		{
 			name: "embedding failed",
 			key:  ProviderE5,
 			err:  providerErr,
@@ -134,7 +173,8 @@ func TestProviderCallsAreRecorded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := sdkmetric.NewManualReader()
 			r := NewRegistry(WithMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))))
-			r.gemini, r.endpoint = stubProvider{tt.err}, stubProvider{tt.err}
+			stub := stubProvider{tt.err}
+			r.gemini, r.cohere, r.openai, r.azure, r.endpoint = stub, stub, stub, stub, stub
 
 			p, err := r.ForModel(tt.key)
 			if err != nil {

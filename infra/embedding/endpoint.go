@@ -3,9 +3,7 @@ package embedding
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 // Endpoint calls a self-hosted embedding/reranker service.
@@ -31,43 +29,14 @@ func NewEndpoint(opts ...EndpointOption) *Endpoint {
 	return e
 }
 
-type endpointEmbedRequest struct {
-	Model      string   `json:"model"`
-	Texts      []string `json:"texts"`
-	Dimensions int      `json:"dimensions,omitempty"`
-	Task       string   `json:"task"`
-}
-
-type endpointEmbedResponse struct {
-	Embeddings [][]float32 `json:"embeddings"`
-}
-
+// Embed speaks the OpenAI embeddings contract. Self-hosted servers take the
+// size from the model itself, so none is asked for; the caller checks it.
 func (e *Endpoint) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, error) {
 	if req.Endpoint == "" {
 		return EmbedResult{}, errors.New("embedding: endpoint url is required")
 	}
 
-	if len(req.Texts) == 0 {
-		return EmbedResult{Vectors: make([][]float32, 0)}, nil
-	}
-
-	body := endpointEmbedRequest{
-		Model:      req.ModelRef,
-		Texts:      req.Texts,
-		Dimensions: req.Dimensions,
-		Task:       endpointTask(req.Task),
-	}
-
-	var out endpointEmbedResponse
-	if err := e.client.doJSON(ctx, http.MethodPost, endpointURL(req.Endpoint, "embed"), nil, body, &out); err != nil {
-		return EmbedResult{}, err
-	}
-
-	if len(out.Embeddings) != len(req.Texts) {
-		return EmbedResult{}, fmt.Errorf("embedding: endpoint returned %d vectors for %d texts", len(out.Embeddings), len(req.Texts))
-	}
-
-	return EmbedResult{Vectors: out.Embeddings}, nil
+	return embed(ctx, e.client, req.Endpoint, openAIRoute, nil, req, 0)
 }
 
 // Rerank speaks the Cohere rerank contract, as vLLM and llama.cpp server do.
@@ -77,16 +46,4 @@ func (e *Endpoint) Rerank(ctx context.Context, req RerankRequest) (RerankResult,
 	}
 
 	return rerank(ctx, e.client, req.Endpoint, nil, req)
-}
-
-func endpointTask(t TaskType) string {
-	if t == TaskQuery {
-		return "query"
-	}
-
-	return "document"
-}
-
-func endpointURL(base, path string) string {
-	return strings.TrimRight(base, "/") + "/" + path
 }

@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"slices"
+	"strconv"
+	"time"
+)
 
 // EmbeddingModel type values.
 const (
@@ -8,10 +12,20 @@ const (
 	ModelTypeReranker  = "reranker"
 )
 
-// EmbeddingStorageDimensions is the vector size of kb.chunk_embedding. The ANN
-// index needs the size in the column type, so one installation stores exactly
-// one dimension and every embedding model is registered with it.
-const EmbeddingStorageDimensions int32 = 768
+// EmbeddingDimensions are the vector sizes kb.chunk_embedding stores. The ANN
+// index needs the size in the column type, so every size has its own column
+// and an embedding model is registered with one of them.
+var EmbeddingDimensions = []int32{768, 1024}
+
+// StoresEmbeddingDimensions reports whether vectors of the size have a column.
+func StoresEmbeddingDimensions(dims int32) bool {
+	return slices.Contains(EmbeddingDimensions, dims)
+}
+
+// EmbeddingColumn names the kb.chunk_embedding column of a vector size.
+func EmbeddingColumn(dims int32) string {
+	return "embedding_" + strconv.Itoa(int(dims))
+}
 
 // EmbeddingModel is a registry entry of an embedding or reranker model. The
 // provider credential is deliberately not part of the read model: it is
@@ -27,9 +41,11 @@ type EmbeddingModel struct {
 	IsSelfHosted bool
 	// ModelRef is the provider model name.
 	ModelRef string
-	// Dimensions is the embedding vector size; 0 for rerankers.
+	// Dimensions is the embedding vector size, one of EmbeddingDimensions; 0 for
+	// rerankers.
 	Dimensions int32
-	// Endpoint is the self-hosted / Azure / BYOM url.
+	// Endpoint is the root of a self-hosted service; the route of each call is
+	// appended. Cloud providers call their own API and ignore it.
 	Endpoint string
 	// ValidatedAt is the time of the last successful test call; zero when the
 	// model was never validated.
@@ -39,10 +55,10 @@ type EmbeddingModel struct {
 	CreatedBy *Lookup
 }
 
-// modelInputFields are the input fields an update writes; the dimensions are
-// fixed by the schema and the api key travels separately.
+// modelInputFields are the input fields an update writes; the api key travels
+// separately.
 var modelInputFields = []string{
-	"type", "name", "provider", "is_self_hosted", "model_ref", "endpoint",
+	"type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint",
 }
 
 // Merge overlays the fields of in named by mask over a copy of the model.
@@ -61,6 +77,8 @@ func (m EmbeddingModel) Merge(in *EmbeddingModel, mask []string) *EmbeddingModel
 			merged.IsSelfHosted = in.IsSelfHosted
 		case "model_ref":
 			merged.ModelRef = in.ModelRef
+		case "dimensions":
+			merged.Dimensions = in.Dimensions
 		case "endpoint":
 			merged.Endpoint = in.Endpoint
 		}

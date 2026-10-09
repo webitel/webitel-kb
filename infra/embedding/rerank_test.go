@@ -267,10 +267,3 @@ func TestRerankErrors(t *testing.T) {
 		})
 	}
 }
-
-func TestCohereEmbedUnsupported(t *testing.T) {
-	_, err := NewCohere().Embed(context.Background(), EmbedRequest{Texts: []string{"x"}})
-	if !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("want ErrUnsupported, got %v", err)
-	}
-}

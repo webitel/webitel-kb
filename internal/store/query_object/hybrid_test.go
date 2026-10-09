@@ -84,8 +84,8 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		Term:   "router",
 		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2, 3}},
 		Vectors: []model.ModelVector{
-			{ModelID: 9, SpaceIDs: []int64{1, 2}, Vector: []float32{0.5, 0.5}},
-			{ModelID: 11, SpaceIDs: []int64{3}, Vector: []float32{1, 0}},
+			{ModelID: 9, Dimensions: 768, SpaceIDs: []int64{1, 2}, Vector: []float32{0.5, 0.5}},
+			{ModelID: 11, Dimensions: 1024, SpaceIDs: []int64{3}, Vector: []float32{1, 0}},
 		},
 		TopK: 5,
 	}
@@ -98,8 +98,11 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		"e.model_id = $",
 		"e.domain_id = $",
 		"e.space_id = ANY($",
+		"e.embedding_768 <=> $",
+		"ORDER BY e.embedding_768 <=> $",
+		"e.embedding_1024 <=> $",
+		"ORDER BY e.embedding_1024 <=> $",
 		"::vector AS rank_key",
-		"ORDER BY e.embedding <=> $",
 		"::vector, c.id LIMIT 50)",
 		"UNION ALL",
 		"(SELECT * FROM lex UNION ALL SELECT * FROM vec) branches",
@@ -108,6 +111,10 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		if !strings.Contains(sql, want) {
 			t.Errorf("SQL %q\n does not contain %q", sql, want)
 		}
+	}
+
+	if strings.Contains(sql, "e.embedding <=>") {
+		t.Errorf("a vector branch ranks by a column of no size: %q", sql)
 	}
 
 	if strings.Count(sql, "e.model_id = $") != 2 || strings.Count(sql, "e.space_id = ANY($") != 2 {
