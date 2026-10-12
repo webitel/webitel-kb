@@ -27,6 +27,7 @@ const embeddingFrom = "kb.chunk_embedding e JOIN kb.chunk c ON c.id = e.chunk_id
 type vectorBranch struct {
 	builder squirrel.SelectBuilder
 	spaces  []int64
+	column  string
 	literal string
 }
 
@@ -54,13 +55,15 @@ func NewHybridHits(q model.HybridQuery) *HybridHits {
 
 	for _, mv := range q.Vectors {
 		literal := VectorLiteral(mv.Vector)
+		column := "e." + model.EmbeddingColumn(mv.Dimensions)
 
 		h.vec = append(h.vec, vectorBranch{
 			builder: squirrel.Select("c.id").
-				Column("e.embedding <=> ?::vector AS rank_key", literal).
+				Column(column+" <=> ?::vector AS rank_key", literal).
 				From(embeddingFrom).
 				Where("e.model_id = ?", mv.ModelID),
 			spaces:  mv.SpaceIDs,
+			column:  column,
 			literal: literal,
 		})
 	}
@@ -83,7 +86,7 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 		vec := whereRetrievable(h.vec[i].builder.Where("e.domain_id = ?", domainID)).
 			Where("e.space_id = ANY(?)", h.vec[i].spaces)
 		h.vec[i].builder = whereTags(vec, h.filter.Tags, h.filter.TagsMatchAll).
-			OrderByClause("e.embedding <=> ?::vector, c.id", h.vec[i].literal).
+			OrderByClause(h.vec[i].column+" <=> ?::vector, c.id", h.vec[i].literal).
 			Limit(BranchDepth)
 	}
 

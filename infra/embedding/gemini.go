@@ -76,13 +76,13 @@ func (g *Gemini) Embed(ctx context.Context, req EmbedRequest) (EmbedResult, erro
 	}
 
 	model := geminiModelPath(req.ModelRef)
-	taskType := geminiTaskType(req.Task)
+	taskType, prefix := geminiTask(model, req.Task)
 
 	batch := geminiBatchRequest{Requests: make([]geminiEmbedRequest, 0, len(req.Texts))}
 	for _, text := range req.Texts {
 		batch.Requests = append(batch.Requests, geminiEmbedRequest{
 			Model:                model,
-			Content:              geminiContent{Parts: []geminiPart{{Text: text}}},
+			Content:              geminiContent{Parts: []geminiPart{{Text: prefix + text}}},
 			TaskType:             taskType,
 			OutputDimensionality: req.Dimensions,
 		})
@@ -127,12 +127,22 @@ func geminiModelPath(ref string) string {
 	return "models/" + ref
 }
 
-func geminiTaskType(t TaskType) string {
-	if t == TaskQuery {
-		return "RETRIEVAL_QUERY"
+// geminiTask tells a query from a document: by taskType, or by a prefix on the
+// text for gemini-embedding-2, which ignores taskType.
+func geminiTask(model string, t TaskType) (taskType, prefix string) {
+	if strings.HasPrefix(model, "models/gemini-embedding-2") {
+		if t == TaskQuery {
+			return "", "task: search result | query: "
+		}
+
+		return "", "title: none | text: "
 	}
 
-	return "RETRIEVAL_DOCUMENT"
+	if t == TaskQuery {
+		return "RETRIEVAL_QUERY", ""
+	}
+
+	return "RETRIEVAL_DOCUMENT", ""
 }
 
 // l2Normalize scales v in place to unit length; a zero vector is left unchanged.

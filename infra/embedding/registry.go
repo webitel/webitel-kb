@@ -24,7 +24,10 @@ const (
 type Registry struct {
 	gemini   Provider
 	cohere   Provider
+	openai   Provider
+	azure    Provider
 	endpoint Provider
+	e5       Provider
 	metrics  *clientMetrics
 }
 
@@ -35,6 +38,7 @@ type registryConfig struct {
 	httpClient    *http.Client
 	geminiBaseURL string
 	cohereBaseURL string
+	openAIBaseURL string
 	meterProvider metric.MeterProvider
 }
 
@@ -51,6 +55,11 @@ func WithGeminiBaseURLOption(url string) RegistryOption {
 // WithCohereBaseURLOption overrides the Cohere base URL (used in tests).
 func WithCohereBaseURLOption(url string) RegistryOption {
 	return func(c *registryConfig) { c.cohereBaseURL = url }
+}
+
+// WithOpenAIBaseURLOption overrides the OpenAI base URL (used in tests).
+func WithOpenAIBaseURLOption(url string) RegistryOption {
+	return func(c *registryConfig) { c.openAIBaseURL = url }
 }
 
 // WithMeterProvider sets where the provider calls are recorded; the global
@@ -84,15 +93,34 @@ func NewRegistry(opts ...RegistryOption) *Registry {
 		cohereOpts = append(cohereOpts, WithCohereBaseURL(cfg.cohereBaseURL))
 	}
 
+	openAIOpts := make([]OpenAIOption, 0, 2)
+	if cfg.httpClient != nil {
+		openAIOpts = append(openAIOpts, WithOpenAIHTTPClient(cfg.httpClient))
+	}
+
+	if cfg.openAIBaseURL != "" {
+		openAIOpts = append(openAIOpts, WithOpenAIBaseURL(cfg.openAIBaseURL))
+	}
+
+	azureOpts := make([]AzureOption, 0, 1)
+	if cfg.httpClient != nil {
+		azureOpts = append(azureOpts, WithAzureHTTPClient(cfg.httpClient))
+	}
+
 	endpointOpts := make([]EndpointOption, 0, 1)
 	if cfg.httpClient != nil {
 		endpointOpts = append(endpointOpts, WithEndpointHTTPClient(cfg.httpClient))
 	}
 
+	endpoint := NewEndpoint(endpointOpts...)
+
 	return &Registry{
 		gemini:   NewGemini(geminiOpts...),
 		cohere:   NewCohere(cohereOpts...),
-		endpoint: NewEndpoint(endpointOpts...),
+		openai:   NewOpenAI(openAIOpts...),
+		azure:    NewAzure(azureOpts...),
+		endpoint: endpoint,
+		e5:       prefixed{Provider: endpoint, query: "query: ", document: "passage: "},
 		metrics:  newClientMetrics(cfg.meterProvider),
 	}
 }
@@ -105,7 +133,13 @@ func (r *Registry) ForModel(provider string) (Provider, error) {
 		return measured{Provider: r.gemini, key: provider, metrics: r.metrics}, nil
 	case ProviderCohere:
 		return measured{Provider: r.cohere, key: provider, metrics: r.metrics}, nil
-	case ProviderBGEM3, ProviderE5, ProviderBGEReranker, ProviderBYOM:
+	case ProviderOpenAI:
+		return measured{Provider: r.openai, key: provider, metrics: r.metrics}, nil
+	case ProviderAzure:
+		return measured{Provider: r.azure, key: provider, metrics: r.metrics}, nil
+	case ProviderE5:
+		return measured{Provider: r.e5, key: provider, metrics: r.metrics}, nil
+	case ProviderBGEM3, ProviderBGEReranker, ProviderBYOM:
 		return measured{Provider: r.endpoint, key: provider, metrics: r.metrics}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupported, provider)

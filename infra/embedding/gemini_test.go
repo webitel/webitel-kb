@@ -118,3 +118,64 @@ func TestGeminiEmbedEmpty(t *testing.T) {
 		t.Fatalf("empty embed: vectors=%v err=%v", res.Vectors, err)
 	}
 }
+
+func TestGeminiTask(t *testing.T) {
+	tests := []struct {
+		name         string
+		modelRef     string
+		task         TaskType
+		wantTaskType string
+		wantText     string
+	}{
+		{
+			name:         "001 query by task type",
+			modelRef:     "gemini-embedding-001",
+			task:         TaskQuery,
+			wantTaskType: "RETRIEVAL_QUERY",
+			wantText:     "x",
+		},
+		{
+			name:         "001 document by task type",
+			modelRef:     "models/gemini-embedding-001",
+			task:         TaskDocument,
+			wantTaskType: "RETRIEVAL_DOCUMENT",
+			wantText:     "x",
+		},
+		{
+			name:     "2 query by prefix",
+			modelRef: "gemini-embedding-2",
+			task:     TaskQuery,
+			wantText: "task: search result | query: x",
+		},
+		{
+			name:     "2 document by prefix",
+			modelRef: "models/gemini-embedding-2-preview",
+			task:     TaskDocument,
+			wantText: "title: none | text: x",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got geminiBatchRequest
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&got)
+				_, _ = w.Write([]byte(`{"embeddings":[{"values":[1,0]}]}`))
+			}))
+			defer srv.Close()
+
+			if _, err := NewGemini(WithGeminiBaseURL(srv.URL)).Embed(context.Background(), EmbedRequest{
+				ModelRef: tt.modelRef, APIKey: "k", Task: tt.task, Texts: []string{"x"},
+			}); err != nil {
+				t.Fatalf("Embed: %v", err)
+			}
+
+			req := got.Requests[0]
+			if req.TaskType != tt.wantTaskType || req.Content.Parts[0].Text != tt.wantText {
+				t.Errorf("taskType = %q, text = %q; want %q, %q",
+					req.TaskType, req.Content.Parts[0].Text, tt.wantTaskType, tt.wantText)
+			}
+		})
+	}
+}

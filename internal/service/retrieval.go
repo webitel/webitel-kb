@@ -218,7 +218,9 @@ func (s *RetrievalService) embedQuery(
 		}
 
 		byModel[space.ModelID] = len(vectors)
-		vectors = append(vectors, model.ModelVector{ModelID: space.ModelID, SpaceIDs: []int64{space.SpaceID}, Vector: vector})
+		vectors = append(vectors, model.ModelVector{
+			ModelID: space.ModelID, Dimensions: space.Dimensions, SpaceIDs: []int64{space.SpaceID}, Vector: vector,
+		})
 	}
 
 	return vectors, nil
@@ -255,6 +257,16 @@ func (s *RetrievalService) embedWith(ctx context.Context, query string, space *m
 		return nil, errors.Unavailable(
 			"embedding provider returned no vector",
 			errors.WithID("kb.retrieval.embedding_unavailable"),
+		)
+	}
+
+	if len(result.Vectors[0]) != int(space.Dimensions) {
+		return nil, errors.New(
+			"dimensions mismatch between the model response and the registration",
+			errors.WithCode(codes.FailedPrecondition),
+			errors.WithID("kb.model.dimensions_mismatch"),
+			errors.WithValue("got", len(result.Vectors[0])),
+			errors.WithValue("registered", space.Dimensions),
 		)
 	}
 
