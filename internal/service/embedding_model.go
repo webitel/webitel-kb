@@ -509,17 +509,18 @@ func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
 		)
 	}
 
-	if err := validateResourceEndpoint(in); err != nil {
+	if err := validateEndpoint(in); err != nil {
 		return err
 	}
 
 	return validateKey(in, apiKey, create)
 }
 
-// validateResourceEndpoint requires the resource of a cloud provider reached at
-// the registered address (azure): the key travels there, so only over https.
-func validateResourceEndpoint(in *model.EmbeddingModel) error {
-	if in.Provider != embedding.ProviderAzure {
+// validateEndpoint requires the address of a provider reached at the
+// registered endpoint: every embedded provider and azure. The azure key travels
+// there, so only over https.
+func validateEndpoint(in *model.EmbeddingModel) error {
+	if !isEmbedded(in.Provider) && in.Provider != embedding.ProviderAzure {
 		return nil
 	}
 
@@ -528,6 +529,10 @@ func validateResourceEndpoint(in *model.EmbeddingModel) error {
 			"endpoint is required for this provider",
 			errors.WithID("kb.model.endpoint_required"),
 		)
+	}
+
+	if in.Provider != embedding.ProviderAzure {
+		return nil
 	}
 
 	if u, err := url.Parse(in.Endpoint); err != nil || u.Scheme != "https" {
