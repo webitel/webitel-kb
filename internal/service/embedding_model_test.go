@@ -289,10 +289,9 @@ func TestValidateInput(t *testing.T) {
 		{name: "valid cloud create", mutate: func(*model.EmbeddingModel) {}, apiKey: "k", create: true},
 		{name: "valid cloud update without key", mutate: func(*model.EmbeddingModel) {}, create: false},
 		{
-			name: "valid embedded without key and endpoint",
+			name: "valid embedded at its endpoint without key",
 			mutate: func(in *model.EmbeddingModel) {
 				*in = *embeddedInput()
-				in.Endpoint = ""
 			},
 			create: true,
 		},
@@ -449,6 +448,73 @@ func TestValidateInput(t *testing.T) {
 			name:   "non-http endpoint",
 			mutate: func(in *model.EmbeddingModel) { in.Endpoint = "ftp://embedder" },
 			apiKey: "k", create: true, wantID: "kb.model.endpoint_invalid",
+		},
+		{
+			name: "bge-m3 without endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Provider = embedding.ProviderBGEM3
+				in.Dimensions = 1024
+				in.Endpoint = ""
+			},
+			create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "e5 without endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Endpoint = ""
+			},
+			create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "byom embedding without endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Provider = embedding.ProviderBYOM
+				in.Endpoint = ""
+			},
+			create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "bge-reranker without endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderBGEReranker
+				in.Dimensions = 0
+				in.Endpoint = ""
+			},
+			create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "byom reranker without endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderBYOM
+				in.Dimensions = 0
+				in.Endpoint = ""
+			},
+			create: true, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "embedded update clearing endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Endpoint = ""
+			},
+			create: false, wantID: "kb.model.endpoint_required",
+		},
+		{
+			name: "embedded reranker at its endpoint",
+			mutate: func(in *model.EmbeddingModel) {
+				*in = *embeddedInput()
+				in.Type = model.ModelTypeReranker
+				in.Provider = embedding.ProviderBGEReranker
+				in.Dimensions = 0
+			},
+			create: true,
 		},
 		{
 			name: "azure at its resource",
