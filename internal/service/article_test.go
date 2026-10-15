@@ -43,6 +43,7 @@ type fakeArticleStore struct {
 	locateFields   [][]string
 	writeFields    [][]string
 	listFilter     model.ArticleFilter
+	listFields     []string
 	suggestSize    int
 	suggestPrefix  string
 
@@ -55,8 +56,9 @@ type fakeArticleStore struct {
 
 func (f *fakeArticleStore) step(name string) { f.callOrder = append(f.callOrder, name) }
 
-func (f *fakeArticleStore) List(_ context.Context, _ options.Searcher, filter model.ArticleFilter) ([]*model.Article, bool, error) {
+func (f *fakeArticleStore) List(_ context.Context, opts options.Searcher, filter model.ArticleFilter) ([]*model.Article, bool, error) {
 	f.listFilter = filter
+	f.listFields = opts.GetFields()
 
 	return f.list, f.listNext, nil
 }
@@ -174,11 +176,14 @@ type fakeVersionStore struct {
 
 	createIn    *model.ArticleVersion
 	createCalls int
+	listFields  []string
 
 	order *fakeArticleStore // shared call-order recorder
 }
 
-func (f *fakeVersionStore) List(context.Context, options.Searcher, int64) ([]*model.ArticleVersion, bool, error) {
+func (f *fakeVersionStore) List(_ context.Context, opts options.Searcher, _ int64) ([]*model.ArticleVersion, bool, error) {
+	f.listFields = opts.GetFields()
+
 	return f.history, false, nil
 }
 
@@ -318,6 +323,66 @@ func TestArticleCreateValidation(t *testing.T) {
 				t.Fatal("a rejected create must not reach the stores")
 			}
 		})
+	}
+}
+
+// docOfSize is a valid document of exactly size bytes.
+func docOfSize(size int) []byte {
+	const (
+		head = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"`
+		tail = `"}]}]}`
+	)
+
+	return []byte(head + strings.Repeat("a", size-len(head)-len(tail)) + tail)
+}
+
+func TestArticleBodySizeLimit(t *testing.T) {
+	tests := []struct {
+		name   string
+		size   int
+		wantID string
+	}{
+		{name: "at the limit", size: model.MaxBodyBytes},
+		{name: "over the limit", size: model.MaxBodyBytes + 1, wantID: "kb.article.body_too_large"},
+	}
+
+	for _, tt := range tests {
+		saves := map[string]func(*ArticleService, []byte) error{
+			"create": func(svc *ArticleService, body []byte) error {
+				_, err := svc.Create(context.Background(), creatorOpts(), &model.Article{SpaceID: 3, Subject: "a"}, body)
+
+				return err
+			},
+			"update": func(svc *ArticleService, body []byte) error {
+				_, err := svc.Update(context.Background(), updaterOpts(), &model.Article{Subject: "a"}, body, 4)
+
+				return err
+			},
+		}
+
+		for op, save := range saves {
+			t.Run(tt.name+" "+op, func(t *testing.T) {
+				svc, uow := newArticleFixture()
+
+				err := save(svc, docOfSize(tt.size))
+
+				if tt.wantID == "" {
+					if err != nil {
+						t.Fatalf("error = %v, want the body accepted", err)
+					}
+
+					return
+				}
+
+				if errors.ID(err) != tt.wantID {
+					t.Fatalf("error = %v, want %s", err, tt.wantID)
+				}
+
+				if uow.versions.createCalls != 0 {
+					t.Fatal("a rejected body must not reach the stores")
+				}
+			})
+		}
 	}
 }
 
@@ -1113,6 +1178,53 @@ func TestArticleReindex(t *testing.T) {
 
 			if uow.transactions != 1 {
 				t.Fatalf("transactions = %d, want one", uow.transactions)
+			}
+		})
+	}
+}
+
+func TestArticleListsCarryNoBodies(t *testing.T) {
+	tests := []struct {
+		name       string
+		versions   bool
+		fields     []string
+		wantFields []string
+	}{
+		{name: "articles keep the default", fields: nil, wantFields: nil},
+		{name: "articles drop the published body", fields: []string{"id", "published"}, wantFields: []string{"id"}},
+		{name: "articles asked only for the body get the default", fields: []string{"published"}, wantFields: nil},
+		{name: "history defaults to metadata", versions: true, fields: nil, wantFields: versionListFields},
+		{name: "history drops a body", versions: true, fields: []string{"id", "body_plain"}, wantFields: []string{"id"}},
+		{
+			name: "history asked only for bodies gets metadata", versions: true,
+			fields: []string{"body_rich_text", "body_markdown", "body_plain"}, wantFields: versionListFields,
+		},
+		{name: "history keeps other fields", versions: true, fields: []string{"notes"}, wantFields: []string{"notes"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			opts := readOptions{fields: tt.fields}
+
+			var got []string
+
+			if tt.versions {
+				if _, _, err := svc.ListVersions(context.Background(), opts, 7); err != nil {
+					t.Fatalf("ListVersions: %v", err)
+				}
+
+				got = uow.versions.listFields
+			} else {
+				if _, _, err := svc.List(context.Background(), opts, model.ArticleFilter{}); err != nil {
+					t.Fatalf("List: %v", err)
+				}
+
+				got = uow.articles.listFields
+			}
+
+			if !slices.Equal(got, tt.wantFields) {
+				t.Fatalf("fields = %v, want %v", got, tt.wantFields)
 			}
 		})
 	}

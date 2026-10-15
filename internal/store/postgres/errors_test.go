@@ -47,6 +47,11 @@ func TestParseError(t *testing.T) {
 			codes.InvalidArgument,
 		},
 		{
+			"storage limit is invalid input",
+			&pgconn.PgError{Code: pgerrcode.ProgramLimitExceeded},
+			codes.InvalidArgument,
+		},
+		{
 			"unknown pg error is internal",
 			&pgconn.PgError{Code: pgerrcode.SerializationFailure},
 			codes.Internal,
