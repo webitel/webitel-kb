@@ -47,8 +47,18 @@ func TestParseError(t *testing.T) {
 			codes.InvalidArgument,
 		},
 		{
-			"unknown pg error is internal",
+			"deadlock is worth another attempt",
+			&pgconn.PgError{Code: pgerrcode.DeadlockDetected},
+			codes.Aborted,
+		},
+		{
+			"serialization failure is worth another attempt",
 			&pgconn.PgError{Code: pgerrcode.SerializationFailure},
+			codes.Aborted,
+		},
+		{
+			"unknown pg error is internal",
+			&pgconn.PgError{Code: pgerrcode.DivisionByZero},
 			codes.Internal,
 		},
 		{

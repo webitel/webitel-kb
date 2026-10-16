@@ -115,7 +115,9 @@ func (f *articleStoreFake) SuggestTags(
 	return []string{"vpn"}, nil
 }
 
-func (f *articleStoreFake) AcquireSpaceMoveLock(context.Context, int64) error { return nil }
+func (f *articleStoreFake) LockSpaceTree(context.Context, int64, int64) error { return nil }
+
+func (f *articleStoreFake) LockSpaceKey(context.Context, int64, int64) error { return nil }
 
 // articleVersionStoreFake plays back the version history.
 type articleVersionStoreFake struct {
@@ -156,8 +158,8 @@ type outboxFake struct {
 	events []event.ArticleReindex
 }
 
-func (f *outboxFake) PublishReindex(_ context.Context, e event.ArticleReindex) error {
-	f.events = append(f.events, e)
+func (f *outboxFake) PublishReindex(_ context.Context, events ...event.ArticleReindex) error {
+	f.events = append(f.events, events...)
 
 	return nil
 }

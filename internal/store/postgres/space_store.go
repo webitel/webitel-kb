@@ -331,6 +331,54 @@ func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID
 	return nil
 }
 
+func (s *spaceStore) LockArticles(ctx context.Context, spaceID, domainID int64) error {
+	const sql = `SELECT a.id FROM kb.article a JOIN kb.space s ON s.id = a.space_id
+		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+		ORDER BY a.id FOR UPDATE OF a`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
+}
+
+func (s *spaceStore) MarkArticlesPending(ctx context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error) {
+	const sql = `UPDATE kb.article a SET index_state = $3
+		FROM kb.space s, (
+			SELECT DISTINCT ON (v.article_id) v.article_id, v.id
+			FROM kb.article_version v JOIN kb.article owner ON owner.id = v.article_id
+			WHERE owner.space_id = $1
+			ORDER BY v.article_id, v.version_number DESC
+		) latest
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
+			AND a.deleted_at IS NULL AND latest.article_id = a.id
+		RETURNING a.id, latest.id`
+
+	rows, err := s.db.Query(ctx, sql, spaceID, domainID, model.IndexStatePending)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	targets, err := pgx.CollectRows(rows, pgx.RowToStructByPos[model.ReindexTarget])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return targets, nil
+}
+
+func (s *spaceStore) DropForeignEmbeddings(ctx context.Context, spaceID, domainID, keepModelID int64) error {
+	const sql = `DELETE FROM kb.chunk_embedding
+		WHERE space_id = $1 AND domain_id = $2 AND model_id IS DISTINCT FROM $3`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID, nullIfZero(keepModelID)); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
+}
+
 // resolveEmbeddingSelect reads spaces with their embedding model. Outer join: a
 // space without a model still answers.
 const resolveEmbeddingSelect = `SELECT

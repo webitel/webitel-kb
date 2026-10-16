@@ -169,13 +169,6 @@ const suggestTagsSQL = `SELECT DISTINCT t FROM kb.article m
 // defaultSuggestSize bounds a suggestion listing the caller left unbounded.
 const defaultSuggestSize = 20
 
-// moveLockClass is the advisory-lock class of per-space article moves in the
-// shared database.
-const moveLockClass = 27491
-
-// spaceMoveLockSQL takes the transaction-scoped advisory lock of a space.
-const spaceMoveLockSQL = `SELECT pg_advisory_xact_lock($1, hashint8($2)::int)`
-
 // errVersionConflict reports a write whose optimistic-lock version no longer
 // matches the stored one.
 var errVersionConflict = errors.Aborted(
@@ -616,8 +609,20 @@ func (s *articleStore) SuggestTags(
 	return tags, nil
 }
 
-func (s *articleStore) AcquireSpaceMoveLock(ctx context.Context, spaceID int64) error {
-	if _, err := s.db.Exec(ctx, spaceMoveLockSQL, moveLockClass, spaceID); err != nil {
+func (s *articleStore) LockSpaceTree(ctx context.Context, spaceID, domainID int64) error {
+	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR NO KEY UPDATE`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
+}
+
+func (s *articleStore) LockSpaceKey(ctx context.Context, spaceID, domainID int64) error {
+	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR KEY SHARE`
+
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
 		return ParseError(err)
 	}
 

@@ -65,6 +65,12 @@ func ParseError(err error) error {
 				errors.WithCause(err),
 				errors.WithValue("column", pgErr.TableName+"."+pgErr.ColumnName),
 			)
+		case pgerrcode.DeadlockDetected, pgerrcode.SerializationFailure:
+			return errors.Aborted(
+				"concurrent change, try again",
+				errors.WithID("store.pg.conflict"),
+				errors.WithCause(err),
+			)
 		}
 	}
 

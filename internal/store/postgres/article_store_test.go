@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -634,20 +635,36 @@ func TestArticleLocateForUpdateLocks(t *testing.T) {
 	}
 }
 
-func TestArticleAcquireSpaceMoveLock(t *testing.T) {
-	f := &fakeQuerier{}
-	s := &articleStore{db: f}
-
-	if err := s.AcquireSpaceMoveLock(context.Background(), 7); err != nil {
-		t.Fatalf("AcquireSpaceMoveLock: %v", err)
+func TestArticleSpaceLocks(t *testing.T) {
+	tests := []struct {
+		name string
+		lock func(s *articleStore) error
+		want string
+	}{
+		{
+			name: "an insert",
+			lock: func(s *articleStore) error { return s.LockSpaceKey(context.Background(), 7, 5) },
+			want: "SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR KEY SHARE",
+		},
+		{
+			name: "a move or a subtree delete",
+			lock: func(s *articleStore) error { return s.LockSpaceTree(context.Background(), 7, 5) },
+			want: "SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR NO KEY UPDATE",
+		},
 	}
 
-	if !strings.Contains(f.gotSQL, "pg_advisory_xact_lock") {
-		t.Fatalf("SQL %q does not take a transaction advisory lock", f.gotSQL)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{}
 
-	if f.gotArgs[0] != 27491 || f.gotArgs[1] != int64(7) {
-		t.Fatalf("args = %v, want the move lock class and the space id", f.gotArgs)
+			if err := tt.lock(&articleStore{db: f}); err != nil {
+				t.Fatalf("lock: %v", err)
+			}
+
+			if f.gotSQL != tt.want || !slices.Equal(f.gotArgs, []any{int64(7), int64(5)}) {
+				t.Fatalf("SQL %q args %v, want %q [7 5]", f.gotSQL, f.gotArgs, tt.want)
+			}
+		})
 	}
 }
 

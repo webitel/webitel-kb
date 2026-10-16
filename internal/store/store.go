@@ -63,8 +63,8 @@ type AttachmentStore interface {
 
 // OutboxStore records events for the relay to deliver.
 type OutboxStore interface {
-	// PublishReindex stores a reindex envelope.
-	PublishReindex(ctx context.Context, e event.ArticleReindex) error
+	// PublishReindex stores reindex envelopes.
+	PublishReindex(ctx context.Context, events ...event.ArticleReindex) error
 }
 
 // ArticleStore persists knowledge-base articles. Every read and write is
@@ -116,10 +116,14 @@ type ArticleStore interface {
 	// SuggestTags returns the distinct tags of a space matching a prefix.
 	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
 
-	// AcquireSpaceMoveLock serializes article moves within a space until the
-	// transaction ends, so concurrent moves cannot weave a cycle their
-	// snapshots would not see.
-	AcquireSpaceMoveLock(ctx context.Context, spaceID int64) error
+	// LockSpaceTree locks the row of a domain's space until the transaction
+	// ends, so moves and subtree deletes in it run one at a time: concurrent
+	// moves cannot weave a cycle their snapshots would not see.
+	LockSpaceTree(ctx context.Context, spaceID, domainID int64) error
+
+	// LockSpaceKey takes up front the lock an article insert takes on a
+	// domain's space, so the space is locked before any article is.
+	LockSpaceKey(ctx context.Context, spaceID, domainID int64) error
 }
 
 // RetrievalStore reads articles for the retrieval endpoints.
@@ -195,6 +199,18 @@ type SpaceStore interface {
 	// PurgeDeletedArticles removes the deleted articles of a domain's space for
 	// good, with everything that cascades from them.
 	PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error
+
+	// LockArticles locks the live articles of a domain's space until the
+	// transaction ends, so no version of theirs commits meanwhile.
+	LockArticles(ctx context.Context, spaceID, domainID int64) error
+
+	// MarkArticlesPending puts the live articles of a domain's space that have
+	// a version back to pending and returns the latest version of each.
+	MarkArticlesPending(ctx context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error)
+
+	// DropForeignEmbeddings removes the vectors of a domain's space made by
+	// any model but keepModelID; 0 keeps none.
+	DropForeignEmbeddings(ctx context.Context, spaceID, domainID, keepModelID int64) error
 
 	// ResolveEmbedding returns the embedding model of a space, credential
 	// included.
