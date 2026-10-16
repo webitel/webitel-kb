@@ -9,6 +9,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/auth"
+	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -107,7 +108,8 @@ var spaceMergeFields = []string{
 
 // Update merges the input over the stored space, enforces the immutable
 // fields, validates a newly configured model, and rewrites the space with its
-// team binding in one transaction.
+// team binding in one transaction. A change of the model the space searches
+// with queues every article for indexing under it.
 func (s *SpaceService) Update(
 	ctx context.Context, opts options.Updator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
@@ -139,22 +141,6 @@ func (s *SpaceService) Update(
 			)
 		}
 
-		// The embedding model fixes the vector dimension of everything already
-		// indexed: it may be configured once, never changed or cleared. This
-		// check runs before the consistency rules, so clearing the model of a
-		// vector-enabled space reports the true cause.
-		switch {
-		case merged.EmbeddingModelID == current.EmbeddingModelID:
-			// Unchanged.
-		case current.EmbeddingModelID == 0:
-			// One-way upgrade from a lexical-only space; validated below.
-		default:
-			return errors.InvalidArgument(
-				"embedding model is immutable",
-				errors.WithID("kb.space.embedding_model_immutable"),
-			)
-		}
-
 		if err := validateRetrievalConfig(merged); err != nil {
 			return err
 		}
@@ -179,6 +165,20 @@ func (s *SpaceService) Update(
 			}
 		}
 
+		// Every change of the search model queues the articles, the one to no
+		// vectors too: a job of the old model in flight gives way to them.
+		modelChanged := merged.EmbeddingModelID != current.EmbeddingModelID
+		reindex := merged.SearchModelID() != current.SearchModelID()
+
+		// The space row is held already, which moves and deletes take first.
+		// Holding every article too means no version of the space commits
+		// until the switch does: none is indexed under the old model unseen.
+		if modelChanged || reindex {
+			if err := tx.SpaceStore().LockArticles(ctx, current.ID, session.GetDomainID()); err != nil {
+				return err
+			}
+		}
+
 		space, err := tx.SpaceStore().Update(ctx, opts, merged)
 		if err != nil {
 			return err
@@ -187,6 +187,20 @@ func (s *SpaceService) Update(
 		if len(mask) == 0 || slices.Contains(mask, "team_ids") {
 			if err := tx.SpaceStore().ReplaceTeams(
 				ctx, space.ID, session.GetDomainID(), session.GetUserID(), dedupeIDs(teamIDs),
+			); err != nil {
+				return err
+			}
+		}
+
+		if reindex {
+			if err := requestSpaceReindex(ctx, tx, session, space.ID); err != nil {
+				return err
+			}
+		}
+
+		if modelChanged {
+			if err := tx.SpaceStore().DropForeignEmbeddings(
+				ctx, space.ID, session.GetDomainID(), merged.EmbeddingModelID,
 			); err != nil {
 				return err
 			}
@@ -245,6 +259,22 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 	}
 
 	return deleted, nil
+}
+
+// requestSpaceReindex puts every article of the space with a version back to
+// pending and queues its latest version.
+func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID int64) error {
+	targets, err := tx.SpaceStore().MarkArticlesPending(ctx, spaceID, session.GetDomainID())
+	if err != nil {
+		return err
+	}
+
+	events := make([]event.ArticleReindex, 0, len(targets))
+	for _, target := range targets {
+		events = append(events, reindexEvent(session, target.ArticleID, target.VersionID, spaceID))
+	}
+
+	return tx.OutboxStore().PublishReindex(ctx, events...)
 }
 
 // errHomeArticleInvalid rejects a home page that is not a live article of the space.

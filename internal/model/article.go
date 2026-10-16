@@ -59,6 +59,12 @@ type Article struct {
 	Published *ArticleVersion
 }
 
+// ReindexTarget is the version of an article a reindex event asks for.
+type ReindexTarget struct {
+	ArticleID int64
+	VersionID int64
+}
+
 // Merge overlays the set fields of in over a copy of the article. Tags named
 // by mask are taken even when empty, so a partial update can clear them.
 func (a Article) Merge(in *Article, mask []string) *Article {

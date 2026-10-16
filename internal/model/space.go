@@ -14,7 +14,7 @@ type Space struct {
 	// behavior of the space.
 	Language string
 	// EmbeddingModelID is the active embedding model; 0 when vector search is
-	// not configured. Immutable once set, except the one-way upgrade from unset.
+	// not configured. A change reindexes the space.
 	EmbeddingModelID int64
 	// TargetEmbeddingModelID is the pending model-migration target; read-only,
 	// never written through the API.
@@ -33,6 +33,16 @@ type Space struct {
 	UpdatedAt time.Time
 	CreatedBy *Lookup
 	UpdatedBy *Lookup
+}
+
+// SearchModelID is the model the space searches and is indexed with; 0 when
+// it searches without vectors.
+func (s Space) SearchModelID() int64 {
+	if !s.VectorSearchEnabled {
+		return 0
+	}
+
+	return s.EmbeddingModelID
 }
 
 // SpaceEmbedding is the embedding model a space is indexed with, for the indexer.

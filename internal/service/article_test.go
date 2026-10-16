@@ -39,12 +39,13 @@ type fakeArticleStore struct {
 	moveTo    int64
 	moveVer   int32
 
-	lockedSpaceIDs []int64
-	locateFields   [][]string
-	writeFields    [][]string
-	listFilter     model.ArticleFilter
-	suggestSize    int
-	suggestPrefix  string
+	lockedSpaceIDs    []int64 // tree locks
+	keyLockedSpaceIDs []int64
+	locateFields      [][]string
+	writeFields       [][]string
+	listFilter        model.ArticleFilter
+	suggestSize       int
+	suggestPrefix     string
 
 	createCalls, updateCalls, deleteCalls, moveCalls, subtreeCalls int
 	lockedLocates, plainLocates                                    int
@@ -121,6 +122,7 @@ func (f *fakeArticleStore) Update(_ context.Context, opts options.Updator, in *m
 func (f *fakeArticleStore) Delete(_ context.Context, opts options.Deleter, expectedVer int32) (*model.Article, error) {
 	f.deleteCalls++
 	f.writeFields = append(f.writeFields, opts.GetFields())
+	f.step("delete-article")
 
 	return f.written, nil
 }
@@ -157,9 +159,16 @@ func (f *fakeArticleStore) SuggestTags(_ context.Context, _ options.Searcher, _ 
 	return f.tags, nil
 }
 
-func (f *fakeArticleStore) AcquireSpaceMoveLock(_ context.Context, spaceID int64) error {
+func (f *fakeArticleStore) LockSpaceTree(_ context.Context, spaceID, _ int64) error {
 	f.lockedSpaceIDs = append(f.lockedSpaceIDs, spaceID)
-	f.step("space-lock")
+	f.step("tree-lock")
+
+	return nil
+}
+
+func (f *fakeArticleStore) LockSpaceKey(_ context.Context, spaceID, _ int64) error {
+	f.keyLockedSpaceIDs = append(f.keyLockedSpaceIDs, spaceID)
+	f.step("space-key-lock")
 
 	return nil
 }
@@ -208,8 +217,8 @@ type fakeOutbox struct {
 	order  *fakeArticleStore
 }
 
-func (f *fakeOutbox) PublishReindex(_ context.Context, e event.ArticleReindex) error {
-	f.events = append(f.events, e)
+func (f *fakeOutbox) PublishReindex(_ context.Context, events ...event.ArticleReindex) error {
+	f.events = append(f.events, events...)
 
 	if f.order != nil {
 		f.order.step("publish-reindex")
@@ -403,6 +412,42 @@ func TestArticleCreateDepthPreCheck(t *testing.T) {
 	}
 }
 
+func TestArticleDeleteLocksTheSpaceFirst(t *testing.T) {
+	tests := []struct {
+		name      string
+		locateErr error
+		wantOrder string
+		wantCode  codes.Code
+	}{
+		{name: "the space before the subtree", wantOrder: "locate,tree-lock,delete-article", wantCode: codes.OK},
+		{
+			name: "an unknown article deletes nothing", locateErr: errors.NotFound("entity does not exist"),
+			wantOrder: "locate", wantCode: codes.NotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.located = &model.Article{ID: 7, SpaceID: 3}
+			uow.articles.locateErr = tt.locateErr
+
+			_, err := svc.Delete(context.Background(), updaterOpts(), 4)
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("err = %v, want %v", err, tt.wantCode)
+			}
+
+			if order := strings.Join(uow.articles.callOrder, ","); order != tt.wantOrder {
+				t.Fatalf("flow order = %s, want %s", order, tt.wantOrder)
+			}
+
+			if tt.locateErr == nil && (!slices.Equal(uow.articles.lockedSpaceIDs, []int64{3}) || uow.transactions != 1) {
+				t.Fatalf("locked %v in %d transactions, want space 3 in one", uow.articles.lockedSpaceIDs, uow.transactions)
+			}
+		})
+	}
+}
+
 func TestArticleCreateLocksTheParent(t *testing.T) {
 	svc, uow := newArticleFixture()
 
@@ -411,7 +456,7 @@ func TestArticleCreateLocksTheParent(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if order := strings.Join(uow.articles.callOrder, ","); order != "locate-for-update,create-article" {
+	if order := strings.Join(uow.articles.callOrder, ","); order != "space-key-lock,locate-for-update,create-article" {
 		t.Fatalf("flow order = %s", order)
 	}
 
@@ -802,7 +847,7 @@ func TestArticleMoveFlow(t *testing.T) {
 	// read, all inside one transaction: concurrent moves then serialize on a
 	// consistent snapshot instead of deadlocking on inverted lock order.
 	order := strings.Join(uow.articles.callOrder, ",")
-	if order != "locate,space-lock,locate-for-update,subtree,locate-for-update,move" {
+	if order != "locate,tree-lock,locate-for-update,subtree,locate-for-update,move" {
 		t.Fatalf("flow order = %s", order)
 	}
 

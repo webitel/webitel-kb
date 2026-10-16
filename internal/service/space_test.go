@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,13 @@ type fakeSpaceStore struct {
 
 	// trace records the delete flow calls in order.
 	trace []string
+	// order, when set, also records the update flow among the other stores.
+	order *fakeArticleStore
+
+	pending      []model.ReindexTarget
+	lockedScope  [][2]int64
+	pendingScope [][2]int64
+	keptModels   []int64
 
 	replaceErr error
 
@@ -120,6 +128,7 @@ func (f *fakeSpaceStore) LocateForUpdate(_ context.Context, opts options.Searche
 	f.lockedLocates++
 	f.trace = append(f.trace, "lock")
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
+	f.note("lock-space")
 
 	if f.current == nil {
 		return nil, errors.NotFound("entity does not exist or access is denied")
@@ -138,6 +147,7 @@ func (f *fakeSpaceStore) Create(_ context.Context, _ options.Creator, in *model.
 func (f *fakeSpaceStore) Update(_ context.Context, _ options.Updator, in *model.Space) (*model.Space, error) {
 	f.updateCalls++
 	f.updateIn = in
+	f.note("update")
 
 	return f.written, nil
 }
@@ -172,6 +182,33 @@ func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) err
 	f.trace = append(f.trace, "purge")
 
 	return f.purgeErr
+}
+
+func (f *fakeSpaceStore) LockArticles(_ context.Context, spaceID, domainID int64) error {
+	f.lockedScope = append(f.lockedScope, [2]int64{spaceID, domainID})
+	f.note("lock-articles")
+
+	return nil
+}
+
+func (f *fakeSpaceStore) MarkArticlesPending(_ context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error) {
+	f.pendingScope = append(f.pendingScope, [2]int64{spaceID, domainID})
+	f.note("mark-pending")
+
+	return f.pending, nil
+}
+
+func (f *fakeSpaceStore) DropForeignEmbeddings(_ context.Context, _, _, keepModelID int64) error {
+	f.keptModels = append(f.keptModels, keepModelID)
+	f.note("drop-embeddings")
+
+	return nil
+}
+
+func (f *fakeSpaceStore) note(name string) {
+	if f.order != nil {
+		f.order.step(name)
+	}
 }
 
 func (f *fakeSpaceStore) ResolveEmbedding(_ context.Context, spaceID int64) (*model.SpaceEmbedding, error) {
@@ -257,8 +294,10 @@ func (f *gateModelStore) GetConfig(context.Context, int64, int64) ([]byte, error
 // fakeUow hands the same store fakes to transactional and direct callers and
 // counts transactions.
 type fakeUow struct {
-	spaces *fakeSpaceStore
-	models *gateModelStore
+	spaces   *fakeSpaceStore
+	models   *gateModelStore
+	articles *fakeArticleStore
+	outbox   *fakeOutbox
 
 	transactions int
 }
@@ -271,9 +310,9 @@ func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context
 
 func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return u.models }
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return u.spaces }
-func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
+func (u *fakeUow) ArticleStore() store.ArticleStore               { return u.articles }
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
-func (u *fakeUow) OutboxStore() store.OutboxStore                 { return nil }
+func (u *fakeUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
 
@@ -282,16 +321,20 @@ func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 }
 
 func newSpaceFixture() (*SpaceService, *fakeUow) {
+	articles := &fakeArticleStore{}
 	uow := &fakeUow{
 		spaces: &fakeSpaceStore{
 			current:  &model.Space{ID: 7, Language: "uk", EmbeddingModelID: 3, RerankerModelID: 0},
 			written:  &model.Space{ID: 7},
 			readBack: &model.Space{ID: 7, Name: "read-back"},
+			order:    articles,
 		},
 		models: &gateModelStore{models: map[int64]*model.EmbeddingModel{
 			3: validatedModel(3, model.ModelTypeEmbedding),
 			4: validatedModel(4, model.ModelTypeReranker),
 		}},
+		articles: articles,
+		outbox:   &fakeOutbox{order: articles},
 	}
 
 	return NewSpaceService(uow), uow
@@ -444,8 +487,6 @@ func TestSpaceUpdateImmutability(t *testing.T) {
 		in   *model.Space
 	}{
 		{"language change rejected", &model.Space{Name: "docs", Language: "en", EmbeddingModelID: 3}},
-		{"embedding model change rejected", &model.Space{Name: "docs", Language: "uk", EmbeddingModelID: 8}},
-		{"embedding model clear rejected", &model.Space{Name: "docs", Language: "uk", EmbeddingModelID: 0}},
 	}
 
 	for _, tt := range tests {
@@ -569,18 +610,20 @@ func TestSpaceCreateAbortsWhenTeamsFail(t *testing.T) {
 	}
 }
 
-func TestSpaceUpdateVectorWithoutModelReportsImmutability(t *testing.T) {
-	// Enabling vector while omitting the model on a space that has one is a
-	// model-clear attempt: the immutability error is the true cause, not a
-	// missing-model complaint.
-	svc, _ := newSpaceFixture()
+func TestSpaceUpdateVectorWithoutModelIsRefused(t *testing.T) {
+	// Enabling vector while clearing the model leaves nothing to search with.
+	svc, uow := newSpaceFixture()
 
 	_, err := svc.Update(context.Background(), updaterOpts(), &model.Space{
 		Name: "docs", VectorSearchEnabled: true,
 	}, nil)
 
-	if errors.Code(err) != codes.InvalidArgument || errors.ID(err) != "kb.space.embedding_model_immutable" {
-		t.Fatalf("err = %v (id %s), want the immutability cause", err, errors.ID(err))
+	if errors.ID(err) != "kb.space.embedding_model_required" {
+		t.Fatalf("err = %v (id %s), want the missing model", err, errors.ID(err))
+	}
+
+	if uow.spaces.updateCalls != 0 || strings.Join(uow.articles.callOrder, ",") != "lock-space" {
+		t.Fatalf("writes ran: %v", uow.articles.callOrder)
 	}
 }
 
@@ -710,5 +753,123 @@ func TestSpaceDeleteGate(t *testing.T) {
 				t.Fatalf("deleted = %+v", deleted)
 			}
 		})
+	}
+}
+
+func TestSpaceUpdateReindexesWhenTheSearchModelChanges(t *testing.T) {
+	const (
+		lock    = "lock-space,lock-articles,update"
+		reindex = ",mark-pending,publish-reindex"
+		drop    = ",drop-embeddings"
+	)
+
+	tests := []struct {
+		name      string
+		model     int64 // stored embedding model
+		vector    bool  // stored vector search
+		in        *model.Space
+		wantOrder string
+		wantID    string
+	}{
+		{
+			name: "nothing changes", model: 3, vector: true,
+			in: &model.Space{Name: "docs", EmbeddingModelID: 3, VectorSearchEnabled: true}, wantOrder: "lock-space,update",
+		},
+		{
+			name: "a lexical space takes its first model", model: 0,
+			in:        &model.Space{Name: "docs", EmbeddingModelID: 3, VectorSearchEnabled: true},
+			wantOrder: lock + reindex + drop,
+		},
+		{
+			name: "another model while searching", model: 3, vector: true,
+			in:        &model.Space{Name: "docs", EmbeddingModelID: 8, VectorSearchEnabled: true},
+			wantOrder: lock + reindex + drop,
+		},
+		{
+			name: "another model while not searching", model: 3,
+			in: &model.Space{Name: "docs", EmbeddingModelID: 8}, wantOrder: lock + drop,
+		},
+		{
+			name: "vector search turned on with the same model", model: 3,
+			in:        &model.Space{Name: "docs", EmbeddingModelID: 3, VectorSearchEnabled: true},
+			wantOrder: lock + reindex,
+		},
+		{
+			name: "vector search turned off keeps the vectors", model: 3, vector: true,
+			in: &model.Space{Name: "docs", EmbeddingModelID: 3}, wantOrder: lock + reindex,
+		},
+		{
+			name: "the model cleared with vector search", model: 3, vector: true,
+			in: &model.Space{Name: "docs"}, wantOrder: lock + reindex + drop,
+		},
+		{
+			name: "the model cleared while not searching", model: 3,
+			in: &model.Space{Name: "docs"}, wantOrder: lock + drop,
+		},
+		{
+			name: "an unvalidated model writes nothing", model: 3, vector: true,
+			in:     &model.Space{Name: "docs", EmbeddingModelID: 9, VectorSearchEnabled: true},
+			wantID: "kb.space.model_not_validated", wantOrder: "lock-space",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.current = &model.Space{
+				ID: 7, Name: "docs", Language: "uk", EmbeddingModelID: tt.model, VectorSearchEnabled: tt.vector,
+			}
+			uow.spaces.pending = []model.ReindexTarget{{ArticleID: 11, VersionID: 21}}
+			uow.models.models[8] = validatedModel(8, model.ModelTypeEmbedding)
+			uow.models.models[9] = &model.EmbeddingModel{ID: 9, Type: model.ModelTypeEmbedding}
+
+			_, err := svc.Update(context.Background(), updaterOpts(), tt.in, nil)
+			if errors.ID(err) != tt.wantID {
+				t.Fatalf("err = %v (id %s), want %q", err, errors.ID(err), tt.wantID)
+			}
+
+			if got := strings.Join(uow.articles.callOrder, ","); got != tt.wantOrder {
+				t.Fatalf("steps = %s, want %s", got, tt.wantOrder)
+			}
+		})
+	}
+}
+
+func TestSpaceReindexQueuesTheLatestVersionOfEveryArticle(t *testing.T) {
+	svc, uow := newSpaceFixture()
+	uow.spaces.current = &model.Space{ID: 7, Name: "docs", Language: "uk", EmbeddingModelID: 3, VectorSearchEnabled: true}
+	uow.spaces.pending = []model.ReindexTarget{{ArticleID: 11, VersionID: 21}, {ArticleID: 12, VersionID: 24}}
+	uow.models.models[8] = validatedModel(8, model.ModelTypeEmbedding)
+
+	if _, err := svc.Update(context.Background(), updaterOpts(), &model.Space{
+		Name: "docs", EmbeddingModelID: 8, VectorSearchEnabled: true,
+	}, nil); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if len(uow.spaces.lockedScope) != 1 || len(uow.spaces.pendingScope) != 1 {
+		t.Fatalf("locks %v, pending %v; want one each", uow.spaces.lockedScope, uow.spaces.pendingScope)
+	}
+
+	if uow.spaces.lockedScope[0] != [2]int64{7, 5} || uow.spaces.pendingScope[0] != [2]int64{7, 5} {
+		t.Fatalf("scope: articles %v, pending %v", uow.spaces.lockedScope, uow.spaces.pendingScope)
+	}
+
+	got := make([][2]int64, 0, len(uow.outbox.events))
+	for _, e := range uow.outbox.events {
+		if e.SpaceID != 7 || e.DomainID != 5 {
+			t.Fatalf("event %+v, want space 7 of domain 5", e)
+		}
+
+		got = append(got, [2]int64{e.ArticleID, e.VersionID})
+	}
+
+	if want := [][2]int64{{11, 21}, {12, 24}}; !slices.Equal(got, want) {
+		t.Fatalf("queued %v, want %v", got, want)
+	}
+
+	// Only the vectors of the new model stay.
+	if !slices.Equal(uow.spaces.keptModels, []int64{8}) {
+		t.Fatalf("kept models = %v, want [8]", uow.spaces.keptModels)
 	}
 }
