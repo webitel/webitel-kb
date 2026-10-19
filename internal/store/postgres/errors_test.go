@@ -47,6 +47,11 @@ func TestParseError(t *testing.T) {
 			codes.InvalidArgument,
 		},
 		{
+			"storage limit is invalid input",
+			&pgconn.PgError{Code: pgerrcode.ProgramLimitExceeded},
+			codes.InvalidArgument,
+		},
+		{
 			"deadlock is worth another attempt",
 			&pgconn.PgError{Code: pgerrcode.DeadlockDetected},
 			codes.Aborted,

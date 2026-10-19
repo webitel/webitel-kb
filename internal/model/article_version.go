@@ -5,6 +5,10 @@ import "time"
 // MaxVersionNotes bounds a restore note, in runes.
 const MaxVersionNotes = 50
 
+// MaxBodyBytes bounds the editor document of a version, in bytes. It keeps an
+// article within what the database, the transport and the index can carry.
+const MaxBodyBytes = 512 << 10
+
 // ArticleVersion is an immutable snapshot of article content.
 type ArticleVersion struct {
 	ID        int64

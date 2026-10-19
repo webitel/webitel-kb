@@ -65,6 +65,12 @@ func ParseError(err error) error {
 				errors.WithCause(err),
 				errors.WithValue("column", pgErr.TableName+"."+pgErr.ColumnName),
 			)
+		case pgerrcode.ProgramLimitExceeded:
+			return errors.InvalidArgument(
+				"invalid input: value exceeds a storage limit",
+				errors.WithID("store.pg.limit"),
+				errors.WithCause(err),
+			)
 		case pgerrcode.DeadlockDetected, pgerrcode.SerializationFailure:
 			return errors.Aborted(
 				"concurrent change, try again",

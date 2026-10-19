@@ -125,24 +125,36 @@ message_id dedup:
 - After exhausted retries or on a permanent error: set the article's
   `index_state=4`, then `basic_nack(requeue=False)` — the message dead-letters
   into `kb.reindex.dlq`. `requeue=True` loops forever and never reaches the DLQ.
-- `prefetch_count=1` in v1 (ordering).
+- A job whose article already has a newer version is acked without indexing,
+  and so is one that fails after a newer version appeared: the newer version's
+  own job is responsible for the article.
+- `prefetch_count=1` per consumer; parallelism comes from more consumers.
 - DLQ carries the `x-death` header. Redrive is manual (fix the cause, republish
   to `kb.reindex`). No automatic redrive in v1.
 
 ## 8. Ordering
 
-Guaranteed by "one active relay publishes in commit order" plus
-"one consumer with prefetch=1". Multiple worker instances are allowed for failover;
-only one consumes.
+The relay publishes in commit order. Consumers do not keep per-article order:
+any number of worker instances consume the queue at once, and two versions of
+one article may be indexed in parallel or out of order.
 
 Commit order, not insert order: the relay reads by `(transaction_id, offset)`.
 The outbox row must still be written in the same transaction as the article
 change, for atomicity, but ordering no longer depends on it.
 
-Seeding scale-out: adding consumers is allowed and deliberately breaks
-per-article FIFO. Safe: the monotonic swap guard decides correctness; a losing
-job leaves at most orphan chunks of its own version. Do NOT build cross-instance
-ordering coordination.
+Correctness comes from the version, not from delivery order:
+
+- every version is saved with its own envelope, so the newest version always
+  has a job;
+- the published-version swap is monotonic;
+- `index_state` is written only by a job of the newest version, and codes 2
+  and 4 never by a job of the version already published. The worker locks the
+  article row, then checks for a newer version, then writes, in one
+  transaction: a save holds the same row until it commits;
+- a losing job leaves at most orphan chunks of its own version, dropped by the
+  next swap.
+
+Do NOT build cross-instance ordering coordination.
 
 ## 9. Schema evolution
 
@@ -159,9 +171,9 @@ Numeric codes are authoritative:
 | Code | State | Written by |
 |---|---|---|
 | 1 | pending | kb-api on version save |
-| 2 | indexing | worker at job start |
-| 3 | indexed | worker after successful swap |
-| 4 | failed | worker before nack to DLQ; relay when delivery is given up |
+| 2 | indexing | worker at job start, for the newest unpublished version |
+| 3 | indexed | worker after successful swap, for the newest version |
+| 4 | failed | worker before nack to DLQ, for the newest unpublished version; relay when delivery is given up |
 
 The relay stamps code 4 before setting an undeliverable envelope aside and
 acknowledging it: without the stamp the article stays pending with nothing left
