@@ -55,10 +55,45 @@ var errReindexNoVersion = errors.InvalidArgument(
 	errors.WithID("kb.article.no_version"),
 )
 
+// A list never carries bodies: a page of them outgrows a response, and a body
+// is read one item at a time.
+var (
+	articleBodyFields = []string{"published"}
+	versionBodyFields = []string{"body_rich_text", "body_markdown", "body_plain"}
+)
+
+// versionListFields is what the history carries when the caller asks for nothing.
+var versionListFields = []string{
+	"id", "article_id", "version_number", "subject", "restored_from", "notes",
+	"created_at", "created_by",
+}
+
+// listOptions are list options with the requested fields replaced.
+type listOptions struct {
+	options.Searcher
+
+	fields []string
+}
+
+func (o listOptions) GetFields() []string { return o.fields }
+
+// withoutBodies drops the body fields from the request; fallback applies when
+// nothing is left.
+func withoutBodies(opts options.Searcher, bodies, fallback []string) options.Searcher {
+	fields := slices.DeleteFunc(slices.Clone(opts.GetFields()), func(field string) bool {
+		return slices.Contains(bodies, field)
+	})
+	if len(fields) == 0 {
+		fields = fallback
+	}
+
+	return listOptions{Searcher: opts, fields: fields}
+}
+
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
 ) ([]*model.Article, bool, error) {
-	return s.uow.ArticleStore().List(ctx, opts, filter)
+	return s.uow.ArticleStore().List(ctx, withoutBodies(opts, articleBodyFields, nil), filter)
 }
 
 func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
@@ -336,7 +371,7 @@ func (s *ArticleService) SuggestTags(
 func (s *ArticleService) ListVersions(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.ArticleVersion, bool, error) {
-	return s.uow.ArticleVersionStore().List(ctx, opts, articleID)
+	return s.uow.ArticleVersionStore().List(ctx, withoutBodies(opts, versionBodyFields, versionListFields), articleID)
 }
 
 func (s *ArticleService) GetVersion(
@@ -578,6 +613,15 @@ func normalizeTags(tags []string) []string {
 func (s *ArticleService) convertBody(ctx context.Context, raw []byte) (bodyconv.Result, error) {
 	if len(raw) == 0 {
 		return bodyconv.Result{}, nil
+	}
+
+	if len(raw) > model.MaxBodyBytes {
+		return bodyconv.Result{}, errors.InvalidArgument(
+			"the body exceeds the size limit",
+			errors.WithID("kb.article.body_too_large"),
+			errors.WithValue("limit", model.MaxBodyBytes),
+			errors.WithValue("size", len(raw)),
+		)
 	}
 
 	result, err := bodyconv.Convert(raw)
