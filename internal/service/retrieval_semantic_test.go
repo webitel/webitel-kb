@@ -289,3 +289,102 @@ func TestSemanticSearchCitations(t *testing.T) {
 
 // discardLogger is the logger of a test: the service logs, nothing reads it.
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+func TestClipQuery(t *testing.T) {
+	words := func(word string, n int) string { return strings.Repeat(word+" ", n) }
+
+	tests := []struct {
+		name string
+		in   string
+		// min and max bound the clipped length in runes.
+		min, max int
+		// suffix is what the clipped query must end with.
+		suffix string
+	}{
+		{name: "a short query is kept", in: "how do I reset my password?", min: 27, max: 27, suffix: "password?"},
+		{name: "a query at the limit is kept", in: strings.Repeat("a", maxQueryRunes), min: maxQueryRunes, max: maxQueryRunes},
+		{
+			name: "a long query ends on a word", in: words("доставка", 1000),
+			min: maxQueryRunes - len([]rune("доставка ")), max: maxQueryRunes, suffix: "доставка",
+		},
+		{name: "runes are counted, not bytes", in: words("ї", 3000), min: maxQueryRunes - 2, max: maxQueryRunes, suffix: "ї"},
+		{
+			name: "a query without spaces is cut at the limit", in: strings.Repeat("я", maxQueryRunes+500),
+			min: maxQueryRunes, max: maxQueryRunes,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := clipQuery(tt.in)
+
+			if !strings.HasPrefix(tt.in, got) {
+				t.Fatal("clipped query is not a prefix of the query")
+			}
+
+			if n := len([]rune(got)); n < tt.min || n > tt.max {
+				t.Fatalf("clipQuery = %d runes, want %d..%d", n, tt.min, tt.max)
+			}
+
+			if !strings.HasSuffix(got, tt.suffix) {
+				t.Fatalf("clipped query does not end with %q", tt.suffix)
+			}
+		})
+	}
+}
+
+func TestLongQueriesReachTheModelsClipped(t *testing.T) {
+	long := strings.Repeat("vpn ", 1000)
+	clipped := clipQuery(long)
+
+	tests := []struct {
+		name string
+		run  func(svc *RetrievalService) error
+		rerank bool
+	}{
+		{
+			name: "semantic search",
+			run: func(svc *RetrievalService) error {
+				_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: long, SpaceIDs: []int64{1}})
+
+				return err
+			},
+		},
+		{
+			name: "suggest",
+			run: func(svc *RetrievalService) error {
+				_, err := svc.Suggest(context.Background(), semanticOpts(), model.SuggestQuery{Message: long, SpaceIDs: []int64{1}})
+
+				return err
+			},
+			rerank: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow, provider := suggestFixture()
+			uow.spaces.resolvedMany[0] = &model.SpaceEmbedding{
+				SpaceID: 1, VectorSearchEnabled: true, ModelID: 9, Provider: "bge-m3", ModelRef: "a", Dimensions: 1,
+				Endpoint: "http://embed",
+			}
+			provider.vectors = map[string][]float32{"a": {0.1}}
+
+			if err := tt.run(svc); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+
+			if len(provider.requests) != 1 || !reflect.DeepEqual(provider.requests[0].Texts, []string{clipped}) {
+				t.Fatalf("embedded texts = %d, want the clipped query", len(provider.requests))
+			}
+
+			if uow.retrieval.hybrid.Term != clipped {
+				t.Fatalf("full-text term = %d runes, want the clipped query", len([]rune(uow.retrieval.hybrid.Term)))
+			}
+
+			if tt.rerank && (len(provider.reranks) != 1 || provider.reranks[0].Query != clipped) {
+				t.Fatalf("rerank requests = %d, want the clipped query", len(provider.reranks))
+			}
+		})
+	}
+}
