@@ -338,8 +338,8 @@ func TestLongQueriesReachTheModelsClipped(t *testing.T) {
 	clipped := clipQuery(long)
 
 	tests := []struct {
-		name string
-		run  func(svc *RetrievalService) error
+		name   string
+		run    func(svc *RetrievalService) error
 		rerank bool
 	}{
 		{
