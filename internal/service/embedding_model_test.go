@@ -221,7 +221,7 @@ type fakeProvider struct {
 
 	embedReq  *embedding.EmbedRequest
 	rerankReq *embedding.RerankRequest
-	deadline time.Time
+	deadline  time.Time
 }
 
 func (f *fakeProvider) Embed(ctx context.Context, req embedding.EmbedRequest) (embedding.EmbedResult, error) {
