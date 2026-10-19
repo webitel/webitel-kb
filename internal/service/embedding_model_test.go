@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -220,16 +221,19 @@ type fakeProvider struct {
 
 	embedReq  *embedding.EmbedRequest
 	rerankReq *embedding.RerankRequest
+	deadline time.Time
 }
 
-func (f *fakeProvider) Embed(_ context.Context, req embedding.EmbedRequest) (embedding.EmbedResult, error) {
+func (f *fakeProvider) Embed(ctx context.Context, req embedding.EmbedRequest) (embedding.EmbedResult, error) {
 	f.embedReq = &req
+	f.deadline, _ = ctx.Deadline()
 
 	return f.embedRes, f.embedErr
 }
 
-func (f *fakeProvider) Rerank(_ context.Context, req embedding.RerankRequest) (embedding.RerankResult, error) {
+func (f *fakeProvider) Rerank(ctx context.Context, req embedding.RerankRequest) (embedding.RerankResult, error) {
 	f.rerankReq = &req
+	f.deadline, _ = ctx.Deadline()
 
 	return f.rerankRes, f.rerankErr
 }
@@ -1300,5 +1304,129 @@ func TestValidateReadsProbeFields(t *testing.T) {
 		if !found {
 			t.Fatalf("probe read misses field %q in %v", field, models.locateFields)
 		}
+	}
+}
+
+func TestProbeIsBounded(t *testing.T) {
+	reranker := registeredModel()
+	reranker.Type = model.ModelTypeReranker
+	reranker.Dimensions = 0
+
+	inUse := &model.EmbeddingModel{
+		ID: 5, DomainID: 1, Type: model.ModelTypeEmbedding, Name: "byom",
+		Provider: embedding.ProviderBYOM, IsSelfHosted: true, ModelRef: "bge-m3", Dimensions: 1024,
+		Endpoint: "http://embedder:8080",
+	}
+
+	tests := []struct {
+		name string
+		run  func(svc *EmbeddingModelService, models *fakeModelStore, provider *fakeProvider) error
+	}{
+		{
+			name: "validate embedding",
+			run: func(svc *EmbeddingModelService, models *fakeModelStore, provider *fakeProvider) error {
+				models.located = registeredModel()
+				_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
+
+				return err
+			},
+		},
+		{
+			name: "validate reranker",
+			run: func(svc *EmbeddingModelService, models *fakeModelStore, provider *fakeProvider) error {
+				models.located = reranker
+				_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
+
+				return err
+			},
+		},
+		{
+			name: "update of a model in use",
+			run: func(svc *EmbeddingModelService, models *fakeModelStore, provider *fakeProvider) error {
+				models.located, models.inUse = inUse, true
+				provider.embedRes = embedding.EmbedResult{Vectors: [][]float32{make([]float32, 1024)}}
+				_, err := svc.Update(context.Background(), &stubWriteOpts{
+					auth: stubAuther{domainID: 1}, id: 5, mask: []string{"endpoint"},
+				}, &model.EmbeddingModel{Endpoint: "http://embedder:9090"}, "")
+
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{config: []byte("enc:key123"), marked: &model.EmbeddingModel{ID: 5}}
+			provider := &fakeProvider{
+				embedRes:  embedding.EmbedResult{Vectors: [][]float32{{1, 2, 3}}},
+				rerankRes: embedding.RerankResult{Scores: make([]float64, len(probeDocuments))},
+			}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{provider: provider})
+
+			if err := tt.run(svc, models, provider); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+
+			if provider.deadline.IsZero() {
+				t.Fatal("the probe ran without a deadline")
+			}
+
+			if latest := time.Now().Add(probeTimeout); provider.deadline.After(latest) {
+				t.Fatalf("probe deadline %v is later than %v", provider.deadline, latest)
+			}
+		})
+	}
+}
+
+func TestDeleteModel(t *testing.T) {
+	global := registeredModel()
+	global.DomainID = 0
+
+	tests := []struct {
+		name       string
+		located    *model.EmbeddingModel
+		locateErr  error
+		inUse      bool
+		wantErrID  string
+		wantDelete int
+	}{
+		{name: "free model is deleted", located: registeredModel(), wantDelete: 1},
+		{name: "model a space uses is kept", located: registeredModel(), inUse: true, wantErrID: "kb.model.in_use"},
+		{name: "global model is read-only", located: global, wantErrID: "kb.model.global_read_only"},
+		{
+			name: "missing model", locateErr: errors.NotFound("not found", errors.WithID("store.pg.not_found")),
+			wantErrID: "store.pg.not_found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := &fakeModelStore{
+				located: tt.located, locateErr: tt.locateErr, inUse: tt.inUse, written: tt.located,
+			}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{})
+
+			_, err := svc.Delete(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 5})
+
+			if tt.wantErrID == "" && err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+
+			if tt.wantErrID != "" && (err == nil || errors.ID(err) != tt.wantErrID) {
+				t.Fatalf("Delete error = %v, want id %q", err, tt.wantErrID)
+			}
+
+			if tt.wantErrID == "kb.model.in_use" && errors.Code(err) != codes.FailedPrecondition {
+				t.Fatalf("Delete code = %v, want FailedPrecondition", errors.Code(err))
+			}
+
+			if models.deleteCalls != tt.wantDelete {
+				t.Fatalf("delete calls = %d, want %d", models.deleteCalls, tt.wantDelete)
+			}
+
+			if tt.located != nil && models.lockedLocates != 1 {
+				t.Fatalf("locked locates = %d, want the row locked once", models.lockedLocates)
+			}
+		})
 	}
 }
