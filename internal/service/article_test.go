@@ -887,6 +887,45 @@ func TestArticleUpdateRejectsHierarchyInput(t *testing.T) {
 	}
 }
 
+func TestArticleUpdateStateTransitions(t *testing.T) {
+	tests := []struct {
+		name      string
+		stored    int32
+		in        int32
+		wantErrID string
+	}{
+		{name: "active back to draft", stored: model.ArticleStateActive, in: model.ArticleStateDraft, wantErrID: "kb.article.state_transition"},
+		{name: "inactive back to draft", stored: model.ArticleStateInactive, in: model.ArticleStateDraft, wantErrID: "kb.article.state_transition"},
+		{name: "draft published", stored: model.ArticleStateDraft, in: model.ArticleStateActive},
+		{name: "draft hidden", stored: model.ArticleStateDraft, in: model.ArticleStateInactive},
+		{name: "active hidden", stored: model.ArticleStateActive, in: model.ArticleStateInactive},
+		{name: "inactive shown", stored: model.ArticleStateInactive, in: model.ArticleStateActive},
+		{name: "state left as is", stored: model.ArticleStateActive},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.current.State = tt.stored
+
+			_, err := svc.Update(context.Background(), updaterOpts(), &model.Article{State: tt.in}, nil, 4)
+
+			if errors.ID(err) != tt.wantErrID {
+				t.Fatalf("error = %v, want %q", err, tt.wantErrID)
+			}
+
+			wantWrites := 1
+			if tt.wantErrID != "" {
+				wantWrites = 0
+			}
+
+			if uow.articles.updateCalls != wantWrites {
+				t.Fatalf("update calls = %d, want %d", uow.articles.updateCalls, wantWrites)
+			}
+		})
+	}
+}
+
 func TestArticleUpdateAcceptsMatchingHierarchyInput(t *testing.T) {
 	// A PUT naturally echoes the current values back; that is not a change.
 	svc, uow := newArticleFixture()

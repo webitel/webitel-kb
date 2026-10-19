@@ -21,6 +21,12 @@ const (
 	ArticleStateInactive int32 = 3
 )
 
+// CanChangeState reports whether an article may move from one lifecycle state
+// to another: once out of draft it never returns there.
+func CanChangeState(from, to int32) bool {
+	return from == to || to != ArticleStateDraft
+}
+
 // Article indexing state codes.
 const (
 	IndexStatePending  int32 = 1
