@@ -71,6 +71,12 @@ func ParseError(err error) error {
 				errors.WithID("store.pg.limit"),
 				errors.WithCause(err),
 			)
+		case pgerrcode.DeadlockDetected, pgerrcode.SerializationFailure:
+			return errors.Aborted(
+				"concurrent change, try again",
+				errors.WithID("store.pg.conflict"),
+				errors.WithCause(err),
+			)
 		}
 	}
 

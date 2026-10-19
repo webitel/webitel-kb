@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -25,12 +26,13 @@ type outboxStore struct {
 
 var _ store.OutboxStore = (*outboxStore)(nil)
 
-// PublishReindex stores one envelope in the caller's transaction. The row
+const outboxBatch = 1000
+
+// PublishReindex stores the envelopes in the caller's transaction. Each row
 // carries the broker routing key; the relay never decodes the payload.
-func (o *outboxStore) PublishReindex(ctx context.Context, e event.ArticleReindex) error {
-	payload, err := e.Marshal()
-	if err != nil {
-		return fmt.Errorf("postgres: outbox event: %w", err)
+func (o *outboxStore) PublishReindex(ctx context.Context, events ...event.ArticleReindex) error {
+	if len(events) == 0 {
+		return nil
 	}
 
 	tx, ok := o.db.(pgx.Tx)
@@ -39,6 +41,22 @@ func (o *outboxStore) PublishReindex(ctx context.Context, e event.ArticleReindex
 			"an outbox event needs the transaction of the change it describes",
 			errors.WithID("kb.outbox.no_transaction"),
 		)
+	}
+
+	messages := make([]*message.Message, 0, len(events))
+
+	for _, e := range events {
+		payload, err := e.Marshal()
+		if err != nil {
+			return fmt.Errorf("postgres: outbox event: %w", err)
+		}
+
+		msg := message.NewMessage(watermill.NewUUID(), payload)
+		msg.SetContext(ctx)
+		msg.Metadata.Set(outbox.MetadataRoutingKey, event.ReindexRoutingKey(e.ArticleID))
+		msg.Metadata.Set(outbox.MetadataType, e.Type)
+		msg.Metadata.Set(outbox.MetadataSchema, strconv.Itoa(e.Schema))
+		messages = append(messages, msg)
 	}
 
 	publisher, err := watermillsql.NewPublisher(
@@ -50,14 +68,10 @@ func (o *outboxStore) PublishReindex(ctx context.Context, e event.ArticleReindex
 		return fmt.Errorf("postgres: outbox publisher: %w", err)
 	}
 
-	msg := message.NewMessage(watermill.NewUUID(), payload)
-	msg.SetContext(ctx)
-	msg.Metadata.Set(outbox.MetadataRoutingKey, event.ReindexRoutingKey(e.ArticleID))
-	msg.Metadata.Set(outbox.MetadataType, e.Type)
-	msg.Metadata.Set(outbox.MetadataSchema, strconv.Itoa(e.Schema))
-
-	if err := publisher.Publish(outbox.Topic, msg); err != nil {
-		return fmt.Errorf("postgres: write outbox: %w", err)
+	for batch := range slices.Chunk(messages, outboxBatch) {
+		if err := publisher.Publish(outbox.Topic, batch...); err != nil {
+			return fmt.Errorf("postgres: write outbox: %w", err)
+		}
 	}
 
 	return nil

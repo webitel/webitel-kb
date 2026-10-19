@@ -132,6 +132,10 @@ func (s *ArticleService) Create(
 	var created *model.Article
 
 	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		if err := tx.ArticleStore().LockSpaceKey(ctx, in.SpaceID, session.GetDomainID()); err != nil {
+			return err
+		}
+
 		if in.ParentID != 0 {
 			if err := checkDepth(ctx, tx, session, in.ParentID, 0, "kb.article.create_depth"); err != nil {
 				return err
@@ -284,7 +288,31 @@ func retitleLatest(
 func (s *ArticleService) Delete(
 	ctx context.Context, opts options.Deleter, expectedVer int32,
 ) (*model.Article, error) {
-	return s.uow.ArticleStore().Delete(ctx, opts, expectedVer)
+	session := opts.GetAuthOpts()
+
+	var deleted *model.Article
+
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		located, err := tx.ArticleStore().Locate(ctx, readOptions{
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"},
+		})
+		if err != nil {
+			return err
+		}
+
+		if err := tx.ArticleStore().LockSpaceTree(ctx, located.SpaceID, session.GetDomainID()); err != nil {
+			return err
+		}
+
+		deleted, err = tx.ArticleStore().Delete(ctx, opts, expectedVer)
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return deleted, nil
 }
 
 // Move reparents an article. The whole flow runs in one transaction and moves
@@ -305,7 +333,7 @@ func (s *ArticleService) Move(
 			return err
 		}
 
-		if err := tx.ArticleStore().AcquireSpaceMoveLock(ctx, located.SpaceID); err != nil {
+		if err := tx.ArticleStore().LockSpaceTree(ctx, located.SpaceID, session.GetDomainID()); err != nil {
 			return err
 		}
 
@@ -487,9 +515,11 @@ func requestReindex(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
 	articleID, versionID, spaceID int64,
 ) error {
-	return tx.OutboxStore().PublishReindex(ctx, event.NewArticleReindex(
-		time.Now(), articleID, versionID, spaceID, session.GetDomainID(),
-	))
+	return tx.OutboxStore().PublishReindex(ctx, reindexEvent(session, articleID, versionID, spaceID))
+}
+
+func reindexEvent(session auth.Auther, articleID, versionID, spaceID int64) event.ArticleReindex {
+	return event.NewArticleReindex(time.Now(), articleID, versionID, spaceID, session.GetDomainID())
 }
 
 // checkDepth refuses a placement past the depth ceiling; height is how far the

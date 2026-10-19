@@ -163,6 +163,14 @@ func (f fakeSpaces) HoldsArticle(context.Context, int64, int64, int64) (bool, er
 }
 func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) error { return nil }
 
+func (f fakeSpaces) LockArticles(context.Context, int64, int64) error { return nil }
+
+func (f fakeSpaces) MarkArticlesPending(context.Context, int64, int64) ([]model.ReindexTarget, error) {
+	return nil, nil
+}
+
+func (f fakeSpaces) DropForeignEmbeddings(context.Context, int64, int64, int64) error { return nil }
+
 func (f fakeSpaces) ResolveEmbedding(context.Context, int64) (*model.SpaceEmbedding, error) {
 	return f.u.embedding, nil
 }
