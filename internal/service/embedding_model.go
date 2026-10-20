@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"net/url"
 	"slices"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -28,6 +29,10 @@ var probeDocuments = []string{
 	"To reset your password, open the profile settings and choose a new one.",
 	"Company holidays are announced at the start of every year.",
 }
+
+// probeTimeout bounds a validation probe, retries included, well within the
+// gateway deadline.
+const probeTimeout = 10 * time.Second
 
 // Provider groups. Registration rules are driven by the group, not by the
 // self-hosted flag: cloud providers authenticate with an API key (azure at the
@@ -295,10 +300,51 @@ func sameRegistration(a, b *model.EmbeddingModel) bool {
 		a.Dimensions == b.Dimensions && a.Endpoint == b.Endpoint
 }
 
+// errModelInUseDelete refuses to delete a model a space relies on.
+var errModelInUseDelete = errors.New(
+	"a model used by a space cannot be deleted",
+	errors.WithCode(codes.FailedPrecondition),
+	errors.WithID("kb.model.in_use"),
+)
+
+// Delete removes a model no space uses.
 func (s *EmbeddingModelService) Delete(
 	ctx context.Context, opts options.Deleter,
 ) (*model.EmbeddingModel, error) {
-	return s.uow.EmbeddingModelStore().Delete(ctx, opts)
+	session := opts.GetAuthOpts()
+
+	var deleted *model.EmbeddingModel
+
+	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
+		found, err := tx.EmbeddingModelStore().LocateForUpdate(ctx, readOptions{
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "domain_id"},
+		})
+		if err != nil {
+			return err
+		}
+
+		if found.DomainID == 0 {
+			return errGlobalReadOnly
+		}
+
+		used, err := tx.EmbeddingModelStore().InUse(ctx, found.ID, session.GetDomainID())
+		if err != nil {
+			return err
+		}
+
+		if used {
+			return errModelInUseDelete
+		}
+
+		deleted, err = tx.EmbeddingModelStore().Delete(ctx, opts)
+
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return deleted, nil
 }
 
 // Validate runs the registration probe: a test call against the live provider
@@ -384,6 +430,9 @@ func (s *EmbeddingModelService) openKey(ctx context.Context, id, domainID int64)
 // probe makes the test call matching the model's role and checks the response
 // shape against the registration.
 func probe(ctx context.Context, p embedding.Provider, m *model.EmbeddingModel, apiKey string) error {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+
 	switch m.Type {
 	case model.ModelTypeEmbedding:
 		res, err := p.Embed(ctx, embedding.EmbedRequest{
