@@ -88,7 +88,7 @@ func mapArticleVersion(record *articleVersionRecord) *model.ArticleVersion {
 }
 
 func (s *articleVersionStore) List(
-	ctx context.Context, opts options.Searcher, articleID int64,
+	ctx context.Context, opts options.Searcher, articleID int64, newest int,
 ) ([]*model.ArticleVersion, bool, error) {
 	sorts := util.SplitSort(opts.GetSort())
 	if len(sorts) == 0 {
@@ -102,6 +102,7 @@ func (s *articleVersionStore) List(
 	sql, args, err := queryobject.NewArticleVersionQuery(queryobject.ArticleVersionFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithArticle(articleID).
+		WithNewest(newest).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).
@@ -126,12 +127,13 @@ func (s *articleVersionStore) List(
 }
 
 func (s *articleVersionStore) Locate(
-	ctx context.Context, opts options.Searcher, articleID int64, number int32,
+	ctx context.Context, opts options.Searcher, articleID int64, number int32, newest int,
 ) (*model.ArticleVersion, error) {
 	sql, args, err := queryobject.NewArticleVersionQuery(queryobject.ArticleVersionFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithArticle(articleID).
 		WithNumber(number).
+		WithNewest(newest).
 		WithFields(opts.GetFields()).
 		ToSQL()
 	if err != nil {

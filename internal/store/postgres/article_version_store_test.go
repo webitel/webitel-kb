@@ -22,7 +22,7 @@ func TestArticleVersionListNewestFirst(t *testing.T) {
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: 10, page: 2}
 
-	if _, _, err := s.List(context.Background(), opts, 7); err != nil {
+	if _, _, err := s.List(context.Background(), opts, 7, 0); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -40,13 +40,28 @@ func TestArticleVersionListNewestFirst(t *testing.T) {
 	}
 }
 
+func TestArticleVersionListKeepsTheLatest(t *testing.T) {
+	f := &fakeQuerier{}
+	s := &articleVersionStore{db: f}
+
+	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: 10, page: 1}
+
+	if _, _, err := s.List(context.Background(), opts, 7, 3); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if !strings.Contains(f.gotSQL, "m.version_number>(SELECT max(x.version_number)") || len(f.gotArgs) != 3 || f.gotArgs[2] != 3 {
+		t.Fatalf("SQL %q, args %v: the latest three are not kept", f.gotSQL, f.gotArgs)
+	}
+}
+
 func TestArticleVersionListKeepsTiebreaker(t *testing.T) {
 	f := &fakeQuerier{}
 	s := &articleVersionStore{db: f}
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, sort: "+created_at"}
 
-	if _, _, err := s.List(context.Background(), opts, 7); err != nil {
+	if _, _, err := s.List(context.Background(), opts, 7, 0); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -75,7 +90,7 @@ func TestArticleVersionLocateByNumber(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(3)}}}}
 	s := &articleVersionStore{db: f}
 
-	got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, 2)
+	got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, 2, 10)
 	if err != nil {
 		t.Fatalf("Locate: %v", err)
 	}
@@ -84,7 +99,7 @@ func TestArticleVersionLocateByNumber(t *testing.T) {
 		t.Fatalf("version = %+v", got)
 	}
 
-	for _, want := range []string{"m.article_id=$2", "m.version_number=$3"} {
+	for _, want := range []string{"m.article_id=$2", "m.version_number=$3", "x.article_id=m.article_id)-$4"} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
@@ -190,7 +205,7 @@ func TestArticleVersionScanMapsRecord(t *testing.T) {
 	}}
 	s := &articleVersionStore{db: f}
 
-	got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, 2)
+	got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, 7, 2, 0)
 	if err != nil {
 		t.Fatalf("Locate: %v", err)
 	}

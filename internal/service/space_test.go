@@ -315,6 +315,7 @@ func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *fakeUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
+func (u *fakeUow) SettingStore() store.SettingStore               { return nil }
 
 func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 	return &model.EmbeddingModel{ID: id, Type: modelType, ValidatedAt: time.Now()}

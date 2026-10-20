@@ -170,7 +170,7 @@ func (h *SearchHits) WithScope(domainID int64, filter model.SearchFilter) *Searc
 		scoped := whereDomainScope(*branch, domainID)
 		scoped = whereRetrievable(scoped)
 		scoped = whereScopeSpaces(scoped, filter.SpaceIDs)
-		*branch = whereTags(scoped, filter.Tags, filter.TagsMatchAll)
+		*branch = whereTags(scoped, filter.Tags, filter.TagMatch.All())
 	}
 
 	return h

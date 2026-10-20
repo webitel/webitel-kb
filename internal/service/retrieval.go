@@ -38,13 +38,15 @@ type RetrievalService struct {
 	uow       store.UnitOfWork
 	enc       crypto.Encryptor
 	providers ProviderResolver
+	tags      TagMatchResolver
 	log       *slog.Logger
 }
 
 func NewRetrievalService(
-	uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver, log *slog.Logger,
+	uow store.UnitOfWork, encryptor crypto.Encryptor, providers ProviderResolver, tags TagMatchResolver,
+	log *slog.Logger,
 ) *RetrievalService {
-	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, log: log}
+	return &RetrievalService{uow: uow, enc: encryptor, providers: providers, tags: tags, log: log}
 }
 
 // Search runs full-text and trigram search over subjects and published bodies.
@@ -55,6 +57,8 @@ func (s *RetrievalService) Search(
 	if strings.TrimSpace(opts.GetSearch()) == "" {
 		return nil, false, nil
 	}
+
+	filter.TagMatch = s.tags.ResolveTagMatch(ctx, opts.GetAuthOpts().GetDomainID(), filter.TagMatch, filter.Tags)
 
 	var (
 		items []*model.ArticleSummary
@@ -141,7 +145,11 @@ func (s *RetrievalService) SemanticSearch(
 		return nil, nil, err
 	}
 
-	filter := model.SearchFilter{SpaceIDs: q.SpaceIDs, Tags: q.Tags, TagsMatchAll: q.TagsMatchAll}
+	filter := model.SearchFilter{
+		SpaceIDs: q.SpaceIDs,
+		Tags:     q.Tags,
+		TagMatch: s.tags.ResolveTagMatch(ctx, opts.GetAuthOpts().GetDomainID(), q.TagMatch, q.Tags),
+	}
 
 	hits, err := s.fuse(ctx, opts, q.Query, spaces, filter, topK(q.TopK))
 	if err != nil {

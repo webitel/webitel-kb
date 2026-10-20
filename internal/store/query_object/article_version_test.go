@@ -107,3 +107,32 @@ func TestVersionProjectionAlwaysCarriesTheIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestArticleVersionNewest(t *testing.T) {
+	tests := []struct {
+		name     string
+		newest   int
+		wantCond bool
+	}{
+		{"zero keeps every version", 0, false},
+		{"limit keeps the latest", 10, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, args := mustSQLArgs(t, NewArticleVersionQuery(ArticleVersionFrom).
+				WithFields([]string{"id"}).
+				WithArticle(7).
+				WithNewest(tt.newest))
+
+			cond := "m.version_number>(SELECT max(x.version_number)FROM kb.article_version x WHERE x.article_id=m.article_id)-$2"
+			if got := strings.Contains(sql, cond); got != tt.wantCond {
+				t.Fatalf("SQL %q, condition rendered = %v, want %v", sql, got, tt.wantCond)
+			}
+
+			if tt.wantCond && (len(args) != 2 || args[1] != tt.newest) {
+				t.Fatalf("args = %v, want the limit second", args)
+			}
+		})
+	}
+}

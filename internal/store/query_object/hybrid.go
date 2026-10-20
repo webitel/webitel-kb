@@ -77,7 +77,7 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 
 	lex := whereRetrievable(whereDomainScope(h.lex, domainID))
 	lex = whereScopeSpaces(lex, h.filter.SpaceIDs)
-	h.lex = whereTags(lex, h.filter.Tags, h.filter.TagsMatchAll).
+	h.lex = whereTags(lex, h.filter.Tags, h.filter.TagMatch.All()).
 		OrderBy("rank_key DESC", "c.id").
 		Limit(BranchDepth)
 
@@ -85,7 +85,7 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 		// The scope sits on the vector row, so the filter needs no join to apply.
 		vec := whereRetrievable(h.vec[i].builder.Where("e.domain_id = ?", domainID)).
 			Where("e.space_id = ANY(?)", h.vec[i].spaces)
-		h.vec[i].builder = whereTags(vec, h.filter.Tags, h.filter.TagsMatchAll).
+		h.vec[i].builder = whereTags(vec, h.filter.Tags, h.filter.TagMatch.All()).
 			OrderByClause(h.vec[i].column+" <=> ?::vector, c.id", h.vec[i].literal).
 			Limit(BranchDepth)
 	}

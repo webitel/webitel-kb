@@ -97,10 +97,9 @@ type ArticleFilter struct {
 	// ParentID selects by parent: nil any, zero top-level, otherwise the
 	// children of that article.
 	ParentID *int64
-	// Tags keeps articles carrying them; TagsMatchAll switches the match from
-	// any tag to all of them.
-	Tags         []string
-	TagsMatchAll bool
+	// Tags keeps articles carrying them, combined by TagMatch.
+	Tags     []string
+	TagMatch TagMatch
 }
 
 // SubtreeNode is an article of a subtree together with its depth, enough for

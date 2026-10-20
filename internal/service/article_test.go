@@ -183,20 +183,29 @@ type fakeVersionStore struct {
 
 	locateErr error
 
-	createIn    *model.ArticleVersion
-	createCalls int
-	listFields  []string
+	createIn     *model.ArticleVersion
+	createCalls  int
+	listFields   []string
+	listNewest   []int
+	locateNewest []int
 
 	order *fakeArticleStore // shared call-order recorder
 }
 
-func (f *fakeVersionStore) List(_ context.Context, opts options.Searcher, _ int64) ([]*model.ArticleVersion, bool, error) {
+func (f *fakeVersionStore) List(
+	_ context.Context, opts options.Searcher, _ int64, newest int,
+) ([]*model.ArticleVersion, bool, error) {
 	f.listFields = opts.GetFields()
+	f.listNewest = append(f.listNewest, newest)
 
 	return f.history, false, nil
 }
 
-func (f *fakeVersionStore) Locate(context.Context, options.Searcher, int64, int32) (*model.ArticleVersion, error) {
+func (f *fakeVersionStore) Locate(
+	_ context.Context, _ options.Searcher, _ int64, _ int32, newest int,
+) (*model.ArticleVersion, error) {
+	f.locateNewest = append(f.locateNewest, newest)
+
 	if f.locateErr != nil {
 		return nil, f.locateErr
 	}
@@ -254,11 +263,12 @@ func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.
 func (u *articleUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *articleUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *articleUow) AttachmentStore() store.AttachmentStore         { return nil }
+func (u *articleUow) SettingStore() store.SettingStore               { return nil }
 
 func newArticleFixture() (*ArticleService, *articleUow) {
 	uow := newArticleUow()
 
-	return NewArticleService(uow, slog.New(slog.DiscardHandler)), uow
+	return NewArticleService(uow, settingsStub{}, slog.New(slog.DiscardHandler)), uow
 }
 
 func newArticleUow() *articleUow {
@@ -1111,7 +1121,7 @@ func TestArticleBodyLogsUnknownNodes(t *testing.T) {
 	var logged bytes.Buffer
 
 	uow := newArticleUow()
-	svc := NewArticleService(uow, slog.New(slog.NewTextHandler(&logged, nil)))
+	svc := NewArticleService(uow, settingsStub{}, slog.New(slog.NewTextHandler(&logged, nil)))
 
 	if _, err := svc.Create(context.Background(), creatorOpts(),
 		&model.Article{SpaceID: 3, Subject: "a"}, []byte(docWithTable)); err != nil {
@@ -1137,7 +1147,7 @@ func TestArticleBodyLogsUnknownNodes(t *testing.T) {
 func TestArticleBodyWithKnownNodesLogsNothing(t *testing.T) {
 	var logged bytes.Buffer
 
-	svc := NewArticleService(newArticleUow(), slog.New(slog.NewTextHandler(&logged, nil)))
+	svc := NewArticleService(newArticleUow(), settingsStub{}, slog.New(slog.NewTextHandler(&logged, nil)))
 
 	if _, err := svc.Create(context.Background(), creatorOpts(),
 		&model.Article{SpaceID: 3, Subject: "a"}, []byte(validDoc)); err != nil {
@@ -1250,7 +1260,7 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow := newArticleFixture()
-			opts := readOptions{fields: tt.fields}
+			opts := readOptions{auth: fakeAuther{domainID: 1}, fields: tt.fields}
 
 			var got []string
 
@@ -1270,6 +1280,70 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 
 			if !slices.Equal(got, tt.wantFields) {
 				t.Fatalf("fields = %v, want %v", got, tt.wantFields)
+			}
+		})
+	}
+}
+
+func TestVersionHistoryLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		call       func(svc *ArticleService) error
+		wantList   []int
+		wantLocate []int
+	}{
+		{
+			name: "the history shows the domain limit",
+			call: func(svc *ArticleService) error {
+				_, _, err := svc.ListVersions(context.Background(), readOptions{auth: fakeAuther{domainID: 1}}, 7)
+
+				return err
+			},
+			wantList: []int{3},
+		},
+		{
+			name: "a version is read among the latest",
+			call: func(svc *ArticleService) error {
+				_, err := svc.GetVersion(context.Background(), readOptions{auth: fakeAuther{domainID: 1}}, 7, 2)
+
+				return err
+			},
+			wantLocate: []int{3},
+		},
+		{
+			name: "a restore takes its source among the latest",
+			call: func(svc *ArticleService) error {
+				_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 2, "back")
+
+				return err
+			},
+			wantLocate: []int{3},
+		},
+		{
+			name: "a reindex reads the latest version past the limit",
+			call: func(svc *ArticleService) error {
+				_, err := svc.Reindex(context.Background(), updaterOpts(), 4)
+
+				return err
+			},
+			wantList: []int{0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uow := newArticleUow()
+			uow.articles.current.IndexState = model.IndexStateFailed
+			uow.versions.history = []*model.ArticleVersion{{ID: 41, VersionNumber: 3}}
+			svc := NewArticleService(uow, settingsStub{limit: 3}, slog.New(slog.DiscardHandler))
+
+			if err := tt.call(svc); err != nil {
+				t.Fatalf("call: %v", err)
+			}
+
+			if !slices.Equal(uow.versions.listNewest, tt.wantList) || !slices.Equal(uow.versions.locateNewest, tt.wantLocate) {
+				t.Fatalf("newest: list %v, locate %v, want %v, %v",
+					uow.versions.listNewest, uow.versions.locateNewest, tt.wantList, tt.wantLocate)
 			}
 		})
 	}

@@ -292,7 +292,7 @@ func (s *articleStore) List(
 		WithType(filter.Type).
 		WithState(filter.State).
 		WithParent(filter.ParentID).
-		WithTags(filter.Tags, filter.TagsMatchAll).
+		WithTags(filter.Tags, filter.TagMatch.All()).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).

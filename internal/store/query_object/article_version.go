@@ -96,3 +96,19 @@ func (q *ArticleVersionQuery) WithNumber(number int32) *ArticleVersionQuery {
 
 	return q
 }
+
+// WithNewest keeps the latest n versions of the article by number; zero keeps
+// them all.
+func (q *ArticleVersionQuery) WithNewest(n int) *ArticleVersionQuery {
+	if n <= 0 {
+		return q
+	}
+
+	q.builder = q.builder.Where(
+		"m.version_number > (SELECT max(x.version_number) FROM kb.article_version x"+
+			" WHERE x.article_id = m.article_id) - ?",
+		n,
+	)
+
+	return q
+}
