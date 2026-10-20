@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 
@@ -31,6 +33,9 @@ const (
 	maxTopK = queryobject.BranchDepth
 	// embedTimeout bounds the query embedding call, retries included.
 	embedTimeout = 5 * time.Second
+	// maxQueryRunes is how much of a query reaches the models: enough for a
+	// question, short enough to embed within embedTimeout.
+	maxQueryRunes = 2000
 )
 
 // RetrievalService owns the read side operators and bots consume.
@@ -143,7 +148,7 @@ func (s *RetrievalService) SemanticSearch(
 
 	filter := model.SearchFilter{SpaceIDs: q.SpaceIDs, Tags: q.Tags, TagsMatchAll: q.TagsMatchAll}
 
-	hits, err := s.fuse(ctx, opts, q.Query, spaces, filter, topK(q.TopK))
+	hits, err := s.fuse(ctx, opts, clipQuery(q.Query), spaces, filter, topK(q.TopK))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -304,6 +309,23 @@ func embedError(err error) error {
 		errors.WithID("kb.retrieval.embedding_unavailable"),
 		errors.WithCause(err),
 	)
+}
+
+// clipQuery keeps the leading maxQueryRunes runes of a query, cut back to a
+// word boundary when there is one.
+func clipQuery(query string) string {
+	if utf8.RuneCountInString(query) <= maxQueryRunes {
+		return query
+	}
+
+	runes := []rune(query)[:maxQueryRunes]
+	clipped := string(runes)
+
+	if cut := strings.LastIndexFunc(clipped, unicode.IsSpace); cut > 0 {
+		clipped = clipped[:cut]
+	}
+
+	return strings.TrimSpace(clipped)
 }
 
 // topK resolves the requested result size.

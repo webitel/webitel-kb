@@ -53,8 +53,9 @@ func (s *RetrievalService) Suggest(
 	}
 
 	spaceIDs = spaceIDsOf(spaces)
+	message := clipQuery(q.Message)
 
-	hits, err := s.fuse(ctx, opts, q.Message, spaces, model.SearchFilter{SpaceIDs: spaceIDs}, suggestCandidates)
+	hits, err := s.fuse(ctx, opts, message, spaces, model.SearchFilter{SpaceIDs: spaceIDs}, suggestCandidates)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func (s *RetrievalService) Suggest(
 		return answer, nil
 	}
 
-	hits = s.rerankHits(ctx, domainID, spaceIDs, q.Message, hits)
+	hits = s.rerankHits(ctx, domainID, spaceIDs, message, hits)
 
 	if q.ReturnChunks {
 		answer.Chunks = hits[:min(len(hits), suggestSize)]
