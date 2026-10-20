@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -81,6 +82,31 @@ func TestBuildTree(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.want(t, BuildTree(tt.nodes))
+		})
+	}
+}
+
+func TestCanChangeState(t *testing.T) {
+	tests := []struct {
+		from, to int32
+		want     bool
+	}{
+		{ArticleStateDraft, ArticleStateDraft, true},
+		{ArticleStateDraft, ArticleStateActive, true},
+		{ArticleStateDraft, ArticleStateInactive, true},
+		{ArticleStateActive, ArticleStateActive, true},
+		{ArticleStateActive, ArticleStateInactive, true},
+		{ArticleStateActive, ArticleStateDraft, false},
+		{ArticleStateInactive, ArticleStateInactive, true},
+		{ArticleStateInactive, ArticleStateActive, true},
+		{ArticleStateInactive, ArticleStateDraft, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d to %d", tt.from, tt.to), func(t *testing.T) {
+			if got := CanChangeState(tt.from, tt.to); got != tt.want {
+				t.Fatalf("CanChangeState(%d, %d) = %v, want %v", tt.from, tt.to, got, tt.want)
+			}
 		})
 	}
 }

@@ -45,6 +45,12 @@ var mergeReadFields = []string{
 // reindexReadFields adds the indexing state the reindex checks to the merge read.
 var reindexReadFields = append(slices.Clone(mergeReadFields), "index_state")
 
+// errStateTransition refuses to move an article back to draft.
+var errStateTransition = errors.InvalidArgument(
+	"an article cannot return to draft",
+	errors.WithID("kb.article.state_transition"),
+)
+
 var errReindexNotFailed = errors.InvalidArgument(
 	"only an article that failed indexing can be reindexed",
 	errors.WithID("kb.article.reindex_not_failed"),
@@ -212,6 +218,10 @@ func (s *ArticleService) Update(
 		}
 
 		merged := current.Merge(in, opts.GetMask())
+
+		if !model.CanChangeState(current.State, merged.State) {
+			return errStateTransition
+		}
 
 		var next *model.ArticleVersion
 
