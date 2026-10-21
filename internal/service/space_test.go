@@ -24,6 +24,7 @@ var errFakeUnused = errors.Internal("not implemented in fake")
 type fakeAuther struct {
 	domainID int64
 	userID   int64
+	supers   []auth.SuperPermission
 }
 
 func (a fakeAuther) GetRoles() []int64                            { return nil }
@@ -38,10 +39,12 @@ func (a fakeAuther) CheckObacAccess(string, auth.AccessMode) bool { return true 
 func (a fakeAuther) IsRbacCheckRequired(string, auth.AccessMode) bool {
 	return false
 }
-func (a fakeAuther) HasPermission(string) bool                    { return true }
-func (a fakeAuther) HasSuperPermission(auth.SuperPermission) bool { return false }
-func (a fakeAuther) GetMainAccessMode() auth.AccessMode           { return auth.NONE }
-func (a fakeAuther) GetMainObjClassName() string                  { return "" }
+func (a fakeAuther) HasPermission(string) bool { return true }
+func (a fakeAuther) HasSuperPermission(p auth.SuperPermission) bool {
+	return slices.Contains(a.supers, p)
+}
+func (a fakeAuther) GetMainAccessMode() auth.AccessMode { return auth.NONE }
+func (a fakeAuther) GetMainObjClassName() string        { return "" }
 
 // writeOpts implements options.Creator, Updator and Deleter.
 type writeOpts struct {

@@ -399,33 +399,44 @@ func (s *ArticleService) SuggestTags(
 	return s.uow.ArticleStore().SuggestTags(ctx, opts, spaceID, prefix, size)
 }
 
+// versionLimit is how many latest versions the caller reaches: all of them with
+// the bypass super permission, the domain history size otherwise.
+func (s *ArticleService) versionLimit(ctx context.Context, session auth.Auther, bypass auth.SuperPermission) int {
+	if session.HasSuperPermission(bypass) {
+		return 0
+	}
+
+	return s.settings.VersionLimit(ctx, session.GetDomainID())
+}
+
+// ListVersions lists the versions the domain shows; super read lists them all.
 func (s *ArticleService) ListVersions(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.ArticleVersion, bool, error) {
-	limit := s.settings.VersionLimit(ctx, opts.GetAuthOpts().GetDomainID())
+	limit := s.versionLimit(ctx, opts.GetAuthOpts(), auth.SuperSelectPermission)
 
 	return s.uow.ArticleVersionStore().List(ctx, withoutBodies(opts, versionBodyFields, versionListFields), articleID, limit)
 }
 
-// GetVersion reads a version among the latest the domain shows; an older one
-// is not found.
+// GetVersion reads a version among the latest the domain shows, an older one
+// is not found; super read reaches any.
 func (s *ArticleService) GetVersion(
 	ctx context.Context, opts options.Searcher, articleID int64, number int32,
 ) (*model.ArticleVersion, error) {
-	limit := s.settings.VersionLimit(ctx, opts.GetAuthOpts().GetDomainID())
+	limit := s.versionLimit(ctx, opts.GetAuthOpts(), auth.SuperSelectPermission)
 
 	return s.uow.ArticleVersionStore().Locate(ctx, opts, articleID, number, limit)
 }
 
 // RestoreVersion appends a new version carrying the content of a past one and
 // aligns the article subject with it; only a version the domain shows can be
-// restored. The version guard uses the stored value: the contract carries no
-// client version here.
+// restored, any with super write. The version guard uses the stored value: the
+// contract carries no client version here.
 func (s *ArticleService) RestoreVersion(
 	ctx context.Context, opts options.Updator, articleID int64, number int32, notes string,
 ) (*model.ArticleVersion, error) {
 	session := opts.GetAuthOpts()
-	limit := s.settings.VersionLimit(ctx, session.GetDomainID())
+	limit := s.versionLimit(ctx, session, auth.SuperEditPermission)
 
 	var restored *model.ArticleVersion
 

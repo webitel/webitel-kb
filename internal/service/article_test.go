@@ -13,6 +13,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -1286,48 +1287,50 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 }
 
 func TestVersionHistoryLimit(t *testing.T) {
+	var (
+		read  = []auth.SuperPermission{auth.SuperSelectPermission}
+		write = []auth.SuperPermission{auth.SuperEditPermission}
+	)
+
+	list := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, _, err := svc.ListVersions(context.Background(), readOptions{auth: fakeAuther{domainID: 1, supers: supers}}, 7)
+
+		return err
+	}
+	get := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, err := svc.GetVersion(context.Background(), readOptions{auth: fakeAuther{domainID: 1, supers: supers}}, 7, 2)
+
+		return err
+	}
+	restore := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, err := svc.RestoreVersion(context.Background(), &writeOpts{auth: fakeAuther{domainID: 1, userID: 9, supers: supers}, id: 7}, 7, 2, "back")
+
+		return err
+	}
+	reindex := func(svc *ArticleService, _ []auth.SuperPermission) error {
+		_, err := svc.Reindex(context.Background(), updaterOpts(), 4)
+
+		return err
+	}
+
 	tests := []struct {
 		name       string
-		call       func(svc *ArticleService) error
+		call       func(*ArticleService, []auth.SuperPermission) error
+		supers     []auth.SuperPermission
 		wantList   []int
 		wantLocate []int
+		wantReads  int
 	}{
-		{
-			name: "the history shows the domain limit",
-			call: func(svc *ArticleService) error {
-				_, _, err := svc.ListVersions(context.Background(), readOptions{auth: fakeAuther{domainID: 1}}, 7)
-
-				return err
-			},
-			wantList: []int{3},
-		},
-		{
-			name: "a version is read among the latest",
-			call: func(svc *ArticleService) error {
-				_, err := svc.GetVersion(context.Background(), readOptions{auth: fakeAuther{domainID: 1}}, 7, 2)
-
-				return err
-			},
-			wantLocate: []int{3},
-		},
-		{
-			name: "a restore takes its source among the latest",
-			call: func(svc *ArticleService) error {
-				_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 2, "back")
-
-				return err
-			},
-			wantLocate: []int{3},
-		},
-		{
-			name: "a reindex reads the latest version past the limit",
-			call: func(svc *ArticleService) error {
-				_, err := svc.Reindex(context.Background(), updaterOpts(), 4)
-
-				return err
-			},
-			wantList: []int{0},
-		},
+		{name: "history shows the domain limit", call: list, wantList: []int{3}, wantReads: 1},
+		{name: "super read lists every version", call: list, supers: read, wantList: []int{0}},
+		{name: "super write does not widen the history", call: list, supers: write, wantList: []int{3}, wantReads: 1},
+		{name: "a version is read among the latest", call: get, wantLocate: []int{3}, wantReads: 1},
+		{name: "super read reaches any version", call: get, supers: read, wantLocate: []int{0}},
+		{name: "super write does not widen a read", call: get, supers: write, wantLocate: []int{3}, wantReads: 1},
+		{name: "a restore takes its source among the latest", call: restore, wantLocate: []int{3}, wantReads: 1},
+		{name: "super write restores any version", call: restore, supers: write, wantLocate: []int{0}},
+		{name: "super read does not widen a restore", call: restore, supers: read, wantLocate: []int{3}, wantReads: 1},
+		{name: "a reindex reads the latest version past the limit", call: reindex, wantList: []int{0}},
 	}
 
 	for _, tt := range tests {
@@ -1335,15 +1338,20 @@ func TestVersionHistoryLimit(t *testing.T) {
 			uow := newArticleUow()
 			uow.articles.current.IndexState = model.IndexStateFailed
 			uow.versions.history = []*model.ArticleVersion{{ID: 41, VersionNumber: 3}}
-			svc := NewArticleService(uow, settingsStub{limit: 3}, slog.New(slog.DiscardHandler))
+			reads := 0
+			svc := NewArticleService(uow, settingsStub{limit: 3, reads: &reads}, slog.New(slog.DiscardHandler))
 
-			if err := tt.call(svc); err != nil {
+			if err := tt.call(svc, tt.supers); err != nil {
 				t.Fatalf("call: %v", err)
 			}
 
 			if !slices.Equal(uow.versions.listNewest, tt.wantList) || !slices.Equal(uow.versions.locateNewest, tt.wantLocate) {
 				t.Fatalf("newest: list %v, locate %v, want %v, %v",
 					uow.versions.listNewest, uow.versions.locateNewest, tt.wantList, tt.wantLocate)
+			}
+
+			if reads != tt.wantReads {
+				t.Fatalf("setting reads = %d, want %d", reads, tt.wantReads)
 			}
 		})
 	}

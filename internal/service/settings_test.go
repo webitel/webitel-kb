@@ -10,12 +10,17 @@ import (
 )
 
 // settingsStub applies the settings of a domain that has set none, except for
-// a history size given in limit.
+// a history size given in limit; reads counts the history size reads.
 type settingsStub struct {
 	limit int
+	reads *int
 }
 
 func (s settingsStub) VersionLimit(context.Context, int64) int {
+	if s.reads != nil {
+		*s.reads++
+	}
+
 	if s.limit > 0 {
 		return s.limit
 	}
