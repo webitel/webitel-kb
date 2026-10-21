@@ -189,6 +189,7 @@ func (f *fakeModelUoW) ArticleVersionStore() store.ArticleVersionStore { return 
 func (f *fakeModelUoW) OutboxStore() store.OutboxStore                 { return nil }
 func (f *fakeModelUoW) RetrievalStore() store.RetrievalStore           { return nil }
 func (f *fakeModelUoW) AttachmentStore() store.AttachmentStore         { return nil }
+func (f *fakeModelUoW) SettingStore() store.SettingStore               { return nil }
 
 // fakeSealer marks what passed through encryption, so a test can tell a sealed
 // credential from a plaintext leak.

@@ -609,7 +609,7 @@ func TestArticleListAppliesParentAndTagFilters(t *testing.T) {
 	f := &fakeQuerier{}
 	s := &articleStore{db: f}
 
-	filter := model.ArticleFilter{ParentID: ptrTo(int64(0)), Tags: []string{"vpn"}, TagsMatchAll: true}
+	filter := model.ArticleFilter{ParentID: ptrTo(int64(0)), Tags: []string{"vpn"}, TagMatch: model.TagMatchAll}
 
 	if _, _, err := s.List(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}}, filter); err != nil {
 		t.Fatalf("List: %v", err)

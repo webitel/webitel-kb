@@ -86,6 +86,7 @@ type retrievalUoWFake struct {
 
 func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore   { return f.retrieval }
 func (f *retrievalUoWFake) AttachmentStore() store.AttachmentStore { return nil }
+func (f *retrievalUoWFake) SettingStore() store.SettingStore       { return nil }
 func (f *retrievalUoWFake) SpaceStore() store.SpaceStore {
 	return fakeSpaces{&fakeUow{embeddings: f.spaces}}
 }
@@ -98,7 +99,7 @@ func retrievalServerWithFake() (*RetrievalServer, *retrievalStoreFake) {
 	fake := &retrievalStoreFake{}
 	svc := service.NewRetrievalService(
 		&retrievalUoWFake{retrieval: fake, spaces: []*model.SpaceEmbedding{{SpaceID: 3}}},
-		sealer{}, embedding.NewRegistry(), slog.New(slog.DiscardHandler),
+		sealer{}, embedding.NewRegistry(), unsetSettings{}, slog.New(slog.DiscardHandler),
 	)
 
 	return NewRetrievalServer(svc), fake
@@ -154,7 +155,7 @@ func TestRetrievalSearchMapsTheRequest(t *testing.T) {
 				t.Fatalf("term = %q, size = %d, page = %d", fake.term, fake.size, fake.page)
 			}
 
-			if fake.filter.TagsMatchAll != tt.wantMatchAll || len(fake.filter.Tags) != len(tt.req.GetTags()) {
+			if fake.filter.TagMatch.All() != tt.wantMatchAll || len(fake.filter.Tags) != len(tt.req.GetTags()) {
 				t.Fatalf("filter = %+v", fake.filter)
 			}
 		})
@@ -324,7 +325,7 @@ func TestSemanticSearchMapsTagMatch(t *testing.T) {
 				t.Fatalf("SemanticSearch: %v", err)
 			}
 
-			if fake.hybrid.Filter.TagsMatchAll != tt.wantMatchAll {
+			if fake.hybrid.Filter.TagMatch.All() != tt.wantMatchAll {
 				t.Fatalf("filter = %+v", fake.hybrid.Filter)
 			}
 		})
@@ -346,7 +347,7 @@ func TestSemanticSearchFullPath(t *testing.T) {
 
 	want := model.HybridQuery{
 		Term:    "vpn",
-		Filter:  model.SearchFilter{SpaceIDs: []int64{3}, Tags: []string{"net"}, TagsMatchAll: true},
+		Filter:  model.SearchFilter{SpaceIDs: []int64{3}, Tags: []string{"net"}, TagMatch: model.TagMatchAll},
 		Vectors: []model.ModelVector{},
 		TopK:    5,
 	}

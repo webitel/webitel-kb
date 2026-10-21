@@ -13,6 +13,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -183,20 +184,29 @@ type fakeVersionStore struct {
 
 	locateErr error
 
-	createIn    *model.ArticleVersion
-	createCalls int
-	listFields  []string
+	createIn     *model.ArticleVersion
+	createCalls  int
+	listFields   []string
+	listNewest   []int
+	locateNewest []int
 
 	order *fakeArticleStore // shared call-order recorder
 }
 
-func (f *fakeVersionStore) List(_ context.Context, opts options.Searcher, _ int64) ([]*model.ArticleVersion, bool, error) {
+func (f *fakeVersionStore) List(
+	_ context.Context, opts options.Searcher, _ int64, newest int,
+) ([]*model.ArticleVersion, bool, error) {
 	f.listFields = opts.GetFields()
+	f.listNewest = append(f.listNewest, newest)
 
 	return f.history, false, nil
 }
 
-func (f *fakeVersionStore) Locate(context.Context, options.Searcher, int64, int32) (*model.ArticleVersion, error) {
+func (f *fakeVersionStore) Locate(
+	_ context.Context, _ options.Searcher, _ int64, _ int32, newest int,
+) (*model.ArticleVersion, error) {
+	f.locateNewest = append(f.locateNewest, newest)
+
 	if f.locateErr != nil {
 		return nil, f.locateErr
 	}
@@ -254,11 +264,12 @@ func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.
 func (u *articleUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *articleUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *articleUow) AttachmentStore() store.AttachmentStore         { return nil }
+func (u *articleUow) SettingStore() store.SettingStore               { return nil }
 
 func newArticleFixture() (*ArticleService, *articleUow) {
 	uow := newArticleUow()
 
-	return NewArticleService(uow, slog.New(slog.DiscardHandler)), uow
+	return NewArticleService(uow, settingsStub{}, slog.New(slog.DiscardHandler)), uow
 }
 
 func newArticleUow() *articleUow {
@@ -1150,7 +1161,7 @@ func TestArticleBodyLogsUnknownNodes(t *testing.T) {
 	var logged bytes.Buffer
 
 	uow := newArticleUow()
-	svc := NewArticleService(uow, slog.New(slog.NewTextHandler(&logged, nil)))
+	svc := NewArticleService(uow, settingsStub{}, slog.New(slog.NewTextHandler(&logged, nil)))
 
 	if _, err := svc.Create(context.Background(), creatorOpts(),
 		&model.Article{SpaceID: 3, Subject: "a"}, []byte(docWithTable)); err != nil {
@@ -1176,7 +1187,7 @@ func TestArticleBodyLogsUnknownNodes(t *testing.T) {
 func TestArticleBodyWithKnownNodesLogsNothing(t *testing.T) {
 	var logged bytes.Buffer
 
-	svc := NewArticleService(newArticleUow(), slog.New(slog.NewTextHandler(&logged, nil)))
+	svc := NewArticleService(newArticleUow(), settingsStub{}, slog.New(slog.NewTextHandler(&logged, nil)))
 
 	if _, err := svc.Create(context.Background(), creatorOpts(),
 		&model.Article{SpaceID: 3, Subject: "a"}, []byte(validDoc)); err != nil {
@@ -1289,7 +1300,7 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow := newArticleFixture()
-			opts := readOptions{fields: tt.fields}
+			opts := readOptions{auth: fakeAuther{domainID: 1}, fields: tt.fields}
 
 			var got []string
 
@@ -1309,6 +1320,77 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 
 			if !slices.Equal(got, tt.wantFields) {
 				t.Fatalf("fields = %v, want %v", got, tt.wantFields)
+			}
+		})
+	}
+}
+
+func TestVersionHistoryLimit(t *testing.T) {
+	var (
+		read  = []auth.SuperPermission{auth.SuperSelectPermission}
+		write = []auth.SuperPermission{auth.SuperEditPermission}
+	)
+
+	list := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, _, err := svc.ListVersions(context.Background(), readOptions{auth: fakeAuther{domainID: 1, supers: supers}}, 7)
+
+		return err
+	}
+	get := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, err := svc.GetVersion(context.Background(), readOptions{auth: fakeAuther{domainID: 1, supers: supers}}, 7, 2)
+
+		return err
+	}
+	restore := func(svc *ArticleService, supers []auth.SuperPermission) error {
+		_, err := svc.RestoreVersion(context.Background(), &writeOpts{auth: fakeAuther{domainID: 1, userID: 9, supers: supers}, id: 7}, 7, 2, "back")
+
+		return err
+	}
+	reindex := func(svc *ArticleService, _ []auth.SuperPermission) error {
+		_, err := svc.Reindex(context.Background(), updaterOpts(), 4)
+
+		return err
+	}
+
+	tests := []struct {
+		name       string
+		call       func(*ArticleService, []auth.SuperPermission) error
+		supers     []auth.SuperPermission
+		wantList   []int
+		wantLocate []int
+		wantReads  int
+	}{
+		{name: "history shows the domain limit", call: list, wantList: []int{3}, wantReads: 1},
+		{name: "super read lists every version", call: list, supers: read, wantList: []int{0}},
+		{name: "super write does not widen the history", call: list, supers: write, wantList: []int{3}, wantReads: 1},
+		{name: "a version is read among the latest", call: get, wantLocate: []int{3}, wantReads: 1},
+		{name: "super read reaches any version", call: get, supers: read, wantLocate: []int{0}},
+		{name: "super write does not widen a read", call: get, supers: write, wantLocate: []int{3}, wantReads: 1},
+		{name: "a restore takes its source among the latest", call: restore, wantLocate: []int{3}, wantReads: 1},
+		{name: "super write restores any version", call: restore, supers: write, wantLocate: []int{0}},
+		{name: "super read does not widen a restore", call: restore, supers: read, wantLocate: []int{3}, wantReads: 1},
+		{name: "a reindex reads the latest version past the limit", call: reindex, wantList: []int{0}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uow := newArticleUow()
+			uow.articles.current.IndexState = model.IndexStateFailed
+			uow.versions.history = []*model.ArticleVersion{{ID: 41, VersionNumber: 3}}
+			reads := 0
+			svc := NewArticleService(uow, settingsStub{limit: 3, reads: &reads}, slog.New(slog.DiscardHandler))
+
+			if err := tt.call(svc, tt.supers); err != nil {
+				t.Fatalf("call: %v", err)
+			}
+
+			if !slices.Equal(uow.versions.listNewest, tt.wantList) || !slices.Equal(uow.versions.locateNewest, tt.wantLocate) {
+				t.Fatalf("newest: list %v, locate %v, want %v, %v",
+					uow.versions.listNewest, uow.versions.locateNewest, tt.wantList, tt.wantLocate)
+			}
+
+			if reads != tt.wantReads {
+				t.Fatalf("setting reads = %d, want %d", reads, tt.wantReads)
 			}
 		})
 	}

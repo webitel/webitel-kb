@@ -87,6 +87,7 @@ func (f *attachmentUoWFake) ArticleVersionStore() store.ArticleVersionStore { re
 func (f *attachmentUoWFake) OutboxStore() store.OutboxStore                 { return nil }
 func (f *attachmentUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
 func (f *attachmentUoWFake) AttachmentStore() store.AttachmentStore         { return f.files }
+func (f *attachmentUoWFake) SettingStore() store.SettingStore               { return nil }
 
 // filesFake stands in for Storage: it signs every file with a predictable link
 // and knows the metadata of the files it was given.
