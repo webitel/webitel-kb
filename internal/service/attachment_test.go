@@ -28,6 +28,9 @@ type fakeAttachmentStore struct {
 	attached  *model.Attachment
 	deleted   *model.Attachment
 	bound     bool
+
+	unboundAsked []int64
+	unboundErr   error
 }
 
 func (f *fakeAttachmentStore) List(
@@ -55,8 +58,15 @@ func (f *fakeAttachmentStore) Delete(
 	return f.deleted, f.err
 }
 
-func (f *fakeAttachmentStore) Bound(_ context.Context, _ int64) (bool, error) {
-	return f.bound, f.err
+// Unbound reports every file asked about as unbound, unless bound is set.
+func (f *fakeAttachmentStore) Unbound(_ context.Context, fileIDs []int64) ([]int64, error) {
+	f.unboundAsked = append(f.unboundAsked, fileIDs...)
+
+	if f.bound || f.unboundErr != nil {
+		return nil, f.unboundErr
+	}
+
+	return fileIDs, f.err
 }
 
 // attachmentUow hands out the attachment fake only.
@@ -331,7 +341,7 @@ func TestAttachmentDeleteSurvivesARefusedRemoval(t *testing.T) {
 		t.Fatalf("deleted = %+v", deleted)
 	}
 
-	if !strings.Contains(logged.String(), "storage kept the file of an unbound attachment") {
+	if !strings.Contains(logged.String(), "storage kept the files of unbound attachments") {
 		t.Fatalf("log = %q, want the refusal reported", logged.String())
 	}
 }

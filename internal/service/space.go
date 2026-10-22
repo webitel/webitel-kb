@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/infra/storage"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -17,11 +19,13 @@ import (
 
 // SpaceService owns the space business rules.
 type SpaceService struct {
-	uow store.UnitOfWork
+	uow   store.UnitOfWork
+	files storage.Files
+	log   *slog.Logger
 }
 
-func NewSpaceService(uow store.UnitOfWork) *SpaceService {
-	return &SpaceService{uow: uow}
+func NewSpaceService(uow store.UnitOfWork, files storage.Files, log *slog.Logger) *SpaceService {
+	return &SpaceService{uow: uow, files: files, log: log}
 }
 
 func (s *SpaceService) List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error) {
@@ -224,7 +228,10 @@ func (s *SpaceService) Update(
 func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model.Space, error) {
 	session := opts.GetAuthOpts()
 
-	var deleted *model.Space
+	var (
+		deleted *model.Space
+		fileIDs []int64
+	)
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		if _, err := tx.SpaceStore().LocateForUpdate(ctx, readOptions{
@@ -246,7 +253,7 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 			)
 		}
 
-		if err := tx.SpaceStore().PurgeDeletedArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
+		if fileIDs, err = tx.SpaceStore().PurgeDeletedArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
 			return err
 		}
 
@@ -256,6 +263,11 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if err := releaseFiles(ctx, s.uow, s.files, s.log, fileIDs); err != nil {
+		s.log.WarnContext(ctx, "the files of a deleted space were left in storage",
+			slog.Int64("space_id", opts.GetID()), slog.Any("file_ids", fileIDs), slog.Any("error", err))
 	}
 
 	return deleted, nil

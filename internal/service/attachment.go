@@ -118,21 +118,34 @@ func (s *AttachmentService) Delete(
 		return nil, err
 	}
 
-	bound, err := files.Bound(ctx, deleted.ID)
-	if err != nil {
+	if err := releaseFiles(ctx, s.uow, s.files, s.log, []int64{deleted.ID}); err != nil {
 		return nil, err
 	}
 
-	if bound {
-		return deleted, nil
-	}
-
-	if err := s.files.Remove(ctx, []int64{deleted.ID}); err != nil {
-		s.log.WarnContext(ctx, "storage kept the file of an unbound attachment",
-			slog.Int64("file_id", deleted.ID), slog.Any("error", err))
-	}
-
 	return deleted, nil
+}
+
+// releaseFiles asks Storage to remove those of the files no article binds any
+// more. Storage owns the bytes: a removal it refuses is reported and left to
+// its retention policy.
+func releaseFiles(
+	ctx context.Context, uow store.UnitOfWork, files storage.Files, log *slog.Logger, fileIDs []int64,
+) error {
+	unbound, err := uow.AttachmentStore().Unbound(ctx, fileIDs)
+	if err != nil {
+		return err
+	}
+
+	if len(unbound) == 0 {
+		return nil
+	}
+
+	if err := files.Remove(ctx, unbound); err != nil {
+		log.WarnContext(ctx, "storage kept the files of unbound attachments",
+			slog.Any("file_ids", unbound), slog.Any("error", err))
+	}
+
+	return nil
 }
 
 // requested reports whether the field is part of the answer: an empty
