@@ -314,16 +314,22 @@ func TestSpaceArticleChecks(t *testing.T) {
 }
 
 func TestSpacePurgeDeletedArticles(t *testing.T) {
-	f := &fakeQuerier{}
+	f := &fakeQuerier{rows: &fakeRows{cols: []string{"file_id"}, vals: [][]any{{int64(40)}}}}
 
-	if err := (&spaceStore{db: f}).PurgeDeletedArticles(context.Background(), 7, 5); err != nil {
+	files, err := (&spaceStore{db: f}).PurgeDeletedArticles(context.Background(), 7, 5)
+	if err != nil {
 		t.Fatalf("purge: %v", err)
+	}
+
+	if !slices.Equal(files, []int64{40}) {
+		t.Fatalf("files = %v, want the files the purged articles bound", files)
 	}
 
 	for _, want := range []string{
 		"DELETE FROM kb.article a USING kb.space s",
 		"a.space_id = $1 AND s.domain_id = $2",
 		"AND a.deleted_at IS NOT NULL",
+		"FROM kb.attachment f JOIN purged p ON p.id = f.article_id",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)

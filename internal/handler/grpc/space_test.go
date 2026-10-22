@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -161,7 +162,9 @@ func (f fakeSpaces) HasArticles(context.Context, int64, int64) (bool, error) { r
 func (f fakeSpaces) HoldsArticle(context.Context, int64, int64, int64) (bool, error) {
 	return false, nil
 }
-func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) error { return nil }
+func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) ([]int64, error) {
+	return nil, nil
+}
 
 func (f fakeSpaces) LockArticles(context.Context, int64, int64) error { return nil }
 
@@ -252,7 +255,7 @@ func newSpacesFixture() (*SpacesServer, *fakeUow, context.Context) {
 		embModel: &model.EmbeddingModel{ID: 3, Type: model.ModelTypeEmbedding, ValidatedAt: time.Now()},
 	}
 
-	server := NewSpacesServer(service.NewSpaceService(uow))
+	server := NewSpacesServer(service.NewSpaceService(uow, &filesFake{}, slog.New(slog.DiscardHandler)))
 	ctx := auth.WithSession(context.Background(), fakeSession{})
 
 	return server, uow, ctx

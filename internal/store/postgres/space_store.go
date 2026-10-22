@@ -320,15 +320,26 @@ func (s *spaceStore) HoldsArticle(ctx context.Context, spaceID, articleID, domai
 	return holds, nil
 }
 
-func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error {
-	const sql = `DELETE FROM kb.article a USING kb.space s
-		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NOT NULL`
+func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error) {
+	const sql = `WITH purged AS (
+		DELETE FROM kb.article a USING kb.space s
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NOT NULL
+		RETURNING a.id
+	)
+	SELECT DISTINCT f.file_id FROM kb.attachment f JOIN purged p ON p.id = f.article_id
+	ORDER BY f.file_id`
 
-	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
-		return ParseError(err)
+	rows, err := s.db.Query(ctx, sql, spaceID, domainID)
+	if err != nil {
+		return nil, ParseError(err)
 	}
 
-	return nil
+	files, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return files, nil
 }
 
 func (s *spaceStore) LockArticles(ctx context.Context, spaceID, domainID int64) error {

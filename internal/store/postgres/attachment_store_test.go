@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -193,25 +194,48 @@ func TestAttachmentDeleteUnbindsTheRowOfTheArticle(t *testing.T) {
 	}
 }
 
-func TestAttachmentBoundAsksForAnyBinding(t *testing.T) {
-	f := &fakeQuerier{row: fakeRow{vals: []any{true}}}
-	s := &attachmentStore{db: f}
-
-	bound, err := s.Bound(context.Background(), 4)
-	if err != nil {
-		t.Fatalf("Bound: %v", err)
+func TestAttachmentUnbound(t *testing.T) {
+	tests := []struct {
+		name      string
+		in        []int64
+		rows      [][]any
+		want      []int64
+		wantQuery bool
+	}{
+		{name: "files nothing binds", in: []int64{40, 41}, rows: [][]any{{int64(41)}}, want: []int64{41}, wantQuery: true},
+		{name: "an empty set asks nothing"},
 	}
 
-	if !bound {
-		t.Fatal("bound = false, want the binding reported")
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: tt.rows}}
 
-	if !strings.Contains(f.gotSQL, "SELECT EXISTS (SELECT 1 FROM kb.attachment WHERE file_id = $1)") {
-		t.Fatalf("SQL = %q", f.gotSQL)
-	}
+			got, err := (&attachmentStore{db: f}).Unbound(context.Background(), tt.in)
+			if err != nil {
+				t.Fatalf("Unbound: %v", err)
+			}
 
-	if len(f.gotArgs) != 1 || f.gotArgs[0] != int64(4) {
-		t.Fatalf("args = %v, want the file", f.gotArgs)
+			if !slices.Equal(got, tt.want) || (len(f.sqls) == 1) != tt.wantQuery {
+				t.Fatalf("got %v after %d statements", got, len(f.sqls))
+			}
+
+			if !tt.wantQuery {
+				return
+			}
+
+			for _, want := range []string{
+				"FROM unnest($1::bigint[]) AS f(id)",
+				"NOT EXISTS (SELECT 1 FROM kb.attachment m WHERE m.file_id = f.id)",
+			} {
+				if !strings.Contains(f.gotSQL, want) {
+					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
+				}
+			}
+
+			if len(f.gotArgs) != 1 || !slices.Equal(f.gotArgs[0].([]int64), tt.in) {
+				t.Fatalf("args = %v, want the ids", f.gotArgs)
+			}
+		})
 	}
 }
 

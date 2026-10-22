@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -84,6 +85,7 @@ type fakeSpaceStore struct {
 	holds       bool
 	holdsAsked  [3]int64
 	purgeErr    error
+	purgedFiles []int64
 
 	// trace records the delete flow calls in order.
 	trace []string
@@ -178,10 +180,10 @@ func (f *fakeSpaceStore) HoldsArticle(_ context.Context, spaceID, articleID, dom
 	return f.holds, nil
 }
 
-func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) error {
+func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) ([]int64, error) {
 	f.trace = append(f.trace, "purge")
 
-	return f.purgeErr
+	return f.purgedFiles, f.purgeErr
 }
 
 func (f *fakeSpaceStore) LockArticles(_ context.Context, spaceID, domainID int64) error {
@@ -294,10 +296,12 @@ func (f *gateModelStore) GetConfig(context.Context, int64, int64) ([]byte, error
 // fakeUow hands the same store fakes to transactional and direct callers and
 // counts transactions.
 type fakeUow struct {
-	spaces   *fakeSpaceStore
-	models   *gateModelStore
-	articles *fakeArticleStore
-	outbox   *fakeOutbox
+	spaces      *fakeSpaceStore
+	models      *gateModelStore
+	articles    *fakeArticleStore
+	outbox      *fakeOutbox
+	attachments *fakeAttachmentStore
+	files       *fakeFiles
 
 	transactions int
 }
@@ -314,7 +318,7 @@ func (u *fakeUow) ArticleStore() store.ArticleStore               { return u.art
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *fakeUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
-func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
+func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return u.attachments }
 
 func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 	return &model.EmbeddingModel{ID: id, Type: modelType, ValidatedAt: time.Now()}
@@ -333,11 +337,13 @@ func newSpaceFixture() (*SpaceService, *fakeUow) {
 			3: validatedModel(3, model.ModelTypeEmbedding),
 			4: validatedModel(4, model.ModelTypeReranker),
 		}},
-		articles: articles,
-		outbox:   &fakeOutbox{order: articles},
+		articles:    articles,
+		outbox:      &fakeOutbox{order: articles},
+		attachments: &fakeAttachmentStore{},
+		files:       &fakeFiles{},
 	}
 
-	return NewSpaceService(uow), uow
+	return NewSpaceService(uow, uow.files, slog.New(slog.DiscardHandler)), uow
 }
 
 func creatorOpts() *writeOpts {
@@ -710,18 +716,24 @@ func TestSpaceUpdateHomeArticle(t *testing.T) {
 
 func TestSpaceDeleteGate(t *testing.T) {
 	tests := []struct {
-		name      string
-		live      bool
-		purgeErr  error
-		wantCode  codes.Code
-		wantTrace []string
+		name        string
+		live        bool
+		purgeErr    error
+		bound       bool // another article binds the purged files
+		wantCode    codes.Code
+		wantTrace   []string
+		wantRemoved []int64
 	}{
 		{
 			name: "live articles refuse the delete", live: true, wantCode: codes.FailedPrecondition,
 			wantTrace: []string{"lock", "has"},
 		},
 		{
-			name: "deleted articles go with the space", wantCode: codes.OK,
+			name: "deleted articles go with the space and their files with them", wantCode: codes.OK,
+			wantTrace: []string{"lock", "has", "purge", "delete"}, wantRemoved: []int64{40, 41},
+		},
+		{
+			name: "a file another article binds stays", bound: true, wantCode: codes.OK,
 			wantTrace: []string{"lock", "has", "purge", "delete"},
 		},
 		{
@@ -735,6 +747,8 @@ func TestSpaceDeleteGate(t *testing.T) {
 			svc, uow := newSpaceFixture()
 			uow.spaces.hasArticles = tt.live
 			uow.spaces.purgeErr = tt.purgeErr
+			uow.spaces.purgedFiles = []int64{40, 41}
+			uow.attachments.bound = tt.bound
 
 			deleted, err := svc.Delete(context.Background(), updaterOpts())
 			if errors.Code(err) != tt.wantCode {
@@ -751,6 +765,10 @@ func TestSpaceDeleteGate(t *testing.T) {
 
 			if tt.wantCode == codes.OK && deleted.ID != 7 {
 				t.Fatalf("deleted = %+v", deleted)
+			}
+
+			if !slices.Equal(uow.files.removed, tt.wantRemoved) {
+				t.Fatalf("storage was asked to remove %v, want %v", uow.files.removed, tt.wantRemoved)
 			}
 		})
 	}
