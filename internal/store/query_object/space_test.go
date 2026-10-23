@@ -28,6 +28,32 @@ func TestSpaceDomainScope(t *testing.T) {
 	}
 }
 
+func TestSpaceState(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    int32
+		want    bool
+		numArgs int
+	}{
+		{"state filters", 2, true, 1},
+		{"zero means any", 0, false, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sql, args := mustSpaceSQL(t, NewSpaceQuery(SpaceFrom).WithFields([]string{"id"}).WithState(tt.code))
+
+			if got := strings.Contains(sql, "m.state=$1"); got != tt.want {
+				t.Fatalf("SQL %q state filter rendered %v, want %v", sql, got, tt.want)
+			}
+
+			if len(args) != tt.numArgs {
+				t.Fatalf("args = %v, want %d", args, tt.numArgs)
+			}
+		})
+	}
+}
+
 func TestSpaceTeamsSubquery(t *testing.T) {
 	// The binding aggregates in the SELECT list: no GROUP BY, no join that
 	// would multiply rows.
