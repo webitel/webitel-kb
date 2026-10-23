@@ -34,12 +34,13 @@ func TestRetrievalSearchRendersRankedPage(t *testing.T) {
 		"s.domain_id = $4",
 		"m.deleted_at IS NULL",
 		"m.state = $5",
-		"s.id = ANY($6)",
-		"m.tags @> $7",
-		"$13 <% m.subject",
+		"s.state = $6",
+		"s.id = ANY($7)",
+		"m.tags @> $8",
+		"$15 <% m.subject",
 		"GROUP BY id ORDER BY rank DESC, id LIMIT 11 OFFSET 10",
 		// The fragment is built outside the ranked query.
-		"ts_headline(s.text_search_config::regconfig, v.body_plain, websearch_to_tsquery(s.text_search_config::regconfig, $18)",
+		"ts_headline(s.text_search_config::regconfig, v.body_plain, websearch_to_tsquery(s.text_search_config::regconfig, $21)",
 		"FROM h JOIN kb.article m ON m.id = h.id",
 		"ORDER BY h.rank DESC, m.id",
 	} {
@@ -86,9 +87,10 @@ func TestRetrievalResolveKeepsTheAskedOrder(t *testing.T) {
 		"s.domain_id=$2",
 		"m.deleted_at IS NULL",
 		"m.state=$3",
-		"m.id=ANY($4)",
-		"m.space_id=ANY($5)",
-		"ORDER BY array_position($6::bigint[],m.id)",
+		"s.state=$4",
+		"m.id=ANY($5)",
+		"m.space_id=ANY($6)",
+		"ORDER BY array_position($7::bigint[],m.id)",
 		"COALESCE(left(v.body_plain,$1),'')AS snippet",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -112,12 +114,12 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 		{
 			name:     "children of an article",
 			parentID: 3,
-			want:     []string{"c.parent_id=$3", "AND c.deleted_at IS NULL AND c.state=$4", "parent.level<$5"},
+			want:     []string{"c.parent_id=$4", "AND c.deleted_at IS NULL AND c.state=$5", "parent.level<$6"},
 		},
 		{
 			name:     "top level of a space",
 			parentID: 0,
-			want:     []string{"c.parent_id IS NULL", "parent.level<$4"},
+			want:     []string{"c.parent_id IS NULL", "parent.level<$5"},
 			absent:   []string{"c.parent_id=$"},
 		},
 	}
@@ -135,7 +137,7 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 
 			want := append([]string{
 				"WITH RECURSIVE menu AS(",
-				"s.domain_id=$1 AND c.space_id=$2",
+				"s.domain_id=$1 AND c.space_id=$2 AND s.state=$3",
 				"UNION ALL",
 				"FROM menu JOIN kb.article m ON m.id=menu.id",
 				"ORDER BY menu.level,m.subject,m.id",

@@ -15,11 +15,12 @@ import (
 // menuFrom reads the summaries of a walked menu.
 const menuFrom = "menu JOIN kb.article m ON m.id = menu.id"
 
-// menuWalkCTE walks the children of a parent down to the requested depth.
+// menuWalkCTE walks the children of a parent of an active space down to the
+// requested depth.
 const menuWalkCTE = `WITH RECURSIVE menu AS (
 	SELECT c.id, 1 AS level
 	FROM kb.article c JOIN kb.space s ON s.id = c.space_id
-	WHERE s.domain_id = ? AND c.space_id = ? AND %s
+	WHERE s.domain_id = ? AND c.space_id = ? AND s.state = ? AND %s
 	  AND c.deleted_at IS NULL AND c.state = ?
 	UNION ALL
 	SELECT c.id, parent.level + 1
@@ -234,7 +235,7 @@ func (s *retrievalStore) Menu(
 
 // menuWalk renders the walk of a menu.
 func menuWalk(domainID, spaceID, parentID int64, depthLimit int32) (string, []any) {
-	args := []any{domainID, spaceID}
+	args := []any{domainID, spaceID, model.SpaceStateActive}
 
 	parent := "c.parent_id IS NULL"
 	if parentID > 0 {
