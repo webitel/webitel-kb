@@ -58,7 +58,7 @@ jobs:
         -X github.com/webitel/webitel-kb/internal/model.Commit=${{ needs.prepare.outputs.commit }}
         -X github.com/webitel/webitel-kb/internal/model.CommitDate=${{ needs.prepare.outputs.commit-timestamp }}
         -X github.com/webitel/webitel-kb/internal/model.Branch=${{ needs.prepare.outputs.branch }}
-        
+        -X github.com/webitel/crypto/cryptobox.defaultSystemDir=/var/lib/webitel/crypto
 
       version: ${{ needs.prepare.outputs.version }}
       version-build: ${{ needs.prepare.outputs.version-build }}
