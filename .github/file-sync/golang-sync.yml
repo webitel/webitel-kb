@@ -4,7 +4,7 @@ version: 1
 source:
   repository: webitel/reusable-configs
   config: golang/sync.yml
-  sha: 3a0cade6e27cd187982389019949d1f33756de9b
+  sha: 85b49a7875f0c842372893894b5a2d414bdbd143
 files:
   .editorconfig:
     source: golang/configs/.editorconfig
@@ -41,7 +41,7 @@ files:
     sha256: 64081c279d210d3901039784068057c46a7b90e4f33e7fcffff941bfaa284ef2
   .github/workflows/workflow.yml:
     source: golang/workflows/workflow.yml.njk
-    sha256: a96af5b29f565097903455744df7c117ab5504589448b782cba2a8c13696d95b
+    sha256: 558dcc501a9538d7d7f1515755c9280aafe9c48248753c7e58eb6bab44cc09b6
   .gitignore:
     source: golang/configs/.gitignore
     sha256: db559b5c84e2e1f216a6b21743be1c1033fb40f7254becc0e1b313189ca0b55c
