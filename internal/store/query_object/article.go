@@ -31,7 +31,7 @@ func (q *ArticleQuery) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "space", "parent_id", "depth", "type", "subject",
 		"tags", "state", "index_state", "published_version_id", "ver",
-		"created_at", "updated_at", "created_by", "updated_by",
+		"created_at", "updated_at", "created_by", "updated_by", "home",
 	}
 }
 
@@ -70,6 +70,11 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 				aliasedExpr:  "ub.id AS updated_by_id, COALESCE(ub.name, ub.username) AS updated_by_name",
 				requiresJoin: articleJoinUpdatedBy,
 				sortable:     true,
+			},
+			"home": {
+				sqlExpr:      "COALESCE(s.home_article_id = m.id, false)",
+				aliasedExpr:  "COALESCE(s.home_article_id = m.id, false) AS home",
+				requiresJoin: articleJoinSpace,
 			},
 			"published": {
 				sqlExpr: "pv.id",

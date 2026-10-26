@@ -131,7 +131,6 @@ func spaceFromInput(in *kb.InputSpace) *model.Space {
 		VectorSearchEnabled: in.GetVectorSearchEnabled(),
 		RerankEnabled:       in.GetRerankEnabled(),
 		ChunkingStrategy:    in.GetChunkingStrategy(),
-		HomeArticleID:       in.GetHomeArticleId(),
 	}
 }
 

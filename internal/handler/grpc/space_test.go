@@ -39,7 +39,8 @@ func TestSpaceToProto(t *testing.T) {
 			want: func(t *testing.T, got *kb.Space) {
 				t.Helper()
 
-				if got.GetId() != 7 || got.GetLanguage() != "uk" || got.GetEmbeddingModelId() != 3 {
+				if got.GetId() != 7 || got.GetLanguage() != "uk" || got.GetEmbeddingModelId() != 3 ||
+					got.GetHomeArticleId() != 11 {
 					t.Fatalf("space = %+v", got)
 				}
 
@@ -85,8 +86,8 @@ func TestSpaceFromInput(t *testing.T) {
 		Name: "docs", Description: "main", Language: "uk",
 		EmbeddingModelId: 3, RerankerModelId: 4,
 		VectorSearchEnabled: true, RerankEnabled: true,
-		ChunkingStrategy: "recursive_markdown", HomeArticleId: 11,
-		TeamIds: []int64{1, 2},
+		ChunkingStrategy: "recursive_markdown",
+		TeamIds:          []int64{1, 2},
 	}
 
 	got := spaceFromInput(in)
@@ -95,7 +96,7 @@ func TestSpaceFromInput(t *testing.T) {
 		Name: "docs", Description: "main", Language: "uk",
 		EmbeddingModelID: 3, RerankerModelID: 4,
 		VectorSearchEnabled: true, RerankEnabled: true,
-		ChunkingStrategy: "recursive_markdown", HomeArticleID: 11,
+		ChunkingStrategy: "recursive_markdown",
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -157,11 +158,11 @@ func (f fakeSpaces) ReplaceTeams(_ context.Context, _, _, _ int64, teamIDs []int
 	return nil
 }
 
-func (f fakeSpaces) HasArticles(context.Context, int64, int64) (bool, error) { return false, nil }
-func (f fakeSpaces) HoldsArticle(context.Context, int64, int64, int64) (bool, error) {
-	return false, nil
+func (f fakeSpaces) HasActiveArticles(context.Context, int64, int64) (bool, error) { return false, nil }
+func (f fakeSpaces) SetHome(context.Context, int64, int64, int64) (bool, error) {
+	return true, nil
 }
-func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) error { return nil }
+func (f fakeSpaces) PurgeArticles(context.Context, int64, int64) error { return nil }
 
 func (f fakeSpaces) LockArticles(context.Context, int64, int64) error { return nil }
 

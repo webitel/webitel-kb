@@ -190,15 +190,17 @@ type SpaceStore interface {
 	// given set; an empty set removes the binding.
 	ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error
 
-	// HasArticles reports whether a domain's space still holds a live article.
-	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
+	// HasActiveArticles reports whether a domain's space still holds a live
+	// active article.
+	HasActiveArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
 
-	// HoldsArticle reports whether a live article belongs to a domain's space.
-	HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
+	// SetHome makes the article the home page of a domain's space; false when
+	// the space has one already.
+	SetHome(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
 
-	// PurgeDeletedArticles removes the deleted articles of a domain's space for
-	// good, with everything that cascades from them.
-	PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error
+	// PurgeArticles removes every article of a domain's space for good, with
+	// everything that cascades from them.
+	PurgeArticles(ctx context.Context, spaceID, domainID int64) error
 
 	// LockArticles locks the live articles of a domain's space until the
 	// transaction ends, so no version of theirs commits meanwhile.
