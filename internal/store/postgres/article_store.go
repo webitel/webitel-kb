@@ -140,12 +140,13 @@ const subtreeSQL = `WITH RECURSIVE subtree AS (
 )
 SELECT id, depth FROM subtree`
 
-// treeSQL reads the visible hierarchy of a space flat; the nesting is built
-// in the application; the limit reads one row past the ceiling to spot an
-// oversized space.
+// treeSQL reads the visible hierarchy of a space flat, without the home page;
+// the nesting is built in the application; the limit reads one row past the
+// ceiling to spot an oversized space.
 const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth
 	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
 	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
+	  AND m.id IS DISTINCT FROM s.home_article_id
 	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id
 	LIMIT $3`
 
@@ -210,6 +211,7 @@ type articleRecord struct {
 	CreatedByName      *string   `db:"created_by_name"`
 	UpdatedByID        *int64    `db:"updated_by_id"`
 	UpdatedByName      *string   `db:"updated_by_name"`
+	Home               bool      `db:"home"`
 
 	PublishedID       *int64 `db:"published_id"`
 	PublishedNumber   int32  `db:"published_number"`
@@ -232,6 +234,7 @@ func mapArticle(record *articleRecord) *model.Article {
 		Ver:        record.Ver,
 		CreatedAt:  record.CreatedAt,
 		UpdatedAt:  record.UpdatedAt,
+		Home:       record.Home,
 	}
 
 	out.Space = mapLookup(record.SpaceID, record.SpaceName)

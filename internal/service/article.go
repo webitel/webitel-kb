@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
+
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/auth"
@@ -39,7 +41,7 @@ var errSubjectRequired = errors.InvalidArgument(
 // mergeReadFields is what the locked read must carry for the merge: the store
 // rewrites every column, so an unread one would be written back empty.
 var mergeReadFields = []string{
-	"id", "space", "parent_id", "subject", "tags", "type", "state", "ver",
+	"id", "space", "parent_id", "subject", "tags", "type", "state", "ver", "home",
 }
 
 // reindexReadFields adds the indexing state the reindex checks to the merge read.
@@ -49,6 +51,36 @@ var reindexReadFields = append(slices.Clone(mergeReadFields), "index_state")
 var errStateTransition = errors.InvalidArgument(
 	"an article cannot return to draft",
 	errors.WithID("kb.article.state_transition"),
+)
+
+// The home page is a top-level article of type article outside the tree: it
+// takes no parent and no children and does not move.
+var (
+	errHomeNested = errors.InvalidArgument(
+		"the home page is a top-level article",
+		errors.WithID("kb.article.home_nested"),
+	)
+	errHomeType = errors.InvalidArgument(
+		"the home page is an article, not a FAQ",
+		errors.WithID("kb.article.home_type"),
+	)
+	errHomeParent = errors.InvalidArgument(
+		"the home page holds no articles",
+		errors.WithID("kb.article.home_parent"),
+	)
+	errHomeMove = errors.InvalidArgument(
+		"the home page does not move",
+		errors.WithID("kb.article.home_move"),
+	)
+	errHomeImmutable = errors.InvalidArgument(
+		"an article becomes the home page only on create",
+		errors.WithID("kb.article.home_immutable"),
+	)
+	errHomeExists = errors.New(
+		"the space has a home page already",
+		errors.WithCode(codes.FailedPrecondition),
+		errors.WithID("kb.article.home_exists"),
+	)
 )
 
 var errReindexNotFailed = errors.InvalidArgument(
@@ -128,6 +160,10 @@ func (s *ArticleService) Create(
 		return nil, err
 	}
 
+	if err := validateHome(in); err != nil {
+		return nil, err
+	}
+
 	body, err := s.convertBody(ctx, rawBody)
 	if err != nil {
 		return nil, err
@@ -153,6 +189,19 @@ func (s *ArticleService) Create(
 		created, err = tx.ArticleStore().Create(ctx, opts, in)
 		if err != nil {
 			return err
+		}
+
+		if in.Home {
+			claimed, err := tx.SpaceStore().SetHome(ctx, in.SpaceID, created.ID, session.GetDomainID())
+			if err != nil {
+				return err
+			}
+
+			if !claimed {
+				return errHomeExists
+			}
+
+			created.Home = true
 		}
 
 		if len(rawBody) == 0 {
@@ -221,6 +270,10 @@ func (s *ArticleService) Update(
 
 		if !model.CanChangeState(current.State, merged.State) {
 			return errStateTransition
+		}
+
+		if merged.Home && merged.Type == model.ArticleTypeFAQ {
+			return errHomeType
 		}
 
 		var next *model.ArticleVersion
@@ -348,10 +401,14 @@ func (s *ArticleService) Move(
 		}
 
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth"},
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth", "home"},
 		})
 		if err != nil {
 			return err
+		}
+
+		if current.Home {
+			return errHomeMove
 		}
 
 		subtree, err := tx.ArticleStore().Subtree(ctx, readOptions{auth: session}, current.ID)
@@ -539,10 +596,14 @@ func checkDepth(
 	parentID int64, height int32, errID string,
 ) error {
 	parent, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-		auth: session, ids: []int64{parentID}, fields: []string{"id", "depth"},
+		auth: session, ids: []int64{parentID}, fields: []string{"id", "depth", "home"},
 	})
 	if err != nil {
 		return err
+	}
+
+	if parent.Home {
+		return errHomeParent
 	}
 
 	if parent.Depth+1+height > model.MaxArticleDepth {
@@ -602,6 +663,10 @@ func validateArticleCodes(typeCode, stateCode int32) error {
 // rejectHierarchyInput refuses update fields the write would silently ignore:
 // the hierarchy changes through MoveArticle, the space not at all.
 func rejectHierarchyInput(in, current *model.Article) error {
+	if in.Home && !current.Home {
+		return errHomeImmutable
+	}
+
 	if in.ParentID != 0 && in.ParentID != current.ParentID {
 		return errors.InvalidArgument(
 			"the parent changes through a move",
@@ -614,6 +679,23 @@ func rejectHierarchyInput(in, current *model.Article) error {
 			"an article cannot change its space",
 			errors.WithID("kb.article.space_immutable"),
 		)
+	}
+
+	return nil
+}
+
+// validateHome keeps a new home page a top-level article of type article.
+func validateHome(in *model.Article) error {
+	if !in.Home {
+		return nil
+	}
+
+	if in.ParentID != 0 {
+		return errHomeNested
+	}
+
+	if in.Type == model.ArticleTypeFAQ {
+		return errHomeType
 	}
 
 	return nil

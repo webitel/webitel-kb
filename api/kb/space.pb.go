@@ -233,8 +233,6 @@ type InputSpace struct {
 	RerankEnabled bool `protobuf:"varint,6,opt,name=rerank_enabled,json=rerankEnabled,proto3" json:"rerank_enabled,omitempty"`
 	// Chunking strategy identifier.
 	ChunkingStrategy string `protobuf:"bytes,7,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
-	// Article used as the space home page.
-	HomeArticleId int64 `protobuf:"varint,8,opt,name=home_article_id,json=homeArticleId,proto3" json:"home_article_id,omitempty"`
 	// Team ids the space is bound to as default operator visibility;
 	// the set replaces the current binding, empty removes it.
 	TeamIds       []int64 `protobuf:"varint,10,rep,packed,name=team_ids,json=teamIds,proto3" json:"team_ids,omitempty"`
@@ -326,13 +324,6 @@ func (x *InputSpace) GetChunkingStrategy() string {
 		return x.ChunkingStrategy
 	}
 	return ""
-}
-
-func (x *InputSpace) GetHomeArticleId() int64 {
-	if x != nil {
-		return x.HomeArticleId
-	}
-	return 0
 }
 
 func (x *InputSpace) GetTeamIds() []int64 {
@@ -709,7 +700,7 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\x83\x03\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xdb\x02\n" +
 	"\n" +
 	"InputSpace\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -719,8 +710,7 @@ const file_space_proto_rawDesc = "" +
 	"\x11reranker_model_id\x18\x04 \x01(\x03R\x0frerankerModelId\x122\n" +
 	"\x15vector_search_enabled\x18\x05 \x01(\bR\x13vectorSearchEnabled\x12%\n" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
-	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12&\n" +
-	"\x0fhome_article_id\x18\b \x01(\x03R\rhomeArticleId\x12\x19\n" +
+	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12\x19\n" +
 	"\bteam_ids\x18\n" +
 	" \x03(\x03R\ateamIds\"u\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
