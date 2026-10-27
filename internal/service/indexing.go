@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 
-	"google.golang.org/grpc/codes"
-
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/infra/crypto"
@@ -41,14 +39,6 @@ func (s *IndexingService) ResolveSpaceEmbedding(ctx context.Context, spaceID int
 
 	if !found.VectorSearchEnabled {
 		return &model.SpaceEmbedding{}, nil
-	}
-
-	if found.ModelID == 0 {
-		return nil, errors.New(
-			"space has no embedding model",
-			errors.WithCode(codes.FailedPrecondition),
-			errors.WithID("kb.space.model_unset"),
-		)
 	}
 
 	key, err := openModelCredential(ctx, s.enc, found.Provider, found.Config)

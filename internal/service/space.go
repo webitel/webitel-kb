@@ -308,16 +308,9 @@ func requireName(in *model.Space) error {
 	return nil
 }
 
-// validateRetrievalConfig checks that the enabled retrieval features have
-// their models configured.
+// validateRetrievalConfig checks that reranking has its model configured.
+// Vector search without a model searches by text alone.
 func validateRetrievalConfig(in *model.Space) error {
-	if in.VectorSearchEnabled && in.EmbeddingModelID == 0 {
-		return errors.InvalidArgument(
-			"vector search requires an embedding model",
-			errors.WithID("kb.space.embedding_model_required"),
-		)
-	}
-
 	if in.RerankEnabled && in.RerankerModelID == 0 {
 		return errors.InvalidArgument(
 			"reranking requires a reranker model",

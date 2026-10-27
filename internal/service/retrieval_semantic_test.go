@@ -212,11 +212,6 @@ func TestSemanticSearchRefusals(t *testing.T) {
 		wantID   string
 	}{
 		{
-			name:     "a vector space without a model",
-			spaces:   []*model.SpaceEmbedding{{SpaceID: 1, VectorSearchEnabled: true}},
-			wantCode: codes.FailedPrecondition, wantID: "kb.space.model_unset",
-		},
-		{
 			name:     "a rejected credential",
 			spaces:   cloud(),
 			embedErr: &embedding.APIError{StatusCode: 401},

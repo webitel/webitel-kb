@@ -203,14 +203,6 @@ func (s *RetrievalService) embedQuery(
 			continue
 		}
 
-		if space.ModelID == 0 {
-			return nil, errors.New(
-				"space has no embedding model",
-				errors.WithCode(codes.FailedPrecondition),
-				errors.WithID("kb.space.model_unset"),
-			)
-		}
-
 		if i, seen := byModel[space.ModelID]; seen {
 			vectors[i].SpaceIDs = append(vectors[i].SpaceIDs, space.SpaceID)
 

@@ -213,7 +213,7 @@ func (s *ArticleService) Update(
 			return err
 		}
 
-		if err := rejectHierarchyInput(in, current); err != nil {
+		if err := rejectImmutableInput(in, current); err != nil {
 			return err
 		}
 
@@ -599,9 +599,9 @@ func validateArticleCodes(typeCode, stateCode int32) error {
 	return nil
 }
 
-// rejectHierarchyInput refuses update fields the write would silently ignore:
-// the hierarchy changes through MoveArticle, the space not at all.
-func rejectHierarchyInput(in, current *model.Article) error {
+// rejectImmutableInput refuses update fields an update may not change: the
+// hierarchy changes through MoveArticle, the space and the type not at all.
+func rejectImmutableInput(in, current *model.Article) error {
 	if in.ParentID != 0 && in.ParentID != current.ParentID {
 		return errors.InvalidArgument(
 			"the parent changes through a move",
@@ -613,6 +613,13 @@ func rejectHierarchyInput(in, current *model.Article) error {
 		return errors.InvalidArgument(
 			"an article cannot change its space",
 			errors.WithID("kb.article.space_immutable"),
+		)
+	}
+
+	if in.Type != 0 && in.Type != current.Type {
+		return errors.InvalidArgument(
+			"an article cannot change its type",
+			errors.WithID("kb.article.type_immutable"),
 		)
 	}
 

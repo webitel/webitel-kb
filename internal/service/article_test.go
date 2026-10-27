@@ -860,14 +860,17 @@ func TestArticleUpdateVersioning(t *testing.T) {
 	}
 }
 
-func TestArticleUpdateRejectsHierarchyInput(t *testing.T) {
+func TestArticleUpdateRejectsImmutableInput(t *testing.T) {
 	tests := []struct {
-		name   string
-		in     *model.Article
-		wantID string
+		name      string
+		in        *model.Article
+		wantID    string
+		wantWrite int
 	}{
 		{name: "different parent", in: &model.Article{ParentID: 99}, wantID: "kb.article.parent_immutable"},
 		{name: "different space", in: &model.Article{SpaceID: 99}, wantID: "kb.article.space_immutable"},
+		{name: "article to faq", in: &model.Article{Type: model.ArticleTypeFAQ}, wantID: "kb.article.type_immutable"},
+		{name: "same type", in: &model.Article{Type: model.ArticleTypeArticle}, wantWrite: 1},
 	}
 
 	for _, tt := range tests {
@@ -877,11 +880,11 @@ func TestArticleUpdateRejectsHierarchyInput(t *testing.T) {
 			_, err := svc.Update(context.Background(), updaterOpts(), tt.in, nil, 4)
 
 			if errors.ID(err) != tt.wantID {
-				t.Fatalf("error = %v, want %s", err, tt.wantID)
+				t.Fatalf("error = %v, want %q", err, tt.wantID)
 			}
 
-			if uow.articles.updateCalls != 0 {
-				t.Fatal("the write must not run")
+			if uow.articles.updateCalls != tt.wantWrite {
+				t.Fatalf("writes = %d, want %d", uow.articles.updateCalls, tt.wantWrite)
 			}
 		})
 	}

@@ -618,9 +618,14 @@ func TestSpaceResolveEmbedding(t *testing.T) {
 		t.Errorf("statement scopes by domain: %s", f.gotSQL)
 	}
 
-	// A space without a model still answers.
-	if !strings.Contains(f.gotSQL, "LEFT JOIN kb.embedding_model") {
-		t.Errorf("statement does not outer join the model: %s", f.gotSQL)
+	// A space without a model still answers, and is not embedded.
+	for _, want := range []string{
+		"LEFT JOIN kb.embedding_model",
+		"s.vector_search_enabled AND s.embedding_model_id IS NOT NULL AS vector_search_enabled",
+	} {
+		if !strings.Contains(f.gotSQL, want) {
+			t.Errorf("SQL does not contain %q", want)
+		}
 	}
 }
 
@@ -651,6 +656,7 @@ func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
 	for _, want := range []string{
 		"FROM kb.space s",
 		"LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id",
+		"s.vector_search_enabled AND s.embedding_model_id IS NOT NULL AS vector_search_enabled",
 		"s.domain_id = $1",
 		"s.id = ANY($2)",
 		"s.deleted_at IS NULL",

@@ -65,13 +65,6 @@ func TestResolveSpaceEmbeddingRefusals(t *testing.T) {
 			wantID:   "kb.space.id_required",
 		},
 		{
-			name:     "a space without a model is refused by reason",
-			spaceID:  7,
-			store:    &fakeSpaceStore{resolved: &model.SpaceEmbedding{VectorSearchEnabled: true}},
-			wantCode: codes.FailedPrecondition,
-			wantID:   "kb.space.model_unset",
-		},
-		{
 			name:    "a cloud model without a credential is refused",
 			spaceID: 7,
 			store: &fakeSpaceStore{resolved: &model.SpaceEmbedding{

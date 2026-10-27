@@ -42,7 +42,8 @@ type Space struct {
 	TargetEmbeddingModelId int64 `protobuf:"varint,6,opt,name=target_embedding_model_id,json=targetEmbeddingModelId,proto3" json:"target_embedding_model_id,omitempty"`
 	// Reranker model id (type=reranker).
 	RerankerModelId int64 `protobuf:"varint,7,opt,name=reranker_model_id,json=rerankerModelId,proto3" json:"reranker_model_id,omitempty"`
-	// Whether articles in this space are embedded for vector search.
+	// Whether vector search is on. Without a model the space is searched by
+	// text alone.
 	VectorSearchEnabled bool `protobuf:"varint,8,opt,name=vector_search_enabled,json=vectorSearchEnabled,proto3" json:"vector_search_enabled,omitempty"`
 	// Whether reranking is applied (default off, on for suggest).
 	RerankEnabled bool `protobuf:"varint,9,opt,name=rerank_enabled,json=rerankEnabled,proto3" json:"rerank_enabled,omitempty"`
@@ -227,8 +228,9 @@ type InputSpace struct {
 	EmbeddingModelId int64 `protobuf:"varint,3,opt,name=embedding_model_id,json=embeddingModelId,proto3" json:"embedding_model_id,omitempty"`
 	// Reranker model id.
 	RerankerModelId int64 `protobuf:"varint,4,opt,name=reranker_model_id,json=rerankerModelId,proto3" json:"reranker_model_id,omitempty"`
-	// Whether articles are embedded for vector search.
-	VectorSearchEnabled bool `protobuf:"varint,5,opt,name=vector_search_enabled,json=vectorSearchEnabled,proto3" json:"vector_search_enabled,omitempty"`
+	// Whether vector search is on; on when omitted at creation. Without a
+	// model the space is searched by text alone.
+	VectorSearchEnabled *bool `protobuf:"varint,5,opt,name=vector_search_enabled,json=vectorSearchEnabled,proto3,oneof" json:"vector_search_enabled,omitempty"`
 	// Whether reranking is applied.
 	RerankEnabled bool `protobuf:"varint,6,opt,name=rerank_enabled,json=rerankEnabled,proto3" json:"rerank_enabled,omitempty"`
 	// Chunking strategy identifier.
@@ -308,8 +310,8 @@ func (x *InputSpace) GetRerankerModelId() int64 {
 }
 
 func (x *InputSpace) GetVectorSearchEnabled() bool {
-	if x != nil {
-		return x.VectorSearchEnabled
+	if x != nil && x.VectorSearchEnabled != nil {
+		return *x.VectorSearchEnabled
 	}
 	return false
 }
@@ -709,20 +711,21 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\x83\x03\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xa2\x03\n" +
 	"\n" +
 	"InputSpace\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x12,\n" +
 	"\x12embedding_model_id\x18\x03 \x01(\x03R\x10embeddingModelId\x12*\n" +
-	"\x11reranker_model_id\x18\x04 \x01(\x03R\x0frerankerModelId\x122\n" +
-	"\x15vector_search_enabled\x18\x05 \x01(\bR\x13vectorSearchEnabled\x12%\n" +
+	"\x11reranker_model_id\x18\x04 \x01(\x03R\x0frerankerModelId\x127\n" +
+	"\x15vector_search_enabled\x18\x05 \x01(\bH\x00R\x13vectorSearchEnabled\x88\x01\x01\x12%\n" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
 	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12&\n" +
 	"\x0fhome_article_id\x18\b \x01(\x03R\rhomeArticleId\x12\x19\n" +
 	"\bteam_ids\x18\n" +
-	" \x03(\x03R\ateamIds\"u\n" +
+	" \x03(\x03R\ateamIdsB\x18\n" +
+	"\x16_vector_search_enabled\"u\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
@@ -808,6 +811,7 @@ func file_space_proto_init() {
 		return
 	}
 	file_general_proto_init()
+	file_space_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
