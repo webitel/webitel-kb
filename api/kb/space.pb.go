@@ -700,7 +700,7 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xf2\x02\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xdb\x02\n" +
 	"\n" +
 	"InputSpace\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -712,7 +712,7 @@ const file_space_proto_rawDesc = "" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
 	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12\x19\n" +
 	"\bteam_ids\x18\n" +
-	" \x03(\x03R\ateamIdsJ\x04\b\b\x10\tR\x0fhome_article_id\"u\n" +
+	" \x03(\x03R\ateamIds\"u\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
