@@ -40,6 +40,17 @@ type UnitOfWork interface {
 
 	// AttachmentStore accesses the files bound to articles.
 	AttachmentStore() AttachmentStore
+
+	// SettingStore accesses the system settings of domains.
+	SettingStore() SettingStore
+}
+
+// SettingStore reads the system settings of a domain, which the platform keeps
+// outside the knowledge base.
+type SettingStore interface {
+	// Value returns the stored value of a domain setting, nil when the domain
+	// has not set it.
+	Value(ctx context.Context, domainID int64, name string) ([]byte, error)
 }
 
 // AttachmentStore binds the files Storage keeps to articles. Every operation is
@@ -147,11 +158,13 @@ type RetrievalStore interface {
 // article and its space.
 type ArticleVersionStore interface {
 	// List returns a page of versions of an article, newest first, and
-	// whether a next page exists.
-	List(ctx context.Context, opts options.Searcher, articleID int64) ([]*model.ArticleVersion, bool, error)
+	// whether a next page exists; newest above zero keeps only that many latest
+	// versions.
+	List(ctx context.Context, opts options.Searcher, articleID int64, newest int) ([]*model.ArticleVersion, bool, error)
 
-	// Locate returns a single version of an article by its number.
-	Locate(ctx context.Context, opts options.Searcher, articleID int64, number int32) (*model.ArticleVersion, error)
+	// Locate returns a single version of an article by its number; newest above
+	// zero finds it only among that many latest versions.
+	Locate(ctx context.Context, opts options.Searcher, articleID int64, number int32, newest int) (*model.ArticleVersion, error)
 
 	// Create appends a version to an article, numbering it after the current
 	// last one and building the search vector with the given text search

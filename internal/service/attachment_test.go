@@ -77,6 +77,7 @@ func (u *attachmentUow) ArticleVersionStore() store.ArticleVersionStore { return
 func (u *attachmentUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *attachmentUow) OutboxStore() store.OutboxStore                 { return nil }
 func (u *attachmentUow) AttachmentStore() store.AttachmentStore         { return u.files }
+func (u *attachmentUow) SettingStore() store.SettingStore               { return nil }
 
 // fakeFiles stands in for Storage: it records what was asked of it and plays
 // back metadata and links.

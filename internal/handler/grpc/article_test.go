@@ -126,18 +126,20 @@ type articleVersionStoreFake struct {
 	created  *model.ArticleVersion
 	createIn *model.ArticleVersion
 	size     int
+	newest   int
 }
 
 func (f *articleVersionStoreFake) List(
-	_ context.Context, opts options.Searcher, _ int64,
+	_ context.Context, opts options.Searcher, _ int64, newest int,
 ) ([]*model.ArticleVersion, bool, error) {
 	f.size = opts.GetSize()
+	f.newest = newest
 
 	return f.items, false, nil
 }
 
 func (f *articleVersionStoreFake) Locate(
-	context.Context, options.Searcher, int64, int32,
+	context.Context, options.Searcher, int64, int32, int,
 ) (*model.ArticleVersion, error) {
 	if len(f.items) == 0 {
 		return nil, errors.NotFound("entity does not exist or access is denied")
@@ -185,11 +187,25 @@ func (f *articleUoWFake) ArticleVersionStore() store.ArticleVersionStore { retur
 func (f *articleUoWFake) OutboxStore() store.OutboxStore                 { return &f.outbox }
 func (f *articleUoWFake) RetrievalStore() store.RetrievalStore           { return nil }
 func (f *articleUoWFake) AttachmentStore() store.AttachmentStore         { return nil }
+func (f *articleUoWFake) SettingStore() store.SettingStore               { return nil }
 
 func newArticleServers(uow *articleUoWFake) (*ArticlesServer, *VersionsServer, *TagsServer) {
-	svc := service.NewArticleService(uow, slog.New(slog.DiscardHandler))
+	svc := service.NewArticleService(uow, unsetSettings{}, slog.New(slog.DiscardHandler))
 
 	return NewArticlesServer(svc), NewVersionsServer(svc), NewTagsServer(svc)
+}
+
+// unsetSettings applies the settings the way a domain that has set none does.
+type unsetSettings struct{}
+
+func (unsetSettings) VersionLimit(context.Context, int64) int { return model.DefaultVersionLimit }
+
+func (unsetSettings) ResolveTagMatch(_ context.Context, _ int64, match model.TagMatch, _ []string) model.TagMatch {
+	if match == model.TagMatchDefault {
+		return model.TagMatchAny
+	}
+
+	return match
 }
 
 func articleContext() context.Context {
@@ -421,8 +437,8 @@ func TestListArticlesTagMatch(t *testing.T) {
 				t.Fatalf("ListArticles: %v", err)
 			}
 
-			if articles.filter.TagsMatchAll != tt.wantMatchAll {
-				t.Fatalf("match all = %v, want %v", articles.filter.TagsMatchAll, tt.wantMatchAll)
+			if articles.filter.TagMatch.All() != tt.wantMatchAll {
+				t.Fatalf("match all = %v, want %v", articles.filter.TagMatch.All(), tt.wantMatchAll)
 			}
 		})
 	}

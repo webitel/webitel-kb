@@ -77,6 +77,11 @@ func (u *unitOfWork) AttachmentStore() store.AttachmentStore {
 	return &attachmentStore{db: u.querier}
 }
 
+// SettingStore returns the setting store bound to the current querier.
+func (u *unitOfWork) SettingStore() store.SettingStore {
+	return &settingStore{db: u.querier}
+}
+
 // WithinTransaction executes fn within one transaction. If this unit of work is
 // already transactional, fn joins the open transaction instead of nesting. A
 // panic inside fn rolls the transaction back and is re-raised.

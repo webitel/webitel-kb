@@ -24,6 +24,7 @@ var errFakeUnused = errors.Internal("not implemented in fake")
 type fakeAuther struct {
 	domainID int64
 	userID   int64
+	supers   []auth.SuperPermission
 }
 
 func (a fakeAuther) GetRoles() []int64                            { return nil }
@@ -38,10 +39,12 @@ func (a fakeAuther) CheckObacAccess(string, auth.AccessMode) bool { return true 
 func (a fakeAuther) IsRbacCheckRequired(string, auth.AccessMode) bool {
 	return false
 }
-func (a fakeAuther) HasPermission(string) bool                    { return true }
-func (a fakeAuther) HasSuperPermission(auth.SuperPermission) bool { return false }
-func (a fakeAuther) GetMainAccessMode() auth.AccessMode           { return auth.NONE }
-func (a fakeAuther) GetMainObjClassName() string                  { return "" }
+func (a fakeAuther) HasPermission(string) bool { return true }
+func (a fakeAuther) HasSuperPermission(p auth.SuperPermission) bool {
+	return slices.Contains(a.supers, p)
+}
+func (a fakeAuther) GetMainAccessMode() auth.AccessMode { return auth.NONE }
+func (a fakeAuther) GetMainObjClassName() string        { return "" }
 
 // writeOpts implements options.Creator, Updator and Deleter.
 type writeOpts struct {
@@ -317,6 +320,7 @@ func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *fakeUow) OutboxStore() store.OutboxStore                 { return u.outbox }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
+func (u *fakeUow) SettingStore() store.SettingStore               { return nil }
 
 func validatedModel(id int64, modelType string) *model.EmbeddingModel {
 	return &model.EmbeddingModel{ID: id, Type: modelType, ValidatedAt: time.Now()}

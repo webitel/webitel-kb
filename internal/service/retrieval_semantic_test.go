@@ -57,7 +57,7 @@ func semanticServiceWithFakes() (*RetrievalService, *retrievalUow, *queryEmbedde
 	embedder := &queryEmbedder{vectors: map[string][]float32{}}
 	uow := &retrievalUow{retrieval: &retrievalStoreFake{}, spaces: &fakeSpaceStore{}}
 
-	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}, discardLogger()), uow, embedder
+	return NewRetrievalService(uow, fakeSealer{}, queryResolver{embedder}, settingsStub{}, discardLogger()), uow, embedder
 }
 
 func semanticOpts() options.Searcher {
@@ -137,7 +137,7 @@ func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 	got := uow.retrieval.hybrid
 	want := model.HybridQuery{
 		Term:   "vpn",
-		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2, 3, 4, 99}, Tags: []string{"net"}},
+		Filter: model.SearchFilter{SpaceIDs: []int64{1, 2, 3, 4, 99}, Tags: []string{"net"}, TagMatch: model.TagMatchAny},
 		Vectors: []model.ModelVector{
 			{ModelID: 9, Dimensions: 1, SpaceIDs: []int64{1, 2}, Vector: []float32{0.1}},
 			{ModelID: 11, Dimensions: 2, SpaceIDs: []int64{3}, Vector: []float32{0.2, 0.3}},

@@ -30,9 +30,9 @@ func (s *RetrievalServer) Search(ctx context.Context, req *kb.SearchRequest) (*k
 	}
 
 	items, next, err := s.service.Search(ctx, opts, model.SearchFilter{
-		SpaceIDs:     req.GetSpaceIds(),
-		Tags:         req.GetTags(),
-		TagsMatchAll: req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
+		SpaceIDs: req.GetSpaceIds(),
+		Tags:     req.GetTags(),
+		TagMatch: tagMatchFromProto(req.GetTagMatch()),
 	})
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (s *RetrievalServer) SemanticSearch(ctx context.Context, req *kb.SemanticSe
 		Query:            req.GetQuery(),
 		SpaceIDs:         req.GetSpaceIds(),
 		Tags:             req.GetTags(),
-		TagsMatchAll:     req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
+		TagMatch:         tagMatchFromProto(req.GetTagMatch()),
 		TopK:             int(req.GetTopK()),
 		IncludeCitations: req.GetIncludeCitations(),
 	})

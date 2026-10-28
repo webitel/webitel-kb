@@ -24,17 +24,17 @@ type ArticleSummary struct {
 type SearchFilter struct {
 	// SpaceIDs keeps the articles of those spaces.
 	SpaceIDs []int64
-	// Tags keeps articles carrying them.
-	Tags         []string
-	TagsMatchAll bool
+	// Tags keeps articles carrying them, combined by TagMatch.
+	Tags     []string
+	TagMatch TagMatch
 }
 
 // SemanticQuery is a hybrid search request as the service takes it.
 type SemanticQuery struct {
-	Query        string
-	SpaceIDs     []int64
-	Tags         []string
-	TagsMatchAll bool
+	Query    string
+	SpaceIDs []int64
+	Tags     []string
+	TagMatch TagMatch
 	// TopK is how many chunks to return; 0 asks for the default.
 	TopK             int
 	IncludeCitations bool

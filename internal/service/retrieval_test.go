@@ -85,6 +85,7 @@ type retrievalUow struct {
 
 func (u *retrievalUow) RetrievalStore() store.RetrievalStore   { return u.retrieval }
 func (u *retrievalUow) AttachmentStore() store.AttachmentStore { return nil }
+func (u *retrievalUow) SettingStore() store.SettingStore       { return nil }
 func (u *retrievalUow) SpaceStore() store.SpaceStore           { return u.spaces }
 
 func (u *retrievalUow) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -141,7 +142,7 @@ func TestRetrievalSearchPassesTheCriteria(t *testing.T) {
 	fake.items = []*model.ArticleSummary{{ID: 1}}
 	fake.next = true
 
-	filter := model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"vpn"}, TagsMatchAll: true}
+	filter := model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"vpn"}, TagMatch: model.TagMatchAll}
 
 	items, next, err := svc.Search(
 		context.Background(),

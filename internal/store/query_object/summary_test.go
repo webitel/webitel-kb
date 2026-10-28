@@ -182,7 +182,7 @@ func TestSummaryPrefixOrderAndLimit(t *testing.T) {
 func TestSearchHitsFusesThreeRankings(t *testing.T) {
 	// One list per side and index, fused by reciprocal rank.
 	sql, args, err := NewSearchHits("reset password").
-		WithScope(5, model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagsMatchAll: true}).
+		WithScope(5, model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagMatch: model.TagMatchAll}).
 		WithPaging(10, 2).
 		ToSQL()
 	if err != nil {
@@ -263,21 +263,22 @@ func TestSearchHitsTrigramsOnlyForKeywordTerms(t *testing.T) {
 
 func TestSearchHitsTagMatch(t *testing.T) {
 	tests := []struct {
-		name     string
-		tags     []string
-		matchAll bool
-		want     string
-		absent   string
+		name   string
+		tags   []string
+		match  model.TagMatch
+		want   string
+		absent string
 	}{
-		{name: "all tags", tags: []string{"a", "b"}, matchAll: true, want: "m.tags @> ?", absent: "m.tags && ?"},
-		{name: "any tag", tags: []string{"a"}, want: "m.tags && ?", absent: "m.tags @> ?"},
+		{name: "all tags", tags: []string{"a", "b"}, match: model.TagMatchAll, want: "m.tags @> ?", absent: "m.tags && ?"},
+		{name: "any tag", tags: []string{"a"}, match: model.TagMatchAny, want: "m.tags && ?", absent: "m.tags @> ?"},
+		{name: "unresolved default is any", tags: []string{"a", "b"}, want: "m.tags && ?", absent: "m.tags @> ?"},
 		{name: "no tags", want: "", absent: "m.tags"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sql, _, err := NewSearchHits("vpn").
-				WithScope(5, model.SearchFilter{Tags: tt.tags, TagsMatchAll: tt.matchAll}).
+				WithScope(5, model.SearchFilter{Tags: tt.tags, TagMatch: tt.match}).
 				ToSQL()
 			if err != nil {
 				t.Fatalf("ToSQL: %v", err)

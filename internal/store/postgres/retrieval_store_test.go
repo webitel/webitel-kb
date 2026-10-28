@@ -16,7 +16,7 @@ func TestRetrievalSearchRendersRankedPage(t *testing.T) {
 	s := &retrievalStore{db: f}
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, search: "router", size: 10, page: 2}
-	filter := model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagsMatchAll: true}
+	filter := model.SearchFilter{SpaceIDs: []int64{7}, Tags: []string{"net"}, TagMatch: model.TagMatchAll}
 
 	if _, _, err := s.Search(context.Background(), opts, filter); err != nil {
 		t.Fatalf("Search: %v", err)

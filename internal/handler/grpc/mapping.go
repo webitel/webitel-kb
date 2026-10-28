@@ -37,3 +37,18 @@ func lookupsToProto(ls []model.Lookup) []*kb.Lookup {
 
 	return out
 }
+
+// tagMatchFromProto keeps an unspecified match unresolved: the domain setting
+// decides it.
+func tagMatchFromProto(m kb.TagMatch) model.TagMatch {
+	switch m {
+	case kb.TagMatch_TAG_MATCH_ALL:
+		return model.TagMatchAll
+	case kb.TagMatch_TAG_MATCH_ANY:
+		return model.TagMatchAny
+	case kb.TagMatch_TAG_MATCH_UNSPECIFIED:
+		return model.TagMatchDefault
+	default:
+		return model.TagMatchDefault
+	}
+}
