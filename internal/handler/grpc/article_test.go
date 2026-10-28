@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -231,10 +232,14 @@ func TestArticleToProto(t *testing.T) {
 		ParentID: 2, Depth: 2, Type: model.ArticleTypeFAQ, Subject: "VPN",
 		Tags: []string{"vpn"}, State: model.ArticleStateActive,
 		IndexState: model.IndexStateIndexed, PublishedVersionID: 40, Ver: 4,
-		CreatedAt: now, CreatedBy: &model.Lookup{ID: 9, Name: "Admin"},
+		CreatedAt: now, CreatedBy: &model.Lookup{ID: 9, Name: "Admin"}, Home: true,
 	})
 	if err != nil {
 		t.Fatalf("articleToProto: %v", err)
+	}
+
+	if !got.GetHome() {
+		t.Fatal("the home flag is lost")
 	}
 
 	if got.GetType() != kb.ArticleType_FAQ || got.GetState() != kb.ArticleState_ACTIVE ||
@@ -258,6 +263,22 @@ func TestArticleToProto(t *testing.T) {
 
 	if id != 7 || ver != 4 {
 		t.Fatalf("etag decodes to (%d, %d), want (7, 4)", id, ver)
+	}
+}
+
+func TestArticleFromInput(t *testing.T) {
+	got := articleFromInput(&kb.InputArticle{
+		SpaceId: 3, ParentId: 2, Type: kb.ArticleType_FAQ, Subject: "VPN",
+		Tags: []string{"vpn"}, State: kb.ArticleState_ACTIVE, Home: true,
+	})
+
+	want := &model.Article{
+		SpaceID: 3, ParentID: 2, Type: model.ArticleTypeFAQ, Subject: "VPN",
+		Tags: []string{"vpn"}, State: model.ArticleStateActive, Home: true,
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("input mapped to %+v, want %+v", got, want)
 	}
 }
 

@@ -34,7 +34,7 @@ func (s *SpacesServer) ListSpaces(ctx context.Context, req *kb.ListSpacesRequest
 		return nil, err
 	}
 
-	items, next, err := s.service.List(ctx, opts)
+	items, next, err := s.service.List(ctx, opts, model.SpaceFilter{State: int32(req.GetState())})
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func spaceFromInput(in *kb.InputSpace) *model.Space {
 		VectorSearchEnabled: in.GetVectorSearchEnabled(),
 		RerankEnabled:       in.GetRerankEnabled(),
 		ChunkingStrategy:    in.GetChunkingStrategy(),
-		HomeArticleID:       in.GetHomeArticleId(),
+		State:               int32(in.GetState()),
 	}
 }
 
@@ -157,6 +157,7 @@ func spaceToProto(m *model.Space) *kb.Space {
 		RerankEnabled:          m.RerankEnabled,
 		ChunkingStrategy:       m.ChunkingStrategy,
 		HomeArticleId:          m.HomeArticleID,
+		State:                  kb.SpaceState(m.State),
 		Teams:                  lookupsToProto(m.Teams),
 		CreatedAt:              unixMilli(m.CreatedAt),
 		UpdatedAt:              unixMilli(m.UpdatedAt),

@@ -23,6 +23,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Space lifecycle state.
+type SpaceState int32
+
+const (
+	SpaceState_SPACE_STATE_UNSPECIFIED SpaceState = 0
+	// Articles of the space are retrievable.
+	SpaceState_SPACE_STATE_ACTIVE SpaceState = 1
+	// Articles are kept but excluded from search and suggestions.
+	SpaceState_SPACE_STATE_INACTIVE SpaceState = 2
+)
+
+// Enum value maps for SpaceState.
+var (
+	SpaceState_name = map[int32]string{
+		0: "SPACE_STATE_UNSPECIFIED",
+		1: "SPACE_STATE_ACTIVE",
+		2: "SPACE_STATE_INACTIVE",
+	}
+	SpaceState_value = map[string]int32{
+		"SPACE_STATE_UNSPECIFIED": 0,
+		"SPACE_STATE_ACTIVE":      1,
+		"SPACE_STATE_INACTIVE":    2,
+	}
+)
+
+func (x SpaceState) Enum() *SpaceState {
+	p := new(SpaceState)
+	*p = x
+	return p
+}
+
+func (x SpaceState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SpaceState) Descriptor() protoreflect.EnumDescriptor {
+	return file_space_proto_enumTypes[0].Descriptor()
+}
+
+func (SpaceState) Type() protoreflect.EnumType {
+	return &file_space_proto_enumTypes[0]
+}
+
+func (x SpaceState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SpaceState.Descriptor instead.
+func (SpaceState) EnumDescriptor() ([]byte, []int) {
+	return file_space_proto_rawDescGZIP(), []int{0}
+}
+
 // Space is a knowledge-base space read model.
 type Space struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -54,6 +106,8 @@ type Space struct {
 	// Teams the space is bound to as default operator visibility;
 	// empty when no binding is configured.
 	Teams []*Lookup `protobuf:"bytes,13,rep,name=teams,proto3" json:"teams,omitempty"`
+	// Lifecycle state.
+	State SpaceState `protobuf:"varint,14,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -187,6 +241,13 @@ func (x *Space) GetTeams() []*Lookup {
 	return nil
 }
 
+func (x *Space) GetState() SpaceState {
+	if x != nil {
+		return x.State
+	}
+	return SpaceState_SPACE_STATE_UNSPECIFIED
+}
+
 func (x *Space) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -235,11 +296,11 @@ type InputSpace struct {
 	RerankEnabled bool `protobuf:"varint,6,opt,name=rerank_enabled,json=rerankEnabled,proto3" json:"rerank_enabled,omitempty"`
 	// Chunking strategy identifier.
 	ChunkingStrategy string `protobuf:"bytes,7,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
-	// Article used as the space home page.
-	HomeArticleId int64 `protobuf:"varint,8,opt,name=home_article_id,json=homeArticleId,proto3" json:"home_article_id,omitempty"`
 	// Team ids the space is bound to as default operator visibility;
 	// the set replaces the current binding, empty removes it.
-	TeamIds       []int64 `protobuf:"varint,10,rep,packed,name=team_ids,json=teamIds,proto3" json:"team_ids,omitempty"`
+	TeamIds []int64 `protobuf:"varint,10,rep,packed,name=team_ids,json=teamIds,proto3" json:"team_ids,omitempty"`
+	// Lifecycle state; unspecified keeps the current one, active on create.
+	State         SpaceState `protobuf:"varint,11,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -330,18 +391,18 @@ func (x *InputSpace) GetChunkingStrategy() string {
 	return ""
 }
 
-func (x *InputSpace) GetHomeArticleId() int64 {
-	if x != nil {
-		return x.HomeArticleId
-	}
-	return 0
-}
-
 func (x *InputSpace) GetTeamIds() []int64 {
 	if x != nil {
 		return x.TeamIds
 	}
 	return nil
+}
+
+func (x *InputSpace) GetState() SpaceState {
+	if x != nil {
+		return x.State
+	}
+	return SpaceState_SPACE_STATE_UNSPECIFIED
 }
 
 // ListSpacesRequest parameters.
@@ -356,7 +417,9 @@ type ListSpacesRequest struct {
 	// Sorting criteria (e.g. field:asc).
 	Sort string `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`
 	// Set of fields to return.
-	Fields        []string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
+	Fields []string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
+	// Optional state filter.
+	State         SpaceState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -424,6 +487,13 @@ func (x *ListSpacesRequest) GetFields() []string {
 		return x.Fields
 	}
 	return nil
+}
+
+func (x *ListSpacesRequest) GetState() SpaceState {
+	if x != nil {
+		return x.State
+	}
+	return SpaceState_SPACE_STATE_UNSPECIFIED
 }
 
 // SpaceList is a page of spaces.
@@ -688,7 +758,7 @@ var File_space_proto protoreflect.FileDescriptor
 const file_space_proto_rawDesc = "" +
 	"\n" +
 	"\vspace.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\x90\x05\n" +
+	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbe\x05\n" +
 	"\x05Space\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -703,7 +773,8 @@ const file_space_proto_rawDesc = "" +
 	"\x11chunking_strategy\x18\n" +
 	" \x01(\tR\x10chunkingStrategy\x12&\n" +
 	"\x0fhome_article_id\x18\v \x01(\x03R\rhomeArticleId\x12%\n" +
-	"\x05teams\x18\r \x03(\v2\x0f.general.LookupR\x05teams\x12\x1d\n" +
+	"\x05teams\x18\r \x03(\v2\x0f.general.LookupR\x05teams\x12,\n" +
+	"\x05state\x18\x0e \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -711,7 +782,7 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xa2\x03\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xa8\x03\n" +
 	"\n" +
 	"InputSpace\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -721,17 +792,18 @@ const file_space_proto_rawDesc = "" +
 	"\x11reranker_model_id\x18\x04 \x01(\x03R\x0frerankerModelId\x127\n" +
 	"\x15vector_search_enabled\x18\x05 \x01(\bH\x00R\x13vectorSearchEnabled\x88\x01\x01\x12%\n" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
-	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12&\n" +
-	"\x0fhome_article_id\x18\b \x01(\x03R\rhomeArticleId\x12\x19\n" +
+	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12\x19\n" +
 	"\bteam_ids\x18\n" +
-	" \x03(\x03R\ateamIdsB\x18\n" +
-	"\x16_vector_search_enabled\"u\n" +
+	" \x03(\x03R\ateamIds\x12,\n" +
+	"\x05state\x18\v \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05stateB\x18\n" +
+	"\x16_vector_search_enabled\"\xa3\x01\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x16\n" +
-	"\x06fields\x18\x05 \x03(\tR\x06fields\"H\n" +
+	"\x06fields\x18\x05 \x03(\tR\x06fields\x12,\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\"H\n" +
 	"\tSpaceList\x12'\n" +
 	"\x05items\x18\x01 \x03(\v2\x11.webitel.kb.SpaceR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"$\n" +
@@ -744,7 +816,12 @@ const file_space_proto_rawDesc = "" +
 	"\x05input\x18\x02 \x01(\v2\x16.webitel.kb.InputSpaceR\x05input\x12\x1e\n" +
 	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"$\n" +
 	"\x12DeleteSpaceRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id2\xa5\x04\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id*[\n" +
+	"\n" +
+	"SpaceState\x12\x1b\n" +
+	"\x17SPACE_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12SPACE_STATE_ACTIVE\x10\x01\x12\x18\n" +
+	"\x14SPACE_STATE_INACTIVE\x10\x022\xa5\x04\n" +
 	"\x06Spaces\x12]\n" +
 	"\n" +
 	"ListSpaces\x12\x1d.webitel.kb.ListSpacesRequest\x1a\x15.webitel.kb.SpaceList\"\x19\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/kb/spaces\x12`\n" +
@@ -769,40 +846,45 @@ func file_space_proto_rawDescGZIP() []byte {
 	return file_space_proto_rawDescData
 }
 
+var file_space_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_space_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_space_proto_goTypes = []any{
-	(*Space)(nil),              // 0: webitel.kb.Space
-	(*InputSpace)(nil),         // 1: webitel.kb.InputSpace
-	(*ListSpacesRequest)(nil),  // 2: webitel.kb.ListSpacesRequest
-	(*SpaceList)(nil),          // 3: webitel.kb.SpaceList
-	(*LocateSpaceRequest)(nil), // 4: webitel.kb.LocateSpaceRequest
-	(*CreateSpaceRequest)(nil), // 5: webitel.kb.CreateSpaceRequest
-	(*UpdateSpaceRequest)(nil), // 6: webitel.kb.UpdateSpaceRequest
-	(*DeleteSpaceRequest)(nil), // 7: webitel.kb.DeleteSpaceRequest
-	(*Lookup)(nil),             // 8: general.Lookup
+	(SpaceState)(0),            // 0: webitel.kb.SpaceState
+	(*Space)(nil),              // 1: webitel.kb.Space
+	(*InputSpace)(nil),         // 2: webitel.kb.InputSpace
+	(*ListSpacesRequest)(nil),  // 3: webitel.kb.ListSpacesRequest
+	(*SpaceList)(nil),          // 4: webitel.kb.SpaceList
+	(*LocateSpaceRequest)(nil), // 5: webitel.kb.LocateSpaceRequest
+	(*CreateSpaceRequest)(nil), // 6: webitel.kb.CreateSpaceRequest
+	(*UpdateSpaceRequest)(nil), // 7: webitel.kb.UpdateSpaceRequest
+	(*DeleteSpaceRequest)(nil), // 8: webitel.kb.DeleteSpaceRequest
+	(*Lookup)(nil),             // 9: general.Lookup
 }
 var file_space_proto_depIdxs = []int32{
-	8,  // 0: webitel.kb.Space.teams:type_name -> general.Lookup
-	8,  // 1: webitel.kb.Space.created_by:type_name -> general.Lookup
-	8,  // 2: webitel.kb.Space.updated_by:type_name -> general.Lookup
-	0,  // 3: webitel.kb.SpaceList.items:type_name -> webitel.kb.Space
-	1,  // 4: webitel.kb.CreateSpaceRequest.input:type_name -> webitel.kb.InputSpace
-	1,  // 5: webitel.kb.UpdateSpaceRequest.input:type_name -> webitel.kb.InputSpace
-	2,  // 6: webitel.kb.Spaces.ListSpaces:input_type -> webitel.kb.ListSpacesRequest
-	4,  // 7: webitel.kb.Spaces.LocateSpace:input_type -> webitel.kb.LocateSpaceRequest
-	5,  // 8: webitel.kb.Spaces.CreateSpace:input_type -> webitel.kb.CreateSpaceRequest
-	6,  // 9: webitel.kb.Spaces.UpdateSpace:input_type -> webitel.kb.UpdateSpaceRequest
-	7,  // 10: webitel.kb.Spaces.DeleteSpace:input_type -> webitel.kb.DeleteSpaceRequest
-	3,  // 11: webitel.kb.Spaces.ListSpaces:output_type -> webitel.kb.SpaceList
-	0,  // 12: webitel.kb.Spaces.LocateSpace:output_type -> webitel.kb.Space
-	0,  // 13: webitel.kb.Spaces.CreateSpace:output_type -> webitel.kb.Space
-	0,  // 14: webitel.kb.Spaces.UpdateSpace:output_type -> webitel.kb.Space
-	0,  // 15: webitel.kb.Spaces.DeleteSpace:output_type -> webitel.kb.Space
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	9,  // 0: webitel.kb.Space.teams:type_name -> general.Lookup
+	0,  // 1: webitel.kb.Space.state:type_name -> webitel.kb.SpaceState
+	9,  // 2: webitel.kb.Space.created_by:type_name -> general.Lookup
+	9,  // 3: webitel.kb.Space.updated_by:type_name -> general.Lookup
+	0,  // 4: webitel.kb.InputSpace.state:type_name -> webitel.kb.SpaceState
+	0,  // 5: webitel.kb.ListSpacesRequest.state:type_name -> webitel.kb.SpaceState
+	1,  // 6: webitel.kb.SpaceList.items:type_name -> webitel.kb.Space
+	2,  // 7: webitel.kb.CreateSpaceRequest.input:type_name -> webitel.kb.InputSpace
+	2,  // 8: webitel.kb.UpdateSpaceRequest.input:type_name -> webitel.kb.InputSpace
+	3,  // 9: webitel.kb.Spaces.ListSpaces:input_type -> webitel.kb.ListSpacesRequest
+	5,  // 10: webitel.kb.Spaces.LocateSpace:input_type -> webitel.kb.LocateSpaceRequest
+	6,  // 11: webitel.kb.Spaces.CreateSpace:input_type -> webitel.kb.CreateSpaceRequest
+	7,  // 12: webitel.kb.Spaces.UpdateSpace:input_type -> webitel.kb.UpdateSpaceRequest
+	8,  // 13: webitel.kb.Spaces.DeleteSpace:input_type -> webitel.kb.DeleteSpaceRequest
+	4,  // 14: webitel.kb.Spaces.ListSpaces:output_type -> webitel.kb.SpaceList
+	1,  // 15: webitel.kb.Spaces.LocateSpace:output_type -> webitel.kb.Space
+	1,  // 16: webitel.kb.Spaces.CreateSpace:output_type -> webitel.kb.Space
+	1,  // 17: webitel.kb.Spaces.UpdateSpace:output_type -> webitel.kb.Space
+	1,  // 18: webitel.kb.Spaces.DeleteSpace:output_type -> webitel.kb.Space
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_space_proto_init() }
@@ -817,13 +899,14 @@ func file_space_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_space_proto_rawDesc), len(file_space_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_space_proto_goTypes,
 		DependencyIndexes: file_space_proto_depIdxs,
+		EnumInfos:         file_space_proto_enumTypes,
 		MessageInfos:      file_space_proto_msgTypes,
 	}.Build()
 	File_space_proto = out.File

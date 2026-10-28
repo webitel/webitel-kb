@@ -153,7 +153,7 @@ func TestWithUpdateMask(t *testing.T) {
 	}{
 		{name: "no paths", wantErr: true},
 		{name: "empty body path", paths: []string{""}, wantErr: true},
-		{name: "json and proto names", paths: []string{"teamIds", "home_article_id"}, want: []string{"team_ids", "home_article_id"}},
+		{name: "json and proto names", paths: []string{"teamIds", "chunking_strategy"}, want: []string{"team_ids", "chunking_strategy"}},
 		{name: "nested path keeps its root", paths: []string{"description.x", "description"}, want: []string{"description"}},
 		{name: "unknown root is kept", paths: []string{"createdAt"}, want: []string{"createdAt"}},
 	}

@@ -237,6 +237,7 @@ type articleUow struct {
 	articles *fakeArticleStore
 	versions *fakeVersionStore
 	outbox   *fakeOutbox
+	spaces   *fakeSpaceStore
 
 	transactions int
 }
@@ -248,7 +249,7 @@ func (u *articleUow) WithinTransaction(ctx context.Context, fn func(context.Cont
 }
 
 func (u *articleUow) EmbeddingModelStore() store.EmbeddingModelStore { return nil }
-func (u *articleUow) SpaceStore() store.SpaceStore                   { return nil }
+func (u *articleUow) SpaceStore() store.SpaceStore                   { return u.spaces }
 func (u *articleUow) ArticleStore() store.ArticleStore               { return u.articles }
 func (u *articleUow) ArticleVersionStore() store.ArticleVersionStore { return u.versions }
 func (u *articleUow) OutboxStore() store.OutboxStore                 { return u.outbox }
@@ -283,6 +284,7 @@ func newArticleUow() *articleUow {
 			order: articles,
 		},
 		outbox: &fakeOutbox{order: articles},
+		spaces: &fakeSpaceStore{order: articles},
 	}
 
 	return uow
@@ -316,6 +318,8 @@ func TestArticleCreateValidation(t *testing.T) {
 			body:   `{"type":"doc","content":[{"type":"paragraph","attrs":{"class":"a\u0000b"},"content":[{"type":"text","text":"hi"}]}]}`,
 			wantID: "kb.article.body_invalid",
 		},
+		{name: "nested home page", in: &model.Article{SpaceID: 3, Subject: "a", ParentID: 2, Home: true}, wantID: "kb.article.home_nested"},
+		{name: "FAQ home page", in: &model.Article{SpaceID: 3, Subject: "a", Type: model.ArticleTypeFAQ, Home: true}, wantID: "kb.article.home_type"},
 	}
 
 	for _, tt := range tests {
@@ -474,6 +478,133 @@ func TestArticleCreateDepthPreCheck(t *testing.T) {
 
 	if uow.articles.createCalls != 0 {
 		t.Fatal("the write must not run after the pre-check refused")
+	}
+}
+
+func TestArticleCreateHome(t *testing.T) {
+	tests := []struct {
+		name      string
+		home      bool
+		taken     bool
+		wantID    string
+		wantAsked [3]int64
+		wantOrder string
+	}{
+		{
+			name: "space without a home", home: true, wantAsked: [3]int64{3, 7, 5},
+			wantOrder: "space-key-lock,create-article,set-home,create-version,publish-reindex",
+		},
+		{
+			name: "space with a home already", home: true, taken: true, wantID: "kb.article.home_exists",
+			wantAsked: [3]int64{3, 7, 5}, wantOrder: "space-key-lock,create-article,set-home",
+		},
+		{
+			name:      "plain article leaves the space alone",
+			wantOrder: "space-key-lock,create-article,create-version,publish-reindex",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.spaces.homeTaken = tt.taken
+
+			created, err := svc.Create(context.Background(), creatorOpts(),
+				&model.Article{SpaceID: 3, Subject: "about", Home: tt.home}, []byte(validDoc))
+			if errors.ID(err) != tt.wantID {
+				t.Fatalf("error = %v, want %q", err, tt.wantID)
+			}
+
+			if uow.spaces.homeAsked != tt.wantAsked {
+				t.Fatalf("home set with %v, want %v", uow.spaces.homeAsked, tt.wantAsked)
+			}
+
+			if order := strings.Join(uow.articles.callOrder, ","); order != tt.wantOrder {
+				t.Fatalf("flow order = %s, want %s", order, tt.wantOrder)
+			}
+
+			if tt.wantID == "" && created.Home != tt.home {
+				t.Fatalf("home = %v, want %v", created.Home, tt.home)
+			}
+		})
+	}
+}
+
+func TestArticleHomeStaysOutOfTheTree(t *testing.T) {
+	tests := []struct {
+		name   string
+		run    func(svc *ArticleService) error
+		home   bool // the article itself is the home page
+		parent bool // the target parent is the home page
+		wantID string
+	}{
+		{
+			name: "child under the home page", parent: true, wantID: "kb.article.home_parent",
+			run: func(svc *ArticleService) error {
+				_, err := svc.Create(context.Background(), creatorOpts(),
+					&model.Article{SpaceID: 3, Subject: "a", ParentID: 2}, nil)
+
+				return err
+			},
+		},
+		{
+			name: "move under the home page", parent: true, wantID: "kb.article.home_parent",
+			run: func(svc *ArticleService) error {
+				_, err := svc.Move(context.Background(), updaterOpts(), 2, 4)
+
+				return err
+			},
+		},
+		{
+			name: "move of the home page", home: true, wantID: "kb.article.home_move",
+			run: func(svc *ArticleService) error {
+				_, err := svc.Move(context.Background(), updaterOpts(), 0, 4)
+
+				return err
+			},
+		},
+		{
+			name: "article turned into the home page", wantID: "kb.article.home_immutable",
+			run: func(svc *ArticleService) error {
+				_, err := svc.Update(context.Background(), updaterOpts(), &model.Article{Home: true}, nil, 4)
+
+				return err
+			},
+		},
+		{
+			name: "home page turned into a FAQ", home: true, wantID: "kb.article.type_immutable",
+			run: func(svc *ArticleService) error {
+				_, err := svc.Update(context.Background(), updaterOpts(), &model.Article{Type: model.ArticleTypeFAQ}, nil, 4)
+
+				return err
+			},
+		},
+		{
+			name: "home page echoed back by a PUT", home: true,
+			run: func(svc *ArticleService) error {
+				_, err := svc.Update(context.Background(), updaterOpts(), &model.Article{Subject: "about", Home: true}, nil, 4)
+
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.current.Home = tt.home
+			uow.articles.located = &model.Article{ID: 2, Depth: 1, Home: tt.parent}
+
+			err := tt.run(svc)
+			if errors.ID(err) != tt.wantID {
+				t.Fatalf("error = %v, want %q", err, tt.wantID)
+			}
+
+			writes := uow.articles.createCalls + uow.articles.updateCalls + uow.articles.moveCalls
+			if tt.wantID != "" && writes != 0 {
+				t.Fatal("a refused change must not reach the store")
+			}
+		})
 	}
 }
 
@@ -1126,7 +1257,7 @@ func TestArticleLockedReadCarriesTheMergedColumns(t *testing.T) {
 		t.Fatalf("locked reads = %d", uow.articles.lockedLocates)
 	}
 
-	for _, want := range []string{"subject", "tags", "type", "state", "parent_id", "space", "ver"} {
+	for _, want := range []string{"subject", "tags", "type", "state", "parent_id", "space", "ver", "home"} {
 		if !slices.Contains(uow.articles.locateFields[0], want) {
 			t.Fatalf("locked read fields = %v, want %q", uow.articles.locateFields[0], want)
 		}

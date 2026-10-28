@@ -57,8 +57,8 @@ type AttachmentStore interface {
 	// returns it; a file of another article or domain is not found.
 	Delete(ctx context.Context, opts options.Deleter, articleID int64) (*model.Attachment, error)
 
-	// Bound reports whether any article still binds the file.
-	Bound(ctx context.Context, fileID int64) (bool, error)
+	// Unbound returns those of the files no article binds any more.
+	Unbound(ctx context.Context, fileIDs []int64) ([]int64, error)
 }
 
 // OutboxStore records events for the relay to deliver.
@@ -163,7 +163,7 @@ type ArticleVersionStore interface {
 // and write is scoped to the caller's domain.
 type SpaceStore interface {
 	// List returns a page of spaces and whether a next page exists.
-	List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error)
+	List(ctx context.Context, opts options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error)
 
 	// Locate returns the single space the options identify by id.
 	Locate(ctx context.Context, opts options.Searcher) (*model.Space, error)
@@ -190,15 +190,17 @@ type SpaceStore interface {
 	// given set; an empty set removes the binding.
 	ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error
 
-	// HasArticles reports whether a domain's space still holds a live article.
-	HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
+	// HasActiveArticles reports whether a domain's space still holds a live
+	// active article.
+	HasActiveArticles(ctx context.Context, spaceID, domainID int64) (bool, error)
 
-	// HoldsArticle reports whether a live article belongs to a domain's space.
-	HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
+	// SetHome makes the article the home page of a domain's space; false when
+	// the space has one already.
+	SetHome(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
 
-	// PurgeDeletedArticles removes the deleted articles of a domain's space for
-	// good, with everything that cascades from them.
-	PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) error
+	// PurgeArticles removes every article of a domain's space for good, with
+	// everything that cascades from them, and returns the files they bound.
+	PurgeArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error)
 
 	// LockArticles locks the live articles of a domain's space until the
 	// transaction ends, so no version of theirs commits meanwhile.
@@ -217,8 +219,8 @@ type SpaceStore interface {
 	ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error)
 
 	// ResolveEmbeddings returns the embedding model of each of a domain's
-	// spaces, credential included; unknown ids are simply absent. No ids
-	// means every space of the domain.
+	// active spaces, credential included; unknown and inactive ids are simply
+	// absent. No ids means every active space of the domain.
 	ResolveEmbeddings(ctx context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceEmbedding, error)
 
 	// ResolveRerankers returns the reranker of each of a domain's spaces,

@@ -266,14 +266,14 @@ func TestArticleScanMapsRecord(t *testing.T) {
 		cols: []string{
 			"id", "domain_id", "space_id", "space_name", "parent_id", "depth", "type",
 			"subject", "tags", "state", "index_state", "published_version_id", "ver",
-			"created_at", "updated_at", "created_by_id", "created_by_name",
+			"created_at", "updated_at", "created_by_id", "created_by_name", "home",
 		},
 		vals: [][]any{{
 			int64(1), int64(5), ptrTo(int64(7)), ptrTo("Sales"), ptrTo(int64(3)), int32(2), int32(1),
 			"VPN setup",
 			[]string{"vpn", "howto"},
 			int32(2), int32(3), ptrTo(int64(11)), int32(4),
-			now, now, ptrTo(int64(9)), ptrTo("Admin"),
+			now, now, ptrTo(int64(9)), ptrTo("Admin"), true,
 		}},
 	}}
 	s := &articleStore{db: f}
@@ -292,12 +292,13 @@ func TestArticleScanMapsRecord(t *testing.T) {
 		PublishedVersionID: 11, Ver: 4,
 		CreatedAt: now, UpdatedAt: now,
 		CreatedBy: &model.Lookup{ID: 9, Name: "Admin"},
+		Home:      true,
 	}
 
 	if got.ID != want.ID || got.DomainID != want.DomainID || got.SpaceID != want.SpaceID ||
 		got.ParentID != want.ParentID || got.Depth != want.Depth || got.Type != want.Type ||
 		got.Subject != want.Subject || got.State != want.State || got.IndexState != want.IndexState ||
-		got.PublishedVersionID != want.PublishedVersionID || got.Ver != want.Ver {
+		got.PublishedVersionID != want.PublishedVersionID || got.Ver != want.Ver || got.Home != want.Home {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 
@@ -495,6 +496,7 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 
 	for _, want := range []string{
 		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
+		"AND m.id IS DISTINCT FROM s.home_article_id",
 		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
 		"LIMIT $3",
 	} {

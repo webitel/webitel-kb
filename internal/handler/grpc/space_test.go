@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestSpaceToProto(t *testing.T) {
 			in: &model.Space{
 				ID: 7, DomainID: 5, Name: "docs", Description: "main", Language: "uk",
 				EmbeddingModelID: 3, RerankerModelID: 4, VectorSearchEnabled: true,
-				ChunkingStrategy: "recursive_markdown", HomeArticleID: 11,
+				ChunkingStrategy: "recursive_markdown", HomeArticleID: 11, State: model.SpaceStateInactive,
 				Teams:     []model.Lookup{{ID: 2, Name: "Sales"}},
 				CreatedAt: now, UpdatedAt: now,
 				CreatedBy: &model.Lookup{ID: 9, Name: "Admin"},
@@ -40,7 +41,8 @@ func TestSpaceToProto(t *testing.T) {
 			want: func(t *testing.T, got *kb.Space) {
 				t.Helper()
 
-				if got.GetId() != 7 || got.GetLanguage() != "uk" || got.GetEmbeddingModelId() != 3 {
+				if got.GetId() != 7 || got.GetLanguage() != "uk" || got.GetEmbeddingModelId() != 3 ||
+					got.GetHomeArticleId() != 11 || got.GetState() != kb.SpaceState_SPACE_STATE_INACTIVE {
 					t.Fatalf("space = %+v", got)
 				}
 
@@ -86,8 +88,8 @@ func TestSpaceFromInput(t *testing.T) {
 		Name: "docs", Description: "main", Language: "uk",
 		EmbeddingModelId: 3, RerankerModelId: 4,
 		VectorSearchEnabled: proto.Bool(true), RerankEnabled: true,
-		ChunkingStrategy: "recursive_markdown", HomeArticleId: 11,
-		TeamIds: []int64{1, 2},
+		ChunkingStrategy: "recursive_markdown", TeamIds: []int64{1, 2},
+		State: kb.SpaceState_SPACE_STATE_INACTIVE,
 	}
 
 	got := spaceFromInput(in)
@@ -96,7 +98,7 @@ func TestSpaceFromInput(t *testing.T) {
 		Name: "docs", Description: "main", Language: "uk",
 		EmbeddingModelID: 3, RerankerModelID: 4,
 		VectorSearchEnabled: true, RerankEnabled: true,
-		ChunkingStrategy: "recursive_markdown", HomeArticleID: 11,
+		ChunkingStrategy: "recursive_markdown", State: model.SpaceStateInactive,
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -134,6 +136,7 @@ func TestSpaceVectorSearchFromInput(t *testing.T) {
 // fakeUow is the minimal store.UnitOfWork for handler-level tests: happy-path
 // stores that record what the handler passed through the service.
 type fakeUow struct {
+	listFilter    model.SpaceFilter
 	replacedTeams [][]int64
 	space         *model.Space
 	embModel      *model.EmbeddingModel
@@ -155,7 +158,9 @@ func (u *fakeUow) AttachmentStore() store.AttachmentStore         { return nil }
 
 type fakeSpaces struct{ u *fakeUow }
 
-func (f fakeSpaces) List(context.Context, options.Searcher) ([]*model.Space, bool, error) {
+func (f fakeSpaces) List(_ context.Context, _ options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error) {
+	f.u.listFilter = filter
+
 	return []*model.Space{f.u.space}, true, nil
 }
 
@@ -185,11 +190,15 @@ func (f fakeSpaces) ReplaceTeams(_ context.Context, _, _, _ int64, teamIDs []int
 	return nil
 }
 
-func (f fakeSpaces) HasArticles(context.Context, int64, int64) (bool, error) { return false, nil }
-func (f fakeSpaces) HoldsArticle(context.Context, int64, int64, int64) (bool, error) {
-	return false, nil
+func (f fakeSpaces) HasActiveArticles(context.Context, int64, int64) (bool, error) { return false, nil }
+
+func (f fakeSpaces) SetHome(context.Context, int64, int64, int64) (bool, error) {
+	return true, nil
 }
-func (f fakeSpaces) PurgeDeletedArticles(context.Context, int64, int64) error { return nil }
+
+func (f fakeSpaces) PurgeArticles(context.Context, int64, int64) ([]int64, error) {
+	return nil, nil
+}
 
 func (f fakeSpaces) LockArticles(context.Context, int64, int64) error { return nil }
 
@@ -280,7 +289,7 @@ func newSpacesFixture() (*SpacesServer, *fakeUow, context.Context) {
 		embModel: &model.EmbeddingModel{ID: 3, Type: model.ModelTypeEmbedding, ValidatedAt: time.Now()},
 	}
 
-	server := NewSpacesServer(service.NewSpaceService(uow))
+	server := NewSpacesServer(service.NewSpaceService(uow, &filesFake{}, slog.New(slog.DiscardHandler)))
 	ctx := auth.WithSession(context.Background(), fakeSession{})
 
 	return server, uow, ctx
@@ -338,11 +347,15 @@ func TestSpacesServerPassesTeamsThrough(t *testing.T) {
 }
 
 func TestSpacesServerListMapsPage(t *testing.T) {
-	server, _, ctx := newSpacesFixture()
+	server, uow, ctx := newSpacesFixture()
 
-	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{Size: 1, Page: 1})
+	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE})
 	if err != nil {
 		t.Fatalf("ListSpaces: %v", err)
+	}
+
+	if got := uow.listFilter.State; got != model.SpaceStateActive {
+		t.Fatalf("list filter state = %d, want active", got)
 	}
 
 	if len(page.GetItems()) != 1 || page.GetItems()[0].GetId() != 7 || !page.GetNext() {

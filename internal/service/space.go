@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"google.golang.org/grpc/codes"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/infra/storage"
 	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -17,15 +19,19 @@ import (
 
 // SpaceService owns the space business rules.
 type SpaceService struct {
-	uow store.UnitOfWork
+	uow   store.UnitOfWork
+	files storage.Files
+	log   *slog.Logger
 }
 
-func NewSpaceService(uow store.UnitOfWork) *SpaceService {
-	return &SpaceService{uow: uow}
+func NewSpaceService(uow store.UnitOfWork, files storage.Files, log *slog.Logger) *SpaceService {
+	return &SpaceService{uow: uow, files: files, log: log}
 }
 
-func (s *SpaceService) List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error) {
-	return s.uow.SpaceStore().List(ctx, opts)
+func (s *SpaceService) List(
+	ctx context.Context, opts options.Searcher, filter model.SpaceFilter,
+) ([]*model.Space, bool, error) {
+	return s.uow.SpaceStore().List(ctx, opts, filter)
 }
 
 func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*model.Space, error) {
@@ -62,9 +68,12 @@ func (s *SpaceService) Create(
 		return nil, err
 	}
 
-	// A new space holds no article yet, so no home page can belong to it.
-	if in.HomeArticleID != 0 {
-		return nil, errHomeArticleInvalid
+	if err := validateSpaceState(in.State); err != nil {
+		return nil, err
+	}
+
+	if in.State == 0 {
+		in.State = model.SpaceStateActive
 	}
 
 	session := opts.GetAuthOpts()
@@ -103,7 +112,7 @@ func (s *SpaceService) Create(
 // spaceMergeFields is what the locked read must carry for the merge.
 var spaceMergeFields = []string{
 	"id", "name", "description", "language", "embedding_model_id", "reranker_model_id",
-	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "state",
 }
 
 // Update merges the input over the stored space, enforces the immutable
@@ -113,6 +122,10 @@ var spaceMergeFields = []string{
 func (s *SpaceService) Update(
 	ctx context.Context, opts options.Updator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
+	if err := validateSpaceState(in.State); err != nil {
+		return nil, err
+	}
+
 	mask := opts.GetMask()
 	session := opts.GetAuthOpts()
 
@@ -157,12 +170,6 @@ func (s *SpaceService) Update(
 
 		if err := s.requireValidatedModels(ctx, tx, session, embeddingToValidate, rerankerToValidate); err != nil {
 			return err
-		}
-
-		if merged.HomeArticleID != 0 && merged.HomeArticleID != current.HomeArticleID {
-			if err := requireHomeArticle(ctx, tx, session, current.ID, merged.HomeArticleID); err != nil {
-				return err
-			}
 		}
 
 		// Every change of the search model queues the articles, the one to no
@@ -219,12 +226,15 @@ func (s *SpaceService) Update(
 	return updated, nil
 }
 
-// Delete removes a space that holds no live article anymore, together with
-// its deleted articles and the team binding.
+// Delete removes a space that holds no active article anymore, together with
+// the rest of its articles and the team binding.
 func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model.Space, error) {
 	session := opts.GetAuthOpts()
 
-	var deleted *model.Space
+	var (
+		deleted *model.Space
+		fileIDs []int64
+	)
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		if _, err := tx.SpaceStore().LocateForUpdate(ctx, readOptions{
@@ -233,20 +243,25 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 			return err
 		}
 
-		hasArticles, err := tx.SpaceStore().HasArticles(ctx, opts.GetID(), session.GetDomainID())
+		// No article may turn active between the check and the purge.
+		if err := tx.SpaceStore().LockArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
+			return err
+		}
+
+		hasActive, err := tx.SpaceStore().HasActiveArticles(ctx, opts.GetID(), session.GetDomainID())
 		if err != nil {
 			return err
 		}
 
-		if hasArticles {
+		if hasActive {
 			return errors.New(
-				"space still holds articles; delete or move them first",
+				"space still holds active articles; unpublish, delete or move them first",
 				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.space.articles_exist"),
 			)
 		}
 
-		if err := tx.SpaceStore().PurgeDeletedArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
+		if fileIDs, err = tx.SpaceStore().PurgeArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
 			return err
 		}
 
@@ -256,6 +271,11 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if err := releaseFiles(ctx, s.uow, s.files, s.log, fileIDs); err != nil {
+		s.log.WarnContext(ctx, "the files of a deleted space were left in storage",
+			slog.Int64("space_id", opts.GetID()), slog.Any("file_ids", fileIDs), slog.Any("error", err))
 	}
 
 	return deleted, nil
@@ -277,31 +297,23 @@ func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.
 	return tx.OutboxStore().PublishReindex(ctx, events...)
 }
 
-// errHomeArticleInvalid rejects a home page that is not a live article of the space.
-var errHomeArticleInvalid = errors.InvalidArgument(
-	"the home article must be a live article of the space",
-	errors.WithID("kb.space.home_article_invalid"),
-)
-
-// requireHomeArticle accepts a home page only from the live articles of the space.
-func requireHomeArticle(ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID, articleID int64) error {
-	holds, err := tx.SpaceStore().HoldsArticle(ctx, spaceID, articleID, session.GetDomainID())
-	if err != nil {
-		return err
-	}
-
-	if !holds {
-		return errHomeArticleInvalid
-	}
-
-	return nil
-}
-
 func requireName(in *model.Space) error {
 	if in.Name == "" {
 		return errors.InvalidArgument(
 			"name is required",
 			errors.WithID("kb.space.name_required"),
+		)
+	}
+
+	return nil
+}
+
+// validateSpaceState accepts the known state codes and the unset zero.
+func validateSpaceState(code int32) error {
+	if code < 0 || code > model.SpaceStateInactive {
+		return errors.InvalidArgument(
+			"unknown space state",
+			errors.WithID("kb.space.state_invalid"),
 		)
 	}
 

@@ -63,6 +63,8 @@ type Article struct {
 	UpdatedBy *Lookup
 	// Published is the live version, read only on request.
 	Published *ArticleVersion
+	// Home marks the home page of the space; set on create only.
+	Home bool
 }
 
 // ReindexTarget is the version of an article a reindex event asks for.

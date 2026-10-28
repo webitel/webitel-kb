@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -25,9 +27,11 @@ const attachSQL = `INSERT INTO kb.attachment (article_id, file_id, name, mime, s
 		SET name = EXCLUDED.name, mime = EXCLUDED.mime, size = EXCLUDED.size
 	RETURNING *`
 
-// boundAttachmentSQL asks whether an article still binds the file; Storage
-// keeps the bytes while one does.
-const boundAttachmentSQL = `SELECT EXISTS (SELECT 1 FROM kb.attachment WHERE file_id = $1)`
+// unboundFilesSQL keeps the files no article binds any more; Storage keeps the
+// bytes while one does.
+const unboundFilesSQL = `SELECT f.id FROM unnest($1::bigint[]) AS f(id)
+	WHERE NOT EXISTS (SELECT 1 FROM kb.attachment m WHERE m.file_id = f.id)
+	ORDER BY f.id`
 
 // deleteAttachmentSQL unbinds a file from an article of the caller's domain.
 // The file itself is Storage's to remove.
@@ -134,14 +138,23 @@ func (s *attachmentStore) Delete(
 	}, opts.GetFields())
 }
 
-func (s *attachmentStore) Bound(ctx context.Context, fileID int64) (bool, error) {
-	var bound bool
-
-	if err := s.db.QueryRow(ctx, boundAttachmentSQL, fileID).Scan(&bound); err != nil {
-		return false, ParseError(err)
+// Unbound asks nothing for an empty set.
+func (s *attachmentStore) Unbound(ctx context.Context, fileIDs []int64) ([]int64, error) {
+	if len(fileIDs) == 0 {
+		return nil, nil
 	}
 
-	return bound, nil
+	rows, err := s.db.Query(ctx, unboundFilesSQL, fileIDs)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	unbound, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return unbound, nil
 }
 
 // writeReturning reads the written row back via cteReadBack, rendering the
