@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
@@ -86,7 +87,7 @@ func TestSpaceFromInput(t *testing.T) {
 	in := &kb.InputSpace{
 		Name: "docs", Description: "main", Language: "uk",
 		EmbeddingModelId: 3, RerankerModelId: 4,
-		VectorSearchEnabled: true, RerankEnabled: true,
+		VectorSearchEnabled: proto.Bool(true), RerankEnabled: true,
 		ChunkingStrategy: "recursive_markdown", TeamIds: []int64{1, 2},
 		State: kb.SpaceState_SPACE_STATE_INACTIVE,
 	}
@@ -102,6 +103,33 @@ func TestSpaceFromInput(t *testing.T) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("input mapped to %+v, want %+v", got, want)
+	}
+}
+
+func TestSpaceVectorSearchFromInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		in         *bool
+		wantCreate bool
+		wantUpdate bool
+	}{
+		{name: "omitted", in: nil, wantCreate: true, wantUpdate: false},
+		{name: "on", in: proto.Bool(true), wantCreate: true, wantUpdate: true},
+		{name: "off", in: proto.Bool(false), wantCreate: false, wantUpdate: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := &kb.InputSpace{Name: "docs", VectorSearchEnabled: tt.in}
+
+			if got := spaceFromCreateInput(in).VectorSearchEnabled; got != tt.wantCreate {
+				t.Fatalf("create = %v, want %v", got, tt.wantCreate)
+			}
+
+			if got := spaceFromInput(in).VectorSearchEnabled; got != tt.wantUpdate {
+				t.Fatalf("update = %v, want %v", got, tt.wantUpdate)
+			}
+		})
 	}
 }
 

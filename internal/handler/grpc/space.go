@@ -72,7 +72,7 @@ func (s *SpacesServer) CreateSpace(ctx context.Context, req *kb.CreateSpaceReque
 		return nil, err
 	}
 
-	created, err := s.service.Create(ctx, opts, spaceFromInput(in), in.GetTeamIds())
+	created, err := s.service.Create(ctx, opts, spaceFromCreateInput(in), in.GetTeamIds())
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +133,14 @@ func spaceFromInput(in *kb.InputSpace) *model.Space {
 		ChunkingStrategy:    in.GetChunkingStrategy(),
 		State:               int32(in.GetState()),
 	}
+}
+
+// spaceFromCreateInput maps a new space: vector search is on unless turned off.
+func spaceFromCreateInput(in *kb.InputSpace) *model.Space {
+	space := spaceFromInput(in)
+	space.VectorSearchEnabled = in.VectorSearchEnabled == nil || in.GetVectorSearchEnabled()
+
+	return space
 }
 
 func spaceToProto(m *model.Space) *kb.Space {

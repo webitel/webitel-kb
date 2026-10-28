@@ -395,17 +395,17 @@ func (s *spaceStore) DropForeignEmbeddings(ctx context.Context, spaceID, domainI
 }
 
 // resolveEmbeddingSelect reads spaces with their embedding model. Outer join: a
-// space without a model still answers.
+// space without a model still answers, and is embedded only with one.
 const resolveEmbeddingSelect = `SELECT
-	s.id                              AS space_id,
-	s.vector_search_enabled,
-	coalesce(s.embedding_model_id, 0) AS model_id,
-	coalesce(m.provider, '')          AS provider,
-	coalesce(m.model_ref, '')         AS model_ref,
-	coalesce(m.dimensions, 0)         AS dimensions,
-	coalesce(m.endpoint, '')          AS endpoint,
+	s.id                                                         AS space_id,
+	s.vector_search_enabled AND s.embedding_model_id IS NOT NULL AS vector_search_enabled,
+	coalesce(s.embedding_model_id, 0)                            AS model_id,
+	coalesce(m.provider, '')                                     AS provider,
+	coalesce(m.model_ref, '')                                    AS model_ref,
+	coalesce(m.dimensions, 0)                                    AS dimensions,
+	coalesce(m.endpoint, '')                                     AS endpoint,
 	m.config,
-	m.validated_at IS NOT NULL        AS validated
+	m.validated_at IS NOT NULL                                   AS validated
 	FROM kb.space s
 	LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id`
 

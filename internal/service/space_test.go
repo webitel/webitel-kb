@@ -367,11 +367,6 @@ func TestSpaceCreateValidation(t *testing.T) {
 		{"language must be a tag", &model.Space{Name: "docs", Language: "Ukrainian"}, codes.InvalidArgument},
 		{"language must not be undetermined", &model.Space{Name: "docs", Language: "und"}, codes.InvalidArgument},
 		{
-			"vector search requires a model",
-			&model.Space{Name: "docs", Language: "uk", VectorSearchEnabled: true},
-			codes.InvalidArgument,
-		},
-		{
 			"rerank requires a reranker",
 			&model.Space{Name: "docs", Language: "uk", RerankEnabled: true},
 			codes.InvalidArgument,
@@ -691,20 +686,19 @@ func TestSpaceCreateAbortsWhenTeamsFail(t *testing.T) {
 	}
 }
 
-func TestSpaceUpdateVectorWithoutModelIsRefused(t *testing.T) {
-	// Enabling vector while clearing the model leaves nothing to search with.
+func TestSpaceCreateVectorSearchWithoutModel(t *testing.T) {
+	// Vector search without a model searches by text alone.
 	svc, uow := newSpaceFixture()
 
-	_, err := svc.Update(context.Background(), updaterOpts(), &model.Space{
-		Name: "docs", VectorSearchEnabled: true,
+	_, err := svc.Create(context.Background(), creatorOpts(), &model.Space{
+		Name: "docs", Language: "uk", VectorSearchEnabled: true,
 	}, nil)
-
-	if errors.ID(err) != "kb.space.embedding_model_required" {
-		t.Fatalf("err = %v (id %s), want the missing model", err, errors.ID(err))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
-	if uow.spaces.updateCalls != 0 || strings.Join(uow.articles.callOrder, ",") != "lock-space" {
-		t.Fatalf("writes ran: %v", uow.articles.callOrder)
+	if uow.spaces.createCalls != 1 || len(uow.models.locatedIDs) != 0 {
+		t.Fatalf("creates = %d, model gates = %v", uow.spaces.createCalls, uow.models.locatedIDs)
 	}
 }
 
@@ -851,6 +845,20 @@ func TestSpaceUpdateReindexesWhenTheSearchModelChanges(t *testing.T) {
 		{
 			name: "the model cleared while not searching", model: 3,
 			in: &model.Space{Name: "docs"}, wantOrder: lock + drop,
+		},
+		{
+			name: "vector search turned on without a model", model: 0,
+			in: &model.Space{Name: "docs", VectorSearchEnabled: true}, wantOrder: "lock-space,update",
+		},
+		{
+			name: "vector search without a model takes one", model: 0, vector: true,
+			in:        &model.Space{Name: "docs", EmbeddingModelID: 3, VectorSearchEnabled: true},
+			wantOrder: lock + reindex + drop,
+		},
+		{
+			name: "the model cleared keeps vector search on", model: 3, vector: true,
+			in:        &model.Space{Name: "docs", VectorSearchEnabled: true},
+			wantOrder: lock + reindex + drop,
 		},
 		{
 			name: "an unvalidated model writes nothing", model: 3, vector: true,
