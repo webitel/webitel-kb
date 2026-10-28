@@ -36,7 +36,7 @@ func (q *SpaceQuery) DefaultFields() []string {
 		"id", "domain_id", "name", "description", "language",
 		"embedding_model_id", "target_embedding_model_id", "reranker_model_id",
 		"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id",
-		"teams", "created_at", "updated_at", "created_by", "updated_by",
+		"state", "teams", "created_at", "updated_at", "created_by", "updated_by",
 	}
 }
 
@@ -58,6 +58,7 @@ func (q *SpaceQuery) FieldsMetadata() map[string]fieldMetadata {
 			"rerank_enabled":            {sqlExpr: "m.rerank_enabled", aliasedExpr: "m.rerank_enabled AS rerank_enabled"},
 			"chunking_strategy":         {sqlExpr: "m.chunking_strategy", aliasedExpr: "m.chunking_strategy AS chunking_strategy"},
 			"home_article_id":           {sqlExpr: "m.home_article_id", aliasedExpr: "m.home_article_id AS home_article_id"},
+			"state":                     {sqlExpr: "m.state", aliasedExpr: "m.state AS state", sortable: true},
 			"teams":                     {sqlExpr: "teams", aliasedExpr: spaceTeamsExpr},
 			"created_at":                {sqlExpr: "m.created_at", aliasedExpr: "m.created_at AS created_at", sortable: true},
 			"updated_at":                {sqlExpr: "m.updated_at", aliasedExpr: "m.updated_at AS updated_at", sortable: true},
@@ -116,6 +117,15 @@ func (q *SpaceQuery) WithLockForUpdate() *SpaceQuery {
 func (q *SpaceQuery) WithSearch(term string) *SpaceQuery {
 	if term != "" {
 		q.builder = q.builder.Where("m.name ILIKE ?", "%"+EscapeLike(term)+"%")
+	}
+
+	return q
+}
+
+// WithState keeps spaces in the given state code; 0 means any.
+func (q *SpaceQuery) WithState(code int32) *SpaceQuery {
+	if code > 0 {
+		q.builder = q.builder.Where("m.state = ?", code)
 	}
 
 	return q

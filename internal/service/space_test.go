@@ -110,7 +110,7 @@ type fakeSpaceStore struct {
 	updateIn *model.Space
 }
 
-func (f *fakeSpaceStore) List(context.Context, options.Searcher) ([]*model.Space, bool, error) {
+func (f *fakeSpaceStore) List(context.Context, options.Searcher, model.SpaceFilter) ([]*model.Space, bool, error) {
 	return nil, false, nil
 }
 
@@ -385,6 +385,11 @@ func TestSpaceCreateValidation(t *testing.T) {
 			&model.Space{Name: "docs", Language: "uk", RerankerModelID: 3},
 			codes.InvalidArgument,
 		},
+		{
+			"unknown state",
+			&model.Space{Name: "docs", Language: "uk", State: 3},
+			codes.InvalidArgument,
+		},
 	}
 
 	for _, tt := range tests {
@@ -475,6 +480,79 @@ func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
 
 	if got := uow.spaces.createIn.Language; got != "pt-BR" {
 		t.Fatalf("stored language = %q, want pt-BR", got)
+	}
+}
+
+func TestSpaceCreateState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state int32
+		want  int32
+	}{
+		{"unset state is active", 0, model.SpaceStateActive},
+		{"inactive state is kept", model.SpaceStateInactive, model.SpaceStateInactive},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+
+			if _, err := svc.Create(context.Background(), creatorOpts(), &model.Space{
+				Name: "docs", Language: "uk", State: tt.state,
+			}, nil); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			if got := uow.spaces.createIn.State; got != tt.want {
+				t.Fatalf("stored state = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpaceUpdateState(t *testing.T) {
+	tests := []struct {
+		name   string
+		state  int32
+		mask   []string
+		want   int32
+		wantID string
+	}{
+		{name: "unset state keeps the current", want: model.SpaceStateActive},
+		{name: "state deactivates", state: model.SpaceStateInactive, want: model.SpaceStateInactive},
+		{name: "masked state deactivates", state: model.SpaceStateInactive, mask: []string{"state"}, want: model.SpaceStateInactive},
+		{name: "unmasked state stays", state: model.SpaceStateInactive, mask: []string{"name"}, want: model.SpaceStateActive},
+		{name: "unknown state rejected", state: 3, wantID: "kb.space.state_invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.current = &model.Space{
+				ID: 7, Name: "docs", Language: "uk", EmbeddingModelID: 3, State: model.SpaceStateActive,
+			}
+			opts := updaterOpts()
+			opts.mask = tt.mask
+
+			_, err := svc.Update(context.Background(), opts, &model.Space{
+				Name: "docs", EmbeddingModelID: 3, State: tt.state,
+			}, nil)
+			if tt.wantID != "" {
+				if errors.ID(err) != tt.wantID || uow.spaces.updateCalls != 0 {
+					t.Fatalf("err = %v, updates = %d; want %s and no write", err, uow.spaces.updateCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if got := uow.spaces.updateIn.State; got != tt.want {
+				t.Fatalf("written state = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 

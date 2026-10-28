@@ -25,13 +25,14 @@ func TestSpaceListRendersScopedQuery(t *testing.T) {
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, search: "docs", size: 10, page: 2}
 
-	if _, _, err := s.List(context.Background(), opts); err != nil {
+	if _, _, err := s.List(context.Background(), opts, model.SpaceFilter{State: model.SpaceStateInactive}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
 	for _, want := range []string{
 		"m.domain_id=$1",
 		"m.name ILIKE $2",
+		"m.state=$3",
 		"ORDER BY m.name ASC,m.id ASC",
 		"LIMIT 11",
 		"OFFSET 10",
@@ -51,7 +52,10 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 	s := &spaceStore{db: f}
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
-	in := &model.Space{Name: "docs", Language: "uk", EmbeddingModelID: 3, VectorSearchEnabled: true, HomeArticleID: 11}
+	in := &model.Space{
+		Name: "docs", Language: "uk", EmbeddingModelID: 3, VectorSearchEnabled: true, HomeArticleID: 11,
+		State: model.SpaceStateInactive,
+	}
 
 	created, err := s.Create(context.Background(), opts, in)
 	if err != nil {
@@ -78,7 +82,7 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 	// text_search_config (the stemmer, bound inside the fallback expression),
 	// embedding_model_id, reranker_model_id, vector_search_enabled,
 	// rerank_enabled, [chunking_strategy = DEFAULT expr, no arg],
-	// created_by, updated_by.
+	// state, created_by, updated_by.
 	wantArgs := []any{int64(5), "docs", (*string)(nil), "uk", "simple"}
 	for i, want := range wantArgs {
 		if want == (*string)(nil) {
@@ -95,16 +99,17 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 	}
 
 	// Remaining columns: embedding, reranker(nil), vector, rerank,
-	// [chunking = DEFAULT, no arg], created_by, updated_by.
+	// [chunking = DEFAULT, no arg], state, created_by, updated_by.
 	assertPinned(t, f.gotArgs, 5, ptrTo(int64(3)))
 	assertPinned(t, f.gotArgs, 6, (*int64)(nil))
 	assertPinned(t, f.gotArgs, 7, true)
 	assertPinned(t, f.gotArgs, 8, false)
-	assertPinned(t, f.gotArgs, 9, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 9, model.SpaceStateInactive)
 	assertPinned(t, f.gotArgs, 10, ptrTo(int64(9)))
+	assertPinned(t, f.gotArgs, 11, ptrTo(int64(9)))
 
-	if len(f.gotArgs) != 11 {
-		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
+	if len(f.gotArgs) != 12 {
+		t.Fatalf("args = %d, want 12: %v", len(f.gotArgs), f.gotArgs)
 	}
 }
 
@@ -400,7 +405,7 @@ func TestSpaceUpdateBindsValuesInOrder(t *testing.T) {
 	in := &model.Space{
 		Name: "n1", Description: "d1", EmbeddingModelID: 3, RerankerModelID: 4,
 		VectorSearchEnabled: true, RerankEnabled: false,
-		ChunkingStrategy: "cs1", HomeArticleID: 11,
+		ChunkingStrategy: "cs1", HomeArticleID: 11, State: model.SpaceStateInactive,
 	}
 
 	if _, err := s.Update(context.Background(), opts, in); err != nil {
@@ -409,9 +414,9 @@ func TestSpaceUpdateBindsValuesInOrder(t *testing.T) {
 
 	// SET order: name, description, embedding_model_id, reranker_model_id,
 	// vector_search_enabled, rerank_enabled, chunking_strategy,
-	// updated_at=now() (no arg), updated_by; WHERE: id, domain_id.
-	if len(f.gotArgs) != 10 {
-		t.Fatalf("args = %d, want 10: %v", len(f.gotArgs), f.gotArgs)
+	// state, updated_at=now() (no arg), updated_by; WHERE: id, domain_id.
+	if len(f.gotArgs) != 11 {
+		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
 	}
 
 	assertPinned(t, f.gotArgs, 0, "n1")
@@ -421,9 +426,10 @@ func TestSpaceUpdateBindsValuesInOrder(t *testing.T) {
 	assertPinned(t, f.gotArgs, 4, true)
 	assertPinned(t, f.gotArgs, 5, false)
 	assertPinned(t, f.gotArgs, 6, "cs1")
-	assertPinned(t, f.gotArgs, 7, ptrTo(int64(9))) // updated_by = caller
-	assertPinned(t, f.gotArgs, 8, int64(1))        // WHERE id
-	assertPinned(t, f.gotArgs, 9, int64(5))        // WHERE domain_id
+	assertPinned(t, f.gotArgs, 7, model.SpaceStateInactive)
+	assertPinned(t, f.gotArgs, 8, ptrTo(int64(9))) // updated_by = caller
+	assertPinned(t, f.gotArgs, 9, int64(1))        // WHERE id
+	assertPinned(t, f.gotArgs, 10, int64(5))       // WHERE domain_id
 }
 
 func TestSpaceLocateRequiresExactlyOneID(t *testing.T) {
@@ -446,9 +452,9 @@ func TestSpaceFullDefaultSelectionScans(t *testing.T) {
 		"embedding_model_id": ptrTo(int64(3)), "target_embedding_model_id": (*int64)(nil),
 		"reranker_model_id": (*int64)(nil), "vector_search_enabled": true,
 		"rerank_enabled": false, "chunking_strategy": "recursive_markdown",
-		"home_article_id": (*int64)(nil),
-		"teams":           []byte(`[{"id": 4, "name": "Sales"}]`),
-		"created_at":      now, "updated_at": now,
+		"home_article_id": (*int64)(nil), "state": int32(2),
+		"teams":      []byte(`[{"id": 4, "name": "Sales"}]`),
+		"created_at": now, "updated_at": now,
 		"created_by_id": ptrTo(int64(9)), "created_by_name": ptrTo("Admin"),
 		"updated_by_id": (*int64)(nil), "updated_by_name": (*string)(nil),
 	}
@@ -487,13 +493,14 @@ func TestSpaceFullDefaultSelectionScans(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{cols: cols, vals: [][]any{row}}}
 	s := &spaceStore{db: f}
 
-	items, _, err := s.List(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: 10, page: 1})
+	items, _, err := s.List(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: 10, page: 1}, model.SpaceFilter{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
 	got := items[0]
-	if got.ID != 7 || got.Name != "docs" || got.Description != "main kb" || got.EmbeddingModelID != 3 {
+	if got.ID != 7 || got.Name != "docs" || got.Description != "main kb" || got.EmbeddingModelID != 3 ||
+		got.State != model.SpaceStateInactive {
 		t.Fatalf("space = %+v", got)
 	}
 
@@ -573,7 +580,7 @@ func TestSpaceListIDsFilter(t *testing.T) {
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: 10, page: 1, ids: []int64{7, 8}}
 
-	if _, _, err := s.List(context.Background(), opts); err != nil {
+	if _, _, err := s.List(context.Background(), opts, model.SpaceFilter{}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
@@ -680,6 +687,7 @@ func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
 		"s.domain_id = $1",
 		"s.id = ANY($2)",
 		"s.deleted_at IS NULL",
+		"s.state = $3",
 		"ORDER BY s.id",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -703,12 +711,13 @@ func TestSpaceResolveEmbeddingsWithoutIDsReadsTheWholeDomain(t *testing.T) {
 		t.Fatalf("ResolveEmbeddings: %v", err)
 	}
 
-	if strings.Contains(f.gotSQL, "ANY(") || !strings.Contains(f.gotSQL, "s.domain_id = $1") || !strings.Contains(f.gotSQL, "s.deleted_at IS NULL") {
+	if strings.Contains(f.gotSQL, "ANY(") || !strings.Contains(f.gotSQL, "s.domain_id = $1") ||
+		!strings.Contains(f.gotSQL, "s.deleted_at IS NULL") || !strings.Contains(f.gotSQL, "s.state = $2") {
 		t.Fatalf("SQL = %s", f.gotSQL)
 	}
 
-	if !reflect.DeepEqual(f.gotArgs, []any{int64(5)}) {
-		t.Fatalf("args = %v, want the domain only", f.gotArgs)
+	if !reflect.DeepEqual(f.gotArgs, []any{int64(5), model.SpaceStateActive}) {
+		t.Fatalf("args = %v, want the domain and the active state", f.gotArgs)
 	}
 }
 

@@ -24,8 +24,10 @@ func NewSpaceService(uow store.UnitOfWork) *SpaceService {
 	return &SpaceService{uow: uow}
 }
 
-func (s *SpaceService) List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error) {
-	return s.uow.SpaceStore().List(ctx, opts)
+func (s *SpaceService) List(
+	ctx context.Context, opts options.Searcher, filter model.SpaceFilter,
+) ([]*model.Space, bool, error) {
+	return s.uow.SpaceStore().List(ctx, opts, filter)
 }
 
 func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*model.Space, error) {
@@ -60,6 +62,14 @@ func (s *SpaceService) Create(
 
 	if err := validateRetrievalConfig(in); err != nil {
 		return nil, err
+	}
+
+	if err := validateSpaceState(in.State); err != nil {
+		return nil, err
+	}
+
+	if in.State == 0 {
+		in.State = model.SpaceStateActive
 	}
 
 	session := opts.GetAuthOpts()
@@ -98,7 +108,7 @@ func (s *SpaceService) Create(
 // spaceMergeFields is what the locked read must carry for the merge.
 var spaceMergeFields = []string{
 	"id", "name", "description", "language", "embedding_model_id", "reranker_model_id",
-	"vector_search_enabled", "rerank_enabled", "chunking_strategy",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "state",
 }
 
 // Update merges the input over the stored space, enforces the immutable
@@ -108,6 +118,10 @@ var spaceMergeFields = []string{
 func (s *SpaceService) Update(
 	ctx context.Context, opts options.Updator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
+	if err := validateSpaceState(in.State); err != nil {
+		return nil, err
+	}
+
 	mask := opts.GetMask()
 	session := opts.GetAuthOpts()
 
@@ -276,6 +290,18 @@ func requireName(in *model.Space) error {
 		return errors.InvalidArgument(
 			"name is required",
 			errors.WithID("kb.space.name_required"),
+		)
+	}
+
+	return nil
+}
+
+// validateSpaceState accepts the known state codes and the unset zero.
+func validateSpaceState(code int32) error {
+	if code < 0 || code > model.SpaceStateInactive {
+		return errors.InvalidArgument(
+			"unknown space state",
+			errors.WithID("kb.space.state_invalid"),
 		)
 	}
 

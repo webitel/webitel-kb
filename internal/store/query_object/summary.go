@@ -80,9 +80,14 @@ func whereDomainScope(builder squirrel.SelectBuilder, domainID int64) squirrel.S
 	return builder.Where("s.domain_id = ?", domainID)
 }
 
-// whereRetrievable keeps live articles in the active state.
-func whereRetrievable(builder squirrel.SelectBuilder) squirrel.SelectBuilder {
+// whereLiveArticle keeps live articles in the active state.
+func whereLiveArticle(builder squirrel.SelectBuilder) squirrel.SelectBuilder {
 	return builder.Where("m.deleted_at IS NULL").Where("m.state = ?", model.ArticleStateActive)
+}
+
+// whereRetrievable keeps live active articles of the joined active space.
+func whereRetrievable(builder squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return whereLiveArticle(builder).Where("s.state = ?", model.SpaceStateActive)
 }
 
 func whereSpaces(builder squirrel.SelectBuilder, spaceIDs []int64) squirrel.SelectBuilder {
@@ -281,6 +286,7 @@ func (q *SummaryQuery) WithDomainScope(domainID int64) *SummaryQuery {
 
 // WithRetrievable keeps the articles a reader may retrieve.
 func (q *SummaryQuery) WithRetrievable() *SummaryQuery {
+	q.ensureJoins(summaryJoinSpace)
 	q.builder = whereRetrievable(q.builder)
 
 	return q

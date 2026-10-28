@@ -46,8 +46,9 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 		"c.tsv @@ tq.query",
 		"s.domain_id = $4",
 		"m.state = $5",
-		"s.id = ANY($6)",
-		"m.tags && $7",
+		"s.state = $6",
+		"s.id = ANY($7)",
+		"m.tags && $8",
 		"ORDER BY rank_key DESC, c.id LIMIT 50) t)",
 		"h AS (SELECT id, sum(1.0 / (60 + rank)) AS score FROM (SELECT * FROM lex) branches" +
 			" GROUP BY id ORDER BY score DESC, id LIMIT 10)",
@@ -66,7 +67,7 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 	}
 
 	// The term is parsed once.
-	if len(args) != 7 || args[0] != "router" || args[1] != int64(5) {
+	if len(args) != 8 || args[0] != "router" || args[1] != int64(5) || args[5] != model.SpaceStateActive {
 		t.Fatalf("args = %v", args)
 	}
 }
@@ -121,7 +122,7 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		t.Errorf("want one vector branch per model, each on its own spaces, SQL: %q", sql)
 	}
 
-	if _, vec, _ := strings.Cut(sql, "vec AS"); strings.Contains(vec, "kb.space s") {
+	if _, vec, _ := strings.Cut(sql, "vec AS"); strings.Contains(vec, "kb.space s") || strings.Contains(vec, "s.state") {
 		t.Errorf("a vector side joins the space although the scope is on the row: %q", sql)
 	}
 

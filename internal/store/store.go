@@ -163,7 +163,7 @@ type ArticleVersionStore interface {
 // and write is scoped to the caller's domain.
 type SpaceStore interface {
 	// List returns a page of spaces and whether a next page exists.
-	List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error)
+	List(ctx context.Context, opts options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error)
 
 	// Locate returns the single space the options identify by id.
 	Locate(ctx context.Context, opts options.Searcher) (*model.Space, error)
@@ -219,8 +219,8 @@ type SpaceStore interface {
 	ResolveEmbedding(ctx context.Context, spaceID int64) (*model.SpaceEmbedding, error)
 
 	// ResolveEmbeddings returns the embedding model of each of a domain's
-	// spaces, credential included; unknown ids are simply absent. No ids
-	// means every space of the domain.
+	// active spaces, credential included; unknown and inactive ids are simply
+	// absent. No ids means every active space of the domain.
 	ResolveEmbeddings(ctx context.Context, domainID int64, spaceIDs []int64) ([]*model.SpaceEmbedding, error)
 
 	// ResolveRerankers returns the reranker of each of a domain's spaces,
