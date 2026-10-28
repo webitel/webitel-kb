@@ -57,8 +57,8 @@ type AttachmentStore interface {
 	// returns it; a file of another article or domain is not found.
 	Delete(ctx context.Context, opts options.Deleter, articleID int64) (*model.Attachment, error)
 
-	// Bound reports whether any article still binds the file.
-	Bound(ctx context.Context, fileID int64) (bool, error)
+	// Unbound returns those of the files no article binds any more.
+	Unbound(ctx context.Context, fileIDs []int64) ([]int64, error)
 }
 
 // OutboxStore records events for the relay to deliver.
@@ -199,8 +199,8 @@ type SpaceStore interface {
 	SetHome(ctx context.Context, spaceID, articleID, domainID int64) (bool, error)
 
 	// PurgeArticles removes every article of a domain's space for good, with
-	// everything that cascades from them.
-	PurgeArticles(ctx context.Context, spaceID, domainID int64) error
+	// everything that cascades from them, and returns the files they bound.
+	PurgeArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error)
 
 	// LockArticles locks the live articles of a domain's space until the
 	// transaction ends, so no version of theirs commits meanwhile.

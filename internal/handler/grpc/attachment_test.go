@@ -65,8 +65,8 @@ func (f *attachmentStoreFake) Delete(
 	return f.deleted, nil
 }
 
-func (f *attachmentStoreFake) Bound(_ context.Context, _ int64) (bool, error) {
-	return false, nil
+func (f *attachmentStoreFake) Unbound(_ context.Context, fileIDs []int64) ([]int64, error) {
+	return fileIDs, nil
 }
 
 // attachmentUoWFake hands out the attachment fake only.
