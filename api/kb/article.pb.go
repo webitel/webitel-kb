@@ -53,6 +53,8 @@ type Article struct {
 	Ver int32 `protobuf:"varint,12,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Published version, only when requested in fields.
 	Published *ArticleVersion `protobuf:"bytes,13,opt,name=published,proto3" json:"published,omitempty"`
+	// Whether the article is the home page of its space.
+	Home bool `protobuf:"varint,14,opt,name=home,proto3" json:"home,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -188,6 +190,13 @@ func (x *Article) GetPublished() *ArticleVersion {
 	return nil
 }
 
+func (x *Article) GetHome() bool {
+	if x != nil {
+		return x.Home
+	}
+	return false
+}
+
 func (x *Article) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -239,7 +248,9 @@ type InputArticle struct {
 	// Lifecycle state.
 	State ArticleState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
 	// Editor document; serialized server-side to markdown/plaintext/tsvector.
-	BodyRichText  *structpb.Struct `protobuf:"bytes,7,opt,name=body_rich_text,json=bodyRichText,proto3" json:"body_rich_text,omitempty"`
+	BodyRichText *structpb.Struct `protobuf:"bytes,7,opt,name=body_rich_text,json=bodyRichText,proto3" json:"body_rich_text,omitempty"`
+	// Creates the article as the home page of its space; create only.
+	Home          bool `protobuf:"varint,8,opt,name=home,proto3" json:"home,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -321,6 +332,13 @@ func (x *InputArticle) GetBodyRichText() *structpb.Struct {
 		return x.BodyRichText
 	}
 	return nil
+}
+
+func (x *InputArticle) GetHome() bool {
+	if x != nil {
+		return x.Home
+	}
+	return false
 }
 
 // ListArticlesRequest parameters and filters.
@@ -1006,7 +1024,7 @@ var File_article_proto protoreflect.FileDescriptor
 const file_article_proto_rawDesc = "" +
 	"\n" +
 	"\rarticle.proto\x12\n" +
-	"webitel.kb\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\x84\x05\n" +
+	"webitel.kb\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\x98\x05\n" +
 	"\aArticle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12%\n" +
@@ -1022,7 +1040,8 @@ const file_article_proto_rawDesc = "" +
 	"indexState\x120\n" +
 	"\x14published_version_id\x18\v \x01(\x03R\x12publishedVersionId\x12\x10\n" +
 	"\x03ver\x18\f \x01(\x05R\x03ver\x128\n" +
-	"\tpublished\x18\r \x01(\v2\x1a.webitel.kb.ArticleVersionR\tpublished\x12\x1d\n" +
+	"\tpublished\x18\r \x01(\v2\x1a.webitel.kb.ArticleVersionR\tpublished\x12\x12\n" +
+	"\x04home\x18\x0e \x01(\bR\x04home\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -1031,7 +1050,7 @@ const file_article_proto_rawDesc = "" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
 	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\x12\x12\n" +
-	"\x04etag\x18\x1e \x01(\tR\x04etag\"\x90\x02\n" +
+	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xa4\x02\n" +
 	"\fInputArticle\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12+\n" +
@@ -1039,7 +1058,8 @@ const file_article_proto_rawDesc = "" +
 	"\asubject\x18\x04 \x01(\tR\asubject\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12=\n" +
-	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\"\xb6\x02\n" +
+	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12\x12\n" +
+	"\x04home\x18\b \x01(\bR\x04home\"\xb6\x02\n" +
 	"\x13ListArticlesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +

@@ -21,6 +21,7 @@ func articleFromInput(in *kb.InputArticle) *model.Article {
 		Subject:  in.GetSubject(),
 		Tags:     in.GetTags(),
 		State:    int32(in.GetState()),
+		Home:     in.GetHome(),
 	}
 }
 
@@ -67,6 +68,7 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 		UpdatedAt:          unixMilli(in.UpdatedAt),
 		CreatedBy:          lookupToProto(in.CreatedBy),
 		UpdatedBy:          lookupToProto(in.UpdatedBy),
+		Home:               in.Home,
 		Etag:               tag,
 	}
 

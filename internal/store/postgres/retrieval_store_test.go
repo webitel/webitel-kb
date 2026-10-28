@@ -138,6 +138,7 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 			want := append([]string{
 				"WITH RECURSIVE menu AS(",
 				"s.domain_id=$1 AND c.space_id=$2 AND s.state=$3",
+				"AND c.id IS DISTINCT FROM s.home_article_id",
 				"UNION ALL",
 				"FROM menu JOIN kb.article m ON m.id=menu.id",
 				"ORDER BY menu.level,m.subject,m.id",

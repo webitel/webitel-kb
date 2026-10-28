@@ -16,11 +16,12 @@ import (
 const menuFrom = "menu JOIN kb.article m ON m.id = menu.id"
 
 // menuWalkCTE walks the children of a parent of an active space down to the
-// requested depth.
+// requested depth; the home page stays out, and it has no children to walk.
 const menuWalkCTE = `WITH RECURSIVE menu AS (
 	SELECT c.id, 1 AS level
 	FROM kb.article c JOIN kb.space s ON s.id = c.space_id
 	WHERE s.domain_id = ? AND c.space_id = ? AND s.state = ? AND %s
+	  AND c.id IS DISTINCT FROM s.home_article_id
 	  AND c.deleted_at IS NULL AND c.state = ?
 	UNION ALL
 	SELECT c.id, parent.level + 1

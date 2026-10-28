@@ -72,11 +72,6 @@ func (s *SpaceService) Create(
 		in.State = model.SpaceStateActive
 	}
 
-	// A new space holds no article yet, so no home page can belong to it.
-	if in.HomeArticleID != 0 {
-		return nil, errHomeArticleInvalid
-	}
-
 	session := opts.GetAuthOpts()
 
 	var created *model.Space
@@ -113,7 +108,7 @@ func (s *SpaceService) Create(
 // spaceMergeFields is what the locked read must carry for the merge.
 var spaceMergeFields = []string{
 	"id", "name", "description", "language", "embedding_model_id", "reranker_model_id",
-	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id", "state",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "state",
 }
 
 // Update merges the input over the stored space, enforces the immutable
@@ -173,12 +168,6 @@ func (s *SpaceService) Update(
 			return err
 		}
 
-		if merged.HomeArticleID != 0 && merged.HomeArticleID != current.HomeArticleID {
-			if err := requireHomeArticle(ctx, tx, session, current.ID, merged.HomeArticleID); err != nil {
-				return err
-			}
-		}
-
 		// Every change of the search model queues the articles, the one to no
 		// vectors too: a job of the old model in flight gives way to them.
 		modelChanged := merged.EmbeddingModelID != current.EmbeddingModelID
@@ -233,8 +222,8 @@ func (s *SpaceService) Update(
 	return updated, nil
 }
 
-// Delete removes a space that holds no live article anymore, together with
-// its deleted articles and the team binding.
+// Delete removes a space that holds no active article anymore, together with
+// the rest of its articles and the team binding.
 func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model.Space, error) {
 	session := opts.GetAuthOpts()
 
@@ -247,20 +236,25 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 			return err
 		}
 
-		hasArticles, err := tx.SpaceStore().HasArticles(ctx, opts.GetID(), session.GetDomainID())
+		// No article may turn active between the check and the purge.
+		if err := tx.SpaceStore().LockArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
+			return err
+		}
+
+		hasActive, err := tx.SpaceStore().HasActiveArticles(ctx, opts.GetID(), session.GetDomainID())
 		if err != nil {
 			return err
 		}
 
-		if hasArticles {
+		if hasActive {
 			return errors.New(
-				"space still holds articles; delete or move them first",
+				"space still holds active articles; unpublish, delete or move them first",
 				errors.WithCode(codes.FailedPrecondition),
 				errors.WithID("kb.space.articles_exist"),
 			)
 		}
 
-		if err := tx.SpaceStore().PurgeDeletedArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
+		if err := tx.SpaceStore().PurgeArticles(ctx, opts.GetID(), session.GetDomainID()); err != nil {
 			return err
 		}
 
@@ -289,26 +283,6 @@ func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.
 	}
 
 	return tx.OutboxStore().PublishReindex(ctx, events...)
-}
-
-// errHomeArticleInvalid rejects a home page that is not a live article of the space.
-var errHomeArticleInvalid = errors.InvalidArgument(
-	"the home article must be a live article of the space",
-	errors.WithID("kb.space.home_article_invalid"),
-)
-
-// requireHomeArticle accepts a home page only from the live articles of the space.
-func requireHomeArticle(ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID, articleID int64) error {
-	holds, err := tx.SpaceStore().HoldsArticle(ctx, spaceID, articleID, session.GetDomainID())
-	if err != nil {
-		return err
-	}
-
-	if !holds {
-		return errHomeArticleInvalid
-	}
-
-	return nil
 }
 
 func requireName(in *model.Space) error {

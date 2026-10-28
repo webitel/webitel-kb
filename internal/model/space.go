@@ -31,6 +31,7 @@ type Space struct {
 	RerankEnabled       bool
 	ChunkingStrategy    string
 	// HomeArticleID is the article shown as the space home page; 0 when unset.
+	// Read-only: the home page is created as an article.
 	HomeArticleID int64
 	// State is the lifecycle state: articles of an inactive space are kept but
 	// not retrieved.
@@ -90,7 +91,7 @@ type SpaceReranker struct {
 // separately.
 var spaceInputFields = []string{
 	"name", "description", "language", "embedding_model_id", "reranker_model_id",
-	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "home_article_id", "state",
+	"vector_search_enabled", "rerank_enabled", "chunking_strategy", "state",
 }
 
 // Merge overlays the fields of in named by mask over a copy of the space.
@@ -117,8 +118,6 @@ func (s Space) Merge(in *Space, mask []string) *Space {
 			merged.RerankEnabled = in.RerankEnabled
 		case "chunking_strategy":
 			merged.ChunkingStrategy = in.ChunkingStrategy
-		case "home_article_id":
-			merged.HomeArticleID = in.HomeArticleID
 		case "state":
 			if in.State != 0 {
 				merged.State = in.State

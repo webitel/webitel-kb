@@ -76,14 +76,14 @@ type fakeSpaceStore struct {
 	teamUnknown   bool
 	teamAsked     int64
 
-	createIn    *model.Space // Create input
-	current     *model.Space // LocateForUpdate result (the stored space)
-	written     *model.Space // Create/Update/Delete result
-	readBack    *model.Space // plain Locate result (the post-write read-back)
-	hasArticles bool
-	holds       bool
-	holdsAsked  [3]int64
-	purgeErr    error
+	createIn  *model.Space // Create input
+	current   *model.Space // LocateForUpdate result (the stored space)
+	written   *model.Space // Create/Update/Delete result
+	readBack  *model.Space // plain Locate result (the post-write read-back)
+	hasActive bool
+	homeTaken bool
+	homeAsked [3]int64
+	purgeErr  error
 
 	// trace records the delete flow calls in order.
 	trace []string
@@ -166,19 +166,20 @@ func (f *fakeSpaceStore) ReplaceTeams(_ context.Context, spaceID, domainID, user
 	return f.replaceErr
 }
 
-func (f *fakeSpaceStore) HasArticles(context.Context, int64, int64) (bool, error) {
+func (f *fakeSpaceStore) HasActiveArticles(context.Context, int64, int64) (bool, error) {
 	f.trace = append(f.trace, "has")
 
-	return f.hasArticles, nil
+	return f.hasActive, nil
 }
 
-func (f *fakeSpaceStore) HoldsArticle(_ context.Context, spaceID, articleID, domainID int64) (bool, error) {
-	f.holdsAsked = [3]int64{spaceID, articleID, domainID}
+func (f *fakeSpaceStore) SetHome(_ context.Context, spaceID, articleID, domainID int64) (bool, error) {
+	f.homeAsked = [3]int64{spaceID, articleID, domainID}
+	f.note("set-home")
 
-	return f.holds, nil
+	return !f.homeTaken, nil
 }
 
-func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) error {
+func (f *fakeSpaceStore) PurgeArticles(context.Context, int64, int64) error {
 	f.trace = append(f.trace, "purge")
 
 	return f.purgeErr
@@ -186,6 +187,7 @@ func (f *fakeSpaceStore) PurgeDeletedArticles(context.Context, int64, int64) err
 
 func (f *fakeSpaceStore) LockArticles(_ context.Context, spaceID, domainID int64) error {
 	f.lockedScope = append(f.lockedScope, [2]int64{spaceID, domainID})
+	f.trace = append(f.trace, "lock-articles")
 	f.note("lock-articles")
 
 	return nil
@@ -381,11 +383,6 @@ func TestSpaceCreateValidation(t *testing.T) {
 		{
 			"type mismatch: embedding as reranker",
 			&model.Space{Name: "docs", Language: "uk", RerankerModelID: 3},
-			codes.InvalidArgument,
-		},
-		{
-			"home article of a space that holds none",
-			&model.Space{Name: "docs", Language: "uk", HomeArticleID: 11},
 			codes.InvalidArgument,
 		},
 		{
@@ -739,79 +736,32 @@ func TestSpaceUpdateSkipsGateForUnchangedModels(t *testing.T) {
 	}
 }
 
-func TestSpaceUpdateHomeArticle(t *testing.T) {
-	tests := []struct {
-		name      string
-		stored    int64
-		home      int64
-		holds     bool
-		wantCode  codes.Code
-		wantAsked bool
-	}{
-		{name: "live article of the space", home: 11, holds: true, wantCode: codes.OK, wantAsked: true},
-		{name: "not a live article of the space", home: 11, wantCode: codes.InvalidArgument, wantAsked: true},
-		{name: "unchanged home is not checked again", stored: 11, home: 11, wantCode: codes.OK},
-		{name: "cleared home needs no check", stored: 11, home: 0, wantCode: codes.OK},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc, uow := newSpaceFixture()
-			uow.spaces.current.Name = "docs"
-			uow.spaces.current.HomeArticleID = tt.stored
-			uow.spaces.holds = tt.holds
-
-			opts := updaterOpts()
-			opts.mask = []string{"home_article_id"}
-
-			_, err := svc.Update(context.Background(), opts, &model.Space{HomeArticleID: tt.home}, nil)
-			if errors.Code(err) != tt.wantCode {
-				t.Fatalf("err = %v, want %v", err, tt.wantCode)
-			}
-
-			asked := uow.spaces.holdsAsked != [3]int64{}
-			if asked != tt.wantAsked {
-				t.Fatalf("home checked = %v, want %v", asked, tt.wantAsked)
-			}
-
-			// The check runs against this space in the caller's domain.
-			if asked && uow.spaces.holdsAsked != [3]int64{7, tt.home, 5} {
-				t.Fatalf("home checked with %v, want [7 %d 5]", uow.spaces.holdsAsked, tt.home)
-			}
-
-			if tt.wantCode != codes.OK && uow.spaces.updateCalls != 0 {
-				t.Fatal("store update must not run on a rejected home article")
-			}
-		})
-	}
-}
-
 func TestSpaceDeleteGate(t *testing.T) {
 	tests := []struct {
 		name      string
-		live      bool
+		active    bool
 		purgeErr  error
 		wantCode  codes.Code
 		wantTrace []string
 	}{
 		{
-			name: "live articles refuse the delete", live: true, wantCode: codes.FailedPrecondition,
-			wantTrace: []string{"lock", "has"},
+			name: "active articles refuse the delete", active: true, wantCode: codes.FailedPrecondition,
+			wantTrace: []string{"lock", "lock-articles", "has"},
 		},
 		{
-			name: "deleted articles go with the space", wantCode: codes.OK,
-			wantTrace: []string{"lock", "has", "purge", "delete"},
+			name: "the rest of the articles go with the space", wantCode: codes.OK,
+			wantTrace: []string{"lock", "lock-articles", "has", "purge", "delete"},
 		},
 		{
 			name: "failed purge keeps the space", purgeErr: errors.Internal("boom"), wantCode: codes.Internal,
-			wantTrace: []string{"lock", "has", "purge"},
+			wantTrace: []string{"lock", "lock-articles", "has", "purge"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow := newSpaceFixture()
-			uow.spaces.hasArticles = tt.live
+			uow.spaces.hasActive = tt.active
 			uow.spaces.purgeErr = tt.purgeErr
 
 			deleted, err := svc.Delete(context.Background(), updaterOpts())
