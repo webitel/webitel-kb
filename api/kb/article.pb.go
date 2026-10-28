@@ -7,6 +7,7 @@
 package kb
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel/gen/go/proto/webitel"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -241,7 +242,7 @@ type InputArticle struct {
 	ParentId int64 `protobuf:"varint,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// Article type.
 	Type ArticleType `protobuf:"varint,3,opt,name=type,proto3,enum=webitel.kb.ArticleType" json:"type,omitempty"`
-	// Article subject.
+	// Article subject, at most 255 characters.
 	Subject string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	// Article tags.
 	Tags []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
@@ -1024,7 +1025,7 @@ var File_article_proto protoreflect.FileDescriptor
 const file_article_proto_rawDesc = "" +
 	"\n" +
 	"\rarticle.proto\x12\n" +
-	"webitel.kb\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\x98\x05\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\x98\x05\n" +
 	"\aArticle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12%\n" +
@@ -1050,12 +1051,12 @@ const file_article_proto_rawDesc = "" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
 	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\x12\x12\n" +
-	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xa4\x02\n" +
+	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xae\x02\n" +
 	"\fInputArticle\x12\x19\n" +
 	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12+\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x18\n" +
-	"\asubject\x18\x04 \x01(\tR\asubject\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\"\n" +
+	"\asubject\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01R\asubject\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12=\n" +
 	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12\x12\n" +

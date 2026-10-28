@@ -7,6 +7,7 @@
 package kb
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel/gen/go/proto/webitel"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -279,7 +280,7 @@ func (x *Space) GetUpdatedBy() *Lookup {
 // InputSpace carries the writable fields of a space.
 type InputSpace struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Human-readable name.
+	// Human-readable name, at most 255 characters.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Free-text description.
 	Description string `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
@@ -758,7 +759,7 @@ var File_space_proto protoreflect.FileDescriptor
 const file_space_proto_rawDesc = "" +
 	"\n" +
 	"\vspace.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbe\x05\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbe\x05\n" +
 	"\x05Space\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -782,10 +783,10 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xa8\x03\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xb2\x03\n" +
 	"\n" +
-	"InputSpace\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"InputSpace\x12\x1c\n" +
+	"\x04name\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01R\x04name\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x12,\n" +
 	"\x12embedding_model_id\x18\x03 \x01(\x03R\x10embeddingModelId\x12*\n" +

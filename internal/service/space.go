@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 
@@ -297,7 +298,10 @@ func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.
 	return tx.OutboxStore().PublishReindex(ctx, events...)
 }
 
+// requireName trims the name and checks it is set.
 func requireName(in *model.Space) error {
+	in.Name = strings.TrimSpace(in.Name)
+
 	if in.Name == "" {
 		return errors.InvalidArgument(
 			"name is required",
