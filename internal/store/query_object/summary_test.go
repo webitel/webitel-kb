@@ -41,14 +41,15 @@ func TestSummaryScope(t *testing.T) {
 		"s.domain_id=$1",
 		"m.deleted_at IS NULL",
 		"m.state=$2",
+		"s.state=$3",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Errorf("SQL %q does not contain %q", sql, want)
 		}
 	}
 
-	if len(args) != 2 || args[0] != int64(5) || args[1] != model.ArticleStateActive {
-		t.Fatalf("args = %v, want the domain id and the active state code", args)
+	if len(args) != 3 || args[0] != int64(5) || args[1] != model.ArticleStateActive || args[2] != model.SpaceStateActive {
+		t.Fatalf("args = %v, want the domain id and the active state codes", args)
 	}
 }
 
@@ -214,7 +215,7 @@ func TestSearchHitsFusesThreeRankings(t *testing.T) {
 	}
 
 	// Every list filters identically.
-	for _, want := range []string{"m.deleted_at IS NULL", "m.state = ?", "AND s.id = ANY(?) AND m.tags", "m.tags @> ?"} {
+	for _, want := range []string{"m.deleted_at IS NULL", "m.state = ?", "s.state = ?", "AND s.id = ANY(?) AND m.tags", "m.tags @> ?"} {
 		if got := strings.Count(sql, want); got != 3 {
 			t.Errorf("SQL %q applies %q %d times, want once per list", sql, want, got)
 		}
@@ -224,7 +225,7 @@ func TestSearchHitsFusesThreeRankings(t *testing.T) {
 		t.Errorf("SQL %q parses under a fixed configuration or joins the trigram sides by OR", sql)
 	}
 
-	if len(args) != 17 || args[0] != "reset password" || args[11] != "reset password" || args[12] != "reset password" {
+	if len(args) != 20 || args[0] != "reset password" || args[13] != "reset password" || args[14] != "reset password" {
 		t.Fatalf("args = %v", args)
 	}
 }

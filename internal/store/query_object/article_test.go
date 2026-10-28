@@ -153,6 +153,7 @@ func TestArticleDefaultsCoverReadModel(t *testing.T) {
 		"m.id AS id", "s.domain_id AS domain_id", "space_name", "m.parent_id AS parent_id",
 		"m.depth AS depth", "m.tags AS tags", "m.ver AS ver", "m.published_version_id AS published_version_id",
 		"created_by_name", "updated_by_name", "JOIN kb.space s", "LEFT JOIN directory.wbt_user cb",
+		"COALESCE(s.home_article_id=m.id,false)AS home",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)

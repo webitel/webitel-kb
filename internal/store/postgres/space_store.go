@@ -44,6 +44,7 @@ type spaceRecord struct {
 	RerankEnabled          bool      `db:"rerank_enabled"`
 	ChunkingStrategy       string    `db:"chunking_strategy"`
 	HomeArticleID          *int64    `db:"home_article_id"`
+	State                  int32     `db:"state"`
 	Teams                  []byte    `db:"teams"`
 	CreatedAt              time.Time `db:"created_at"`
 	UpdatedAt              time.Time `db:"updated_at"`
@@ -62,6 +63,7 @@ func mapSpace(record *spaceRecord) *model.Space {
 		VectorSearchEnabled: record.VectorSearchEnabled,
 		RerankEnabled:       record.RerankEnabled,
 		ChunkingStrategy:    record.ChunkingStrategy,
+		State:               record.State,
 		CreatedAt:           record.CreatedAt,
 		UpdatedAt:           record.UpdatedAt,
 	}
@@ -111,7 +113,9 @@ func mapLookup(id *int64, name *string) *model.Lookup {
 	return lookup
 }
 
-func (s *spaceStore) List(ctx context.Context, opts options.Searcher) ([]*model.Space, bool, error) {
+func (s *spaceStore) List(
+	ctx context.Context, opts options.Searcher, filter model.SpaceFilter,
+) ([]*model.Space, bool, error) {
 	sorts := util.SplitSort(opts.GetSort())
 	if len(sorts) == 0 {
 		sorts = []string{defaultSpaceSort}
@@ -125,6 +129,7 @@ func (s *spaceStore) List(ctx context.Context, opts options.Searcher) ([]*model.
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
+		WithState(filter.State).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).
@@ -202,14 +207,14 @@ func (s *spaceStore) Create(ctx context.Context, opts options.Creator, in *model
 			"domain_id", "name", "description", "language", "text_search_config",
 			"embedding_model_id", "reranker_model_id",
 			"vector_search_enabled", "rerank_enabled", "chunking_strategy",
-			"home_article_id", "created_by", "updated_by",
+			"state", "created_by", "updated_by",
 		).
 		Values(
 			session.GetDomainID(), in.Name, nullIfEmpty(in.Description), in.Language,
 			squirrel.Expr(searchConfigExpr, model.TextSearchDictionary(in.Language)),
 			nullIfZero(in.EmbeddingModelID), nullIfZero(in.RerankerModelID),
 			in.VectorSearchEnabled, in.RerankEnabled, defaultIfEmpty(in.ChunkingStrategy),
-			nullIfZero(in.HomeArticleID), nullIfZero(session.GetUserID()), nullIfZero(session.GetUserID()),
+			in.State, nullIfZero(session.GetUserID()), nullIfZero(session.GetUserID()),
 		).
 		Suffix("RETURNING *").
 		ToSql()
@@ -230,7 +235,7 @@ func (s *spaceStore) Update(ctx context.Context, opts options.Updator, in *model
 		Set("vector_search_enabled", in.VectorSearchEnabled).
 		Set("rerank_enabled", in.RerankEnabled).
 		Set("chunking_strategy", defaultIfEmpty(in.ChunkingStrategy)).
-		Set("home_article_id", nullIfZero(in.HomeArticleID)).
+		Set("state", in.State).
 		Set("updated_at", squirrel.Expr("now()")).
 		Set("updated_by", nullIfZero(opts.GetAuthOpts().GetUserID())).
 		Where("id = ?", opts.GetID()).
@@ -294,36 +299,35 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 	return nil
 }
 
-func (s *spaceStore) HasArticles(ctx context.Context, spaceID, domainID int64) (bool, error) {
+func (s *spaceStore) HasActiveArticles(ctx context.Context, spaceID, domainID int64) (bool, error) {
 	const sql = `SELECT EXISTS (
 		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL)`
+		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND a.state = $3)`
 
 	var has bool
-	if err := s.db.QueryRow(ctx, sql, spaceID, domainID).Scan(&has); err != nil {
+	if err := s.db.QueryRow(ctx, sql, spaceID, domainID, model.ArticleStateActive).Scan(&has); err != nil {
 		return false, ParseError(err)
 	}
 
 	return has, nil
 }
 
-func (s *spaceStore) HoldsArticle(ctx context.Context, spaceID, articleID, domainID int64) (bool, error) {
-	const sql = `SELECT EXISTS (
-		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.id = $1 AND a.space_id = $2 AND s.domain_id = $3 AND a.deleted_at IS NULL)`
+func (s *spaceStore) SetHome(ctx context.Context, spaceID, articleID, domainID int64) (bool, error) {
+	const sql = `UPDATE kb.space SET home_article_id = $3
+		WHERE id = $1 AND domain_id = $2 AND home_article_id IS NULL`
 
-	var holds bool
-	if err := s.db.QueryRow(ctx, sql, articleID, spaceID, domainID).Scan(&holds); err != nil {
+	tag, err := s.db.Exec(ctx, sql, spaceID, domainID, articleID)
+	if err != nil {
 		return false, ParseError(err)
 	}
 
-	return holds, nil
+	return tag.RowsAffected() == 1, nil
 }
 
-func (s *spaceStore) PurgeDeletedArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error) {
+func (s *spaceStore) PurgeArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error) {
 	const sql = `WITH purged AS (
 		DELETE FROM kb.article a USING kb.space s
-		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NOT NULL
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
 		RETURNING a.id
 	)
 	SELECT DISTINCT f.file_id FROM kb.attachment f JOIN purged p ON p.id = f.article_id
@@ -409,14 +413,14 @@ const resolveEmbeddingSelect = `SELECT
 const resolveEmbeddingSQL = resolveEmbeddingSelect + `
 	WHERE s.id = $1`
 
-// resolveEmbeddingsSQL is the read of some of a domain's spaces.
+// resolveEmbeddingsSQL is the read of some of a domain's active spaces.
 const resolveEmbeddingsSQL = resolveEmbeddingSelect + `
-	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
+	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL AND s.state = $3
 	ORDER BY s.id`
 
-// resolveDomainEmbeddingsSQL is the read of every space of a domain.
+// resolveDomainEmbeddingsSQL is the read of every active space of a domain.
 const resolveDomainEmbeddingsSQL = resolveEmbeddingSelect + `
-	WHERE s.domain_id = $1 AND s.deleted_at IS NULL
+	WHERE s.domain_id = $1 AND s.deleted_at IS NULL AND s.state = $2
 	ORDER BY s.id`
 
 // resolveRerankersSQL reads spaces with their reranker. Outer join: a space
@@ -473,9 +477,9 @@ func (s *spaceStore) ResolveEmbeddings(
 	)
 
 	if len(spaceIDs) == 0 {
-		rows, err = s.db.Query(ctx, resolveDomainEmbeddingsSQL, domainID)
+		rows, err = s.db.Query(ctx, resolveDomainEmbeddingsSQL, domainID, model.SpaceStateActive)
 	} else {
-		rows, err = s.db.Query(ctx, resolveEmbeddingsSQL, domainID, spaceIDs)
+		rows, err = s.db.Query(ctx, resolveEmbeddingsSQL, domainID, spaceIDs, model.SpaceStateActive)
 	}
 
 	if err != nil {
