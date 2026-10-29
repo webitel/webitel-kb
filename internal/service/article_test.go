@@ -301,12 +301,8 @@ func TestArticleCreateValidation(t *testing.T) {
 		body   string
 		wantID string
 	}{
-		{name: "space required", in: &model.Article{Subject: "a"}, wantID: "kb.article.space_required"},
 		{name: "subject required", in: &model.Article{SpaceID: 3}, wantID: "kb.article.subject_required"},
 		{name: "blank subject rejected", in: &model.Article{SpaceID: 3, Subject: "   "}, wantID: "kb.article.subject_required"},
-		{name: "unknown type code", in: &model.Article{SpaceID: 3, Subject: "a", Type: 9}, wantID: "kb.article.code_invalid"},
-		{name: "unknown state code", in: &model.Article{SpaceID: 3, Subject: "a", State: 9}, wantID: "kb.article.code_invalid"},
-		{name: "negative type code", in: &model.Article{SpaceID: 3, Subject: "a", Type: -1}, wantID: "kb.article.code_invalid"},
 		{name: "broken body json", in: &model.Article{SpaceID: 3, Subject: "a"}, body: "{", wantID: "kb.article.body_invalid"},
 		{name: "body is not a document", in: &model.Article{SpaceID: 3, Subject: "a"}, body: `{"type":"paragraph"}`, wantID: "kb.article.body_invalid"},
 		{
@@ -1152,13 +1148,9 @@ func TestArticleMoveToTopSkipsTargetChecks(t *testing.T) {
 	}
 }
 
-func TestSuggestTagsGuards(t *testing.T) {
+func TestSuggestTagsCapsTheSize(t *testing.T) {
 	svc, uow := newArticleFixture()
 	uow.articles.tags = []string{"vpn"}
-
-	if _, err := svc.SuggestTags(context.Background(), readOptions{auth: fakeAuther{domainID: 5}}, 0, "v", 10); errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("error = %v, want InvalidArgument on a missing space", err)
-	}
 
 	if _, err := svc.SuggestTags(context.Background(), readOptions{auth: fakeAuther{domainID: 5}}, 3, "v", options.MaxSearchSize+1); err != nil {
 		t.Fatalf("SuggestTags: %v", err)

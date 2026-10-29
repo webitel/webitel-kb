@@ -3,8 +3,6 @@ package grpc
 import (
 	"context"
 
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/handler/grpc/options"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -65,9 +63,6 @@ func (s *EmbeddingModelsServer) LocateModel(ctx context.Context, req *kb.LocateM
 
 func (s *EmbeddingModelsServer) CreateModel(ctx context.Context, req *kb.CreateModelRequest) (*kb.EmbeddingModel, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errModelInputRequired
-	}
 
 	opts, err := options.NewCreateOptions(ctx)
 	if err != nil {
@@ -84,9 +79,6 @@ func (s *EmbeddingModelsServer) CreateModel(ctx context.Context, req *kb.CreateM
 
 func (s *EmbeddingModelsServer) UpdateModel(ctx context.Context, req *kb.UpdateModelRequest) (*kb.EmbeddingModel, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errModelInputRequired
-	}
 
 	opts, err := options.NewUpdateOptions(ctx,
 		options.WithUpdateID(req.GetId()),
@@ -160,8 +152,3 @@ func modelToProto(m *model.EmbeddingModel) *kb.EmbeddingModel {
 		CreatedBy:    lookupToProto(m.CreatedBy),
 	}
 }
-
-var errModelInputRequired = errors.InvalidArgument(
-	"input is required",
-	errors.WithID("kb.model.input_required"),
-)

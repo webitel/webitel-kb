@@ -7,6 +7,7 @@
 package kb
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel/gen/go/proto/webitel"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -393,7 +394,7 @@ var File_attachment_proto protoreflect.FileDescriptor
 const file_attachment_proto_rawDesc = "" +
 	"\n" +
 	"\x10attachment.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xc1\x01\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbb\x01\n" +
 	"\x04File\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x126\n" +
 	"\n" +
@@ -403,7 +404,7 @@ const file_attachment_proto_rawDesc = "" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x12\n" +
 	"\x04mime\x18\x05 \x01(\tR\x04mime\x12\x12\n" +
 	"\x04name\x18\x06 \x01(\tR\x04name\x12\x10\n" +
-	"\x03url\x18\a \x01(\tR\x03urlJ\x04\b\b\x10\t\"F\n" +
+	"\x03url\x18\a \x01(\tR\x03url\"F\n" +
 	"\bFileList\x12&\n" +
 	"\x05items\x18\x01 \x03(\v2\x10.webitel.kb.FileR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"\xa9\x01\n" +
@@ -414,12 +415,12 @@ const file_attachment_proto_rawDesc = "" +
 	"\x01q\x18\x04 \x01(\tR\x01q\x12\x16\n" +
 	"\x06fields\x18\x05 \x03(\tR\x06fields\x12\x10\n" +
 	"\x03ids\x18\x06 \x03(\x03R\x03ids\x12\x12\n" +
-	"\x04sort\x18\a \x01(\tR\x04sort\"O\n" +
+	"\x04sort\x18\a \x01(\tR\x04sort\"X\n" +
 	"\x11AttachFileRequest\x12!\n" +
-	"\farticle_etag\x18\x01 \x01(\tR\varticleEtag\x12\x17\n" +
-	"\afile_id\x18\x02 \x01(\x03R\x06fileId\"F\n" +
-	"\x11DeleteFileRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12!\n" +
+	"\farticle_etag\x18\x01 \x01(\tR\varticleEtag\x12 \n" +
+	"\afile_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06fileId\"O\n" +
+	"\x11DeleteFileRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\x12!\n" +
 	"\farticle_etag\x18\x02 \x01(\tR\varticleEtag2\xfb\x02\n" +
 	"\vAttachments\x12q\n" +
 	"\tListFiles\x12\x1c.webitel.kb.ListFilesRequest\x1a\x14.webitel.kb.FileList\"0\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02&\x12$/v1/kb/articles/{article_etag}/files\x12r\n" +

@@ -90,13 +90,6 @@ func (s *RetrievalService) Resolve(
 		return nil, nil
 	}
 
-	if len(ids) > options.MaxSearchSize {
-		return nil, errors.InvalidArgument(
-			"too many ids requested at once",
-			errors.WithID("kb.retrieval.ids_limit"),
-		)
-	}
-
 	return s.uow.RetrievalStore().Resolve(ctx, opts, ids, spaceIDs)
 }
 
@@ -104,13 +97,6 @@ func (s *RetrievalService) Resolve(
 func (s *RetrievalService) Menu(
 	ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32,
 ) ([]*model.ArticleSummary, error) {
-	if spaceID <= 0 {
-		return nil, errors.InvalidArgument(
-			"a space is required",
-			errors.WithID("kb.retrieval.space_required"),
-		)
-	}
-
 	return s.uow.RetrievalStore().Menu(ctx, opts, spaceID, parentID, menuDepth(depthLimit))
 }
 
@@ -132,13 +118,6 @@ func (s *RetrievalService) SemanticSearch(
 ) ([]*model.ChunkHit, []*model.Citation, error) {
 	if strings.TrimSpace(q.Query) == "" {
 		return make([]*model.ChunkHit, 0), make([]*model.Citation, 0), nil
-	}
-
-	if len(q.SpaceIDs) == 0 {
-		return nil, nil, errors.InvalidArgument(
-			"at least one space is required",
-			errors.WithID("kb.retrieval.space_required"),
-		)
 	}
 
 	spaces, err := s.uow.SpaceStore().ResolveEmbeddings(ctx, opts.GetAuthOpts().GetDomainID(), q.SpaceIDs)

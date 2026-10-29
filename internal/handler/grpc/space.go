@@ -3,8 +3,6 @@ package grpc
 import (
 	"context"
 
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/handler/grpc/options"
 	"github.com/webitel/webitel-kb/internal/model"
@@ -63,9 +61,6 @@ func (s *SpacesServer) LocateSpace(ctx context.Context, req *kb.LocateSpaceReque
 
 func (s *SpacesServer) CreateSpace(ctx context.Context, req *kb.CreateSpaceRequest) (*kb.Space, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errSpaceInputRequired
-	}
 
 	opts, err := options.NewCreateOptions(ctx)
 	if err != nil {
@@ -82,9 +77,6 @@ func (s *SpacesServer) CreateSpace(ctx context.Context, req *kb.CreateSpaceReque
 
 func (s *SpacesServer) UpdateSpace(ctx context.Context, req *kb.UpdateSpaceRequest) (*kb.Space, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errSpaceInputRequired
-	}
 
 	opts, err := options.NewUpdateOptions(ctx,
 		options.WithUpdateID(req.GetId()),
@@ -115,11 +107,6 @@ func (s *SpacesServer) DeleteSpace(ctx context.Context, req *kb.DeleteSpaceReque
 
 	return spaceToProto(deleted), nil
 }
-
-var errSpaceInputRequired = errors.InvalidArgument(
-	"input is required",
-	errors.WithID("kb.space.input_required"),
-)
 
 func spaceFromInput(in *kb.InputSpace) *model.Space {
 	return &model.Space{

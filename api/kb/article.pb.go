@@ -582,7 +582,7 @@ func (x *LocateArticleRequest) GetFields() []string {
 // CreateArticleRequest wraps the article to create.
 type CreateArticleRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Article fields.
+	// Article fields; the space is required.
 	Input         *InputArticle `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1051,53 +1051,54 @@ const file_article_proto_rawDesc = "" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
 	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\x12\x12\n" +
-	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xae\x02\n" +
+	"\x04etag\x18\x1e \x01(\tR\x04etag\"\xcb\x02\n" +
 	"\fInputArticle\x12\x19\n" +
-	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12\x1b\n" +
-	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12+\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\"\n" +
+	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12$\n" +
+	"\tparent_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\bparentId\x125\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04type\x12\"\n" +
 	"\asubject\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01R\asubject\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12=\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x128\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12=\n" +
 	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12\x12\n" +
-	"\x04home\x18\b \x01(\bR\x04home\"\xb6\x02\n" +
+	"\x04home\x18\b \x01(\bR\x04home\"\xd4\x02\n" +
 	"\x13ListArticlesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x19\n" +
 	"\bspace_id\x18\x04 \x01(\x03R\aspaceId\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x12.\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state\x12+\n" +
-	"\x04type\x18\a \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x12\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x128\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x125\n" +
+	"\x04type\x18\a \x01(\x0e2\x17.webitel.kb.ArticleTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04type\x12\x12\n" +
 	"\x04sort\x18\b \x01(\tR\x04sort\x12\x16\n" +
-	"\x06fields\x18\t \x03(\tR\x06fields\x121\n" +
+	"\x06fields\x18\t \x03(\tR\x06fields\x12;\n" +
 	"\ttag_match\x18\n" +
-	" \x01(\x0e2\x14.webitel.kb.TagMatchR\btagMatch\"L\n" +
+	" \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\"L\n" +
 	"\vArticleList\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.webitel.kb.ArticleR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"B\n" +
 	"\x14LocateArticleRequest\x12\x12\n" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\x12\x16\n" +
-	"\x06fields\x18\x02 \x03(\tR\x06fields\"F\n" +
-	"\x14CreateArticleRequest\x12.\n" +
-	"\x05input\x18\x01 \x01(\v2\x18.webitel.kb.InputArticleR\x05input\"z\n" +
+	"\x06fields\x18\x02 \x03(\tR\x06fields\"\x94\x01\n" +
+	"\x14CreateArticleRequest\x12|\n" +
+	"\x05input\x18\x01 \x01(\v2\x18.webitel.kb.InputArticleBL\xbaHI\xba\x01C\n" +
+	"\x19kb.article.space_required\x12\x13a space is required\x1a\x11this.space_id > 0\xc8\x01\x01R\x05input\"\x82\x01\n" +
 	"\x14UpdateArticleRequest\x12\x12\n" +
-	"\x04etag\x18\x01 \x01(\tR\x04etag\x12.\n" +
-	"\x05input\x18\x02 \x01(\v2\x18.webitel.kb.InputArticleR\x05input\x12\x1e\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\x126\n" +
+	"\x05input\x18\x02 \x01(\v2\x18.webitel.kb.InputArticleB\x06\xbaH\x03\xc8\x01\x01R\x05input\x12\x1e\n" +
 	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"*\n" +
 	"\x14DeleteArticleRequest\x12\x12\n" +
-	"\x04etag\x18\x01 \x01(\tR\x04etag\"L\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\"U\n" +
 	"\x12MoveArticleRequest\x12\x12\n" +
-	"\x04etag\x18\x01 \x01(\tR\x04etag\x12\"\n" +
-	"\rnew_parent_id\x18\x02 \x01(\x03R\vnewParentId\"+\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\x12+\n" +
+	"\rnew_parent_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\vnewParentId\"+\n" +
 	"\x15ReindexArticleRequest\x12\x12\n" +
-	"\x04etag\x18\x01 \x01(\tR\x04etag\"%\n" +
-	"\x13ListChildrenRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"&\n" +
-	"\x14ListAncestorsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"+\n" +
-	"\x0eGetTreeRequest\x12\x19\n" +
-	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\"=\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\".\n" +
+	"\x13ListChildrenRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"/\n" +
+	"\x14ListAncestorsRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"4\n" +
+	"\x0eGetTreeRequest\x12\"\n" +
+	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\"=\n" +
 	"\x0fGetTreeResponse\x12*\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\x9d\t\n" +
 	"\bArticles\x12e\n" +

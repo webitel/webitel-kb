@@ -298,14 +298,6 @@ func newSpacesFixture() (*SpacesServer, *fakeUow, context.Context) {
 func TestSpacesServerInputGuards(t *testing.T) {
 	server, _, ctx := newSpacesFixture()
 
-	if _, err := server.CreateSpace(ctx, &kb.CreateSpaceRequest{}); errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("create nil input err = %v, want InvalidArgument", err)
-	}
-
-	if _, err := server.UpdateSpace(ctx, &kb.UpdateSpaceRequest{Id: 7}); errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("update nil input err = %v, want InvalidArgument", err)
-	}
-
 	if _, err := server.UpdateSpace(ctx, &kb.UpdateSpaceRequest{Input: &kb.InputSpace{Name: "n", Language: "uk"}}); errors.Code(err) != codes.InvalidArgument {
 		t.Fatalf("update zero id err = %v, want InvalidArgument", err)
 	}

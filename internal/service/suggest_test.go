@@ -50,11 +50,6 @@ func TestSuggestGuards(t *testing.T) {
 	}{
 		{name: "a blank message suggests nothing", query: model.SuggestQuery{Message: " ", TeamID: 1}},
 		{
-			name:     "a team or spaces are required",
-			query:    model.SuggestQuery{Message: "vpn"},
-			wantCode: codes.InvalidArgument, wantID: "kb.retrieval.space_required",
-		},
-		{
 			name:  "an unknown team is refused, not answered with the whole domain",
 			query: model.SuggestQuery{Message: "vpn", TeamID: 7}, unknownTeam: true,
 			wantCode: codes.InvalidArgument, wantID: "kb.retrieval.team_unknown",

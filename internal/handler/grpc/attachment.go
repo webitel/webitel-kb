@@ -3,8 +3,6 @@ package grpc
 import (
 	"context"
 
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/etag"
 	"github.com/webitel/webitel-kb/internal/handler/grpc/options"
@@ -77,13 +75,6 @@ func (s *AttachmentsServer) AttachFile(ctx context.Context, req *kb.AttachFileRe
 }
 
 func (s *AttachmentsServer) DeleteFile(ctx context.Context, req *kb.DeleteFileRequest) (*kb.File, error) {
-	if req.GetId() <= 0 {
-		return nil, errors.InvalidArgument(
-			"a file is required",
-			errors.WithID("kb.attachment.file_required"),
-		)
-	}
-
 	articleID, err := etag.ParseLocator(etag.TypeArticle, req.GetArticleEtag())
 	if err != nil {
 		return nil, err

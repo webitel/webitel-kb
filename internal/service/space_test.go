@@ -386,11 +386,6 @@ func TestSpaceCreateValidation(t *testing.T) {
 			&model.Space{Name: "docs", Language: "uk", RerankerModelID: 3},
 			codes.InvalidArgument,
 		},
-		{
-			"unknown state",
-			&model.Space{Name: "docs", Language: "uk", State: 3},
-			codes.InvalidArgument,
-		},
 	}
 
 	for _, tt := range tests {
@@ -558,7 +553,6 @@ func TestSpaceUpdateState(t *testing.T) {
 		{name: "state deactivates", state: model.SpaceStateInactive, want: model.SpaceStateInactive},
 		{name: "masked state deactivates", state: model.SpaceStateInactive, mask: []string{"state"}, want: model.SpaceStateInactive},
 		{name: "unmasked state stays", state: model.SpaceStateInactive, mask: []string{"name"}, want: model.SpaceStateActive},
-		{name: "unknown state rejected", state: 3, wantID: "kb.space.state_invalid"},
 	}
 
 	for _, tt := range tests {

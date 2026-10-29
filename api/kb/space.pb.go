@@ -601,7 +601,7 @@ func (x *LocateSpaceRequest) GetId() int64 {
 // CreateSpaceRequest wraps the space to create.
 type CreateSpaceRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Space fields.
+	// Space fields; language is required.
 	Input         *InputSpace `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -783,41 +783,42 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\x12.\n" +
 	"\n" +
-	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xb2\x03\n" +
+	"updated_by\x18\x17 \x01(\v2\x0f.general.LookupR\tupdatedBy\"\xdc\x03\n" +
 	"\n" +
 	"InputSpace\x12\x1c\n" +
 	"\x04name\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01R\x04name\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12\x1a\n" +
-	"\blanguage\x18\x02 \x01(\tR\blanguage\x12,\n" +
-	"\x12embedding_model_id\x18\x03 \x01(\x03R\x10embeddingModelId\x12*\n" +
-	"\x11reranker_model_id\x18\x04 \x01(\x03R\x0frerankerModelId\x127\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x125\n" +
+	"\x12embedding_model_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x10embeddingModelId\x123\n" +
+	"\x11reranker_model_id\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x0frerankerModelId\x127\n" +
 	"\x15vector_search_enabled\x18\x05 \x01(\bH\x00R\x13vectorSearchEnabled\x88\x01\x01\x12%\n" +
 	"\x0ererank_enabled\x18\x06 \x01(\bR\rrerankEnabled\x12+\n" +
-	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12\x19\n" +
+	"\x11chunking_strategy\x18\a \x01(\tR\x10chunkingStrategy\x12'\n" +
 	"\bteam_ids\x18\n" +
-	" \x03(\x03R\ateamIds\x12,\n" +
-	"\x05state\x18\v \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05stateB\x18\n" +
-	"\x16_vector_search_enabled\"\xa3\x01\n" +
+	" \x03(\x03B\f\xbaH\t\x92\x01\x06\"\x04\"\x02 \x00R\ateamIds\x126\n" +
+	"\x05state\x18\v \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05stateB\x18\n" +
+	"\x16_vector_search_enabled\"\xad\x01\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x16\n" +
-	"\x06fields\x18\x05 \x03(\tR\x06fields\x12,\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\"H\n" +
+	"\x06fields\x18\x05 \x03(\tR\x06fields\x126\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\"H\n" +
 	"\tSpaceList\x12'\n" +
 	"\x05items\x18\x01 \x03(\v2\x11.webitel.kb.SpaceR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"$\n" +
-	"\x12LocateSpaceRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"B\n" +
-	"\x12CreateSpaceRequest\x12,\n" +
-	"\x05input\x18\x01 \x01(\v2\x16.webitel.kb.InputSpaceR\x05input\"r\n" +
-	"\x12UpdateSpaceRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12,\n" +
-	"\x05input\x18\x02 \x01(\v2\x16.webitel.kb.InputSpaceR\x05input\x12\x1e\n" +
-	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"$\n" +
-	"\x12DeleteSpaceRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id*[\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"-\n" +
+	"\x12LocateSpaceRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"\x94\x01\n" +
+	"\x12CreateSpaceRequest\x12~\n" +
+	"\x05input\x18\x01 \x01(\v2\x16.webitel.kb.InputSpaceBP\xbaHM\xba\x01G\n" +
+	"\x1akb.space.language_required\x12\x14language is required\x1a\x13this.language != ''\xc8\x01\x01R\x05input\"\x83\x01\n" +
+	"\x12UpdateSpaceRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\x124\n" +
+	"\x05input\x18\x02 \x01(\v2\x16.webitel.kb.InputSpaceB\x06\xbaH\x03\xc8\x01\x01R\x05input\x12\x1e\n" +
+	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"-\n" +
+	"\x12DeleteSpaceRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id*[\n" +
 	"\n" +
 	"SpaceState\x12\x1b\n" +
 	"\x17SPACE_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +

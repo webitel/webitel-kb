@@ -170,7 +170,6 @@ func TestRetrievalResolve(t *testing.T) {
 	}{
 		{name: "nothing asked is nothing read", ids: nil, wantCalls: 0},
 		{name: "ids reach the store", ids: []int64{3, 1}, wantCalls: 1},
-		{name: "an unbounded batch is refused", ids: make([]int64, options.MaxSearchSize+1), wantCalls: 0, wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {
@@ -203,18 +202,6 @@ func TestRetrievalResolve(t *testing.T) {
 				t.Fatalf("ids = %v, spaces = %v", fake.ids, fake.spaces)
 			}
 		})
-	}
-}
-
-func TestRetrievalMenuRequiresASpace(t *testing.T) {
-	svc, fake := retrievalServiceWithFake()
-
-	if _, err := svc.Menu(context.Background(), &readOpts{auth: fakeAuther{domainID: 5}}, 0, 0, 1); errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("error = %v, want InvalidArgument", err)
-	}
-
-	if fake.calls != 0 {
-		t.Fatalf("store calls = %d, want none", fake.calls)
 	}
 }
 

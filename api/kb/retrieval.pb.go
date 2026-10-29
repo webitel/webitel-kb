@@ -7,6 +7,7 @@
 package kb
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	_ "github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel/gen/go/proto/webitel"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -226,7 +227,7 @@ func (x *SearchResponse) GetNext() bool {
 // ResolveRequest selects articles by id within the given spaces.
 type ResolveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Article ids to resolve.
+	// Article ids to resolve, at most 5000.
 	Ids []int64 `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
 	// Spaces the ids are expected in (RBAC scope).
 	SpaceIds      []int64 `protobuf:"varint,2,rep,packed,name=space_ids,json=spaceIds,proto3" json:"space_ids,omitempty"`
@@ -713,42 +714,44 @@ var File_retrieval_proto protoreflect.FileDescriptor
 const file_retrieval_proto_rawDesc = "" +
 	"\n" +
 	"\x0fretrieval.proto\x12\n" +
-	"webitel.kb\x1a\fcommon.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xb1\x01\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbb\x01\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\x121\n" +
-	"\ttag_match\x18\x04 \x01(\x0e2\x14.webitel.kb.TagMatchR\btagMatch\x12\x12\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x12;\n" +
+	"\ttag_match\x18\x04 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12\x12\n" +
 	"\x04size\x18\x05 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x06 \x01(\x05R\x04page\"V\n" +
 	"\x0eSearchResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"?\n" +
-	"\x0eResolveRequest\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\x03R\x03ids\x12\x1b\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"J\n" +
+	"\x0eResolveRequest\x12\x1b\n" +
+	"\x03ids\x18\x01 \x03(\x03B\t\xbaH\x06\x92\x01\x03\x10\x88'R\x03ids\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\"C\n" +
 	"\x0fResolveResponse\x120\n" +
-	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xd3\x01\n" +
+	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xd6\x02\n" +
 	"\x15SemanticSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x13\n" +
 	"\x05top_k\x18\x03 \x01(\x05R\x04topK\x12+\n" +
 	"\x11include_citations\x18\x04 \x01(\bR\x10includeCitations\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x121\n" +
-	"\ttag_match\x18\x06 \x01(\x0e2\x14.webitel.kb.TagMatchR\btagMatch\"w\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x12;\n" +
+	"\ttag_match\x18\x06 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch:w\xbaHt\x1ar\n" +
+	"\x1bkb.retrieval.space_required\x12\x1eat least one space is required\x1a3this.query.trim() == '' || size(this.space_ids) > 0\"w\n" +
 	"\x16SemanticSearchResponse\x12)\n" +
 	"\x06chunks\x18\x01 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\x122\n" +
-	"\tcitations\x18\x02 \x03(\v2\x14.webitel.kb.CitationR\tcitations\"\x96\x01\n" +
+	"\tcitations\x18\x02 \x03(\v2\x14.webitel.kb.CitationR\tcitations\"\xbb\x02\n" +
 	"\x0eSuggestRequest\x12)\n" +
 	"\x10customer_message\x18\x01 \x01(\tR\x0fcustomerMessage\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x17\n" +
 	"\ateam_id\x18\x03 \x01(\x03R\x06teamId\x12#\n" +
-	"\rreturn_chunks\x18\x04 \x01(\bR\freturnChunks\"t\n" +
+	"\rreturn_chunks\x18\x04 \x01(\bR\freturnChunks:\xa2\x01\xbaH\x9e\x01\x1a\x9b\x01\n" +
+	"\x1bkb.retrieval.space_required\x12(a team or at least one space is required\x1aRthis.customer_message.trim() == '' || size(this.space_ids) > 0 || this.team_id > 0\"t\n" +
 	"\x0fSuggestResponse\x126\n" +
 	"\barticles\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\barticles\x12)\n" +
-	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\"f\n" +
-	"\vMenuRequest\x12\x19\n" +
-	"\bspace_id\x18\x01 \x01(\x03R\aspaceId\x12\x1b\n" +
+	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\"o\n" +
+	"\vMenuRequest\x12\"\n" +
+	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12\x1f\n" +
 	"\vdepth_limit\x18\x03 \x01(\x05R\n" +
 	"depthLimit\"@\n" +
