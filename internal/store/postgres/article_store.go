@@ -143,7 +143,7 @@ SELECT id, depth FROM subtree`
 // treeSQL reads the visible hierarchy of a space flat, without the home page;
 // the nesting is built in the application; the limit reads one row past the
 // ceiling to spot an oversized space.
-const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth
+const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth, m.state
 	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
 	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
 	  AND m.id IS DISTINCT FROM s.home_article_id
@@ -559,7 +559,7 @@ func (s *articleStore) Tree(
 
 	nodes, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*model.TreeNode, error) {
 		node := new(model.TreeNode)
-		err := row.Scan(&node.ID, &node.ParentID, &node.Subject, &node.Type, &node.Depth)
+		err := row.Scan(&node.ID, &node.ParentID, &node.Subject, &node.Type, &node.Depth, &node.State)
 
 		return node, err
 	})

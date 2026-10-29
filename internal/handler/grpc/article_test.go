@@ -98,8 +98,8 @@ func (f *articleStoreFake) Ancestors(context.Context, options.Searcher, int64) (
 
 func (f *articleStoreFake) Tree(context.Context, options.Searcher, int64) ([]*model.TreeNode, error) {
 	return []*model.TreeNode{
-		{ID: 1, Subject: "root", Type: model.ArticleTypeArticle, Depth: 1, Children: []*model.TreeNode{
-			{ID: 2, Subject: "child", Type: model.ArticleTypeFAQ, Depth: 2},
+		{ID: 1, Subject: "root", Type: model.ArticleTypeArticle, Depth: 1, State: model.ArticleStateInactive, Children: []*model.TreeNode{
+			{ID: 2, Subject: "child", Type: model.ArticleTypeFAQ, Depth: 2, State: model.ArticleStateDraft},
 		}},
 	}, nil
 }
@@ -607,6 +607,10 @@ func TestGetTreeMapsRecursively(t *testing.T) {
 	root := resp.GetNodes()[0]
 	if len(root.GetChildren()) != 1 || root.GetChildren()[0].GetType() != kb.ArticleType_FAQ {
 		t.Fatalf("children = %+v", root.GetChildren())
+	}
+
+	if root.GetState() != kb.ArticleState_INACTIVE || root.GetChildren()[0].GetState() != kb.ArticleState_DRAFT {
+		t.Fatalf("states = %v %v, want the state of each node", root.GetState(), root.GetChildren()[0].GetState())
 	}
 }
 
