@@ -35,6 +35,10 @@ const (
 	// sourceFile reads the metadata of an uploaded file rather than a media
 	// file.
 	sourceFile = "file"
+	// requireChannel limits a link to the files of one upload channel.
+	requireChannel = "require_channel"
+	// channelKnowledgebase is the upload channel of article files.
+	channelKnowledgebase = "knowledgebase"
 )
 
 // File is the metadata Storage keeps for an uploaded file.
@@ -48,8 +52,9 @@ type File struct {
 
 // Files is the part of the Storage file service the attachments need.
 type Files interface {
-	// Describe returns the metadata of a file of the domain, with a signed
-	// download link; an unknown file is an error.
+	// Describe returns the metadata of a file the domain uploaded to the
+	// knowledgebase channel, with a signed download link; any other file is
+	// an error.
 	Describe(ctx context.Context, domainID, fileID int64) (*File, error)
 
 	// Links returns a signed download link per file id for the files Storage
@@ -121,6 +126,7 @@ func (c *Client) Describe(ctx context.Context, domainID, fileID int64) (*File, e
 			Source:   sourceFile,
 			Action:   actionDownload,
 			Metadata: true,
+			Query:    map[string]string{requireChannel: channelKnowledgebase},
 		})
 
 		return err
