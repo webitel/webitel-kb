@@ -300,16 +300,6 @@ func TestValidateInput(t *testing.T) {
 			create: true,
 		},
 		{
-			name:   "unknown type",
-			mutate: func(in *model.EmbeddingModel) { in.Type = "generator" },
-			apiKey: "k", create: true, wantID: "kb.model.type_invalid",
-		},
-		{
-			name:   "empty type",
-			mutate: func(in *model.EmbeddingModel) { in.Type = "" },
-			apiKey: "k", create: true, wantID: "kb.model.type_invalid",
-		},
-		{
 			name:   "missing name",
 			mutate: func(in *model.EmbeddingModel) { in.Name = "" },
 			apiKey: "k", create: true, wantID: "kb.model.name_required",

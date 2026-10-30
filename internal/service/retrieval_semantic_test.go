@@ -72,7 +72,6 @@ func TestSemanticSearchGuards(t *testing.T) {
 		wantCalls int
 	}{
 		{name: "a blank query matches nothing", query: model.SemanticQuery{Query: "  ", SpaceIDs: []int64{1}}},
-		{name: "spaces are required", query: model.SemanticQuery{Query: "vpn"}, wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {

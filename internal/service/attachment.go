@@ -69,13 +69,6 @@ func (s *AttachmentService) List(
 func (s *AttachmentService) Attach(
 	ctx context.Context, opts options.Creator, articleID, fileID int64,
 ) (*model.Attachment, error) {
-	if fileID <= 0 {
-		return nil, errors.InvalidArgument(
-			"a file is required",
-			errors.WithID("kb.attachment.file_required"),
-		)
-	}
-
 	file, err := s.files.Describe(ctx, opts.GetAuthOpts().GetDomainID(), fileID)
 	if err != nil {
 		if errors.Code(err) == codes.NotFound {

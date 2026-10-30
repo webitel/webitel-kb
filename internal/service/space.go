@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 
@@ -43,13 +44,6 @@ func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*mode
 func (s *SpaceService) Create(
 	ctx context.Context, opts options.Creator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
-	if in.Language == "" {
-		return nil, errors.InvalidArgument(
-			"language is required",
-			errors.WithID("kb.space.language_required"),
-		)
-	}
-
 	canonical, ok := model.CanonicalLanguage(in.Language)
 	if !ok {
 		return nil, errors.InvalidArgument(
@@ -65,10 +59,6 @@ func (s *SpaceService) Create(
 	}
 
 	if err := validateRetrievalConfig(in); err != nil {
-		return nil, err
-	}
-
-	if err := validateSpaceState(in.State); err != nil {
 		return nil, err
 	}
 
@@ -122,10 +112,6 @@ var spaceMergeFields = []string{
 func (s *SpaceService) Update(
 	ctx context.Context, opts options.Updator, in *model.Space, teamIDs []int64,
 ) (*model.Space, error) {
-	if err := validateSpaceState(in.State); err != nil {
-		return nil, err
-	}
-
 	mask := opts.GetMask()
 	session := opts.GetAuthOpts()
 
@@ -297,23 +283,14 @@ func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.
 	return tx.OutboxStore().PublishReindex(ctx, events...)
 }
 
+// requireName trims the name and checks it is set.
 func requireName(in *model.Space) error {
+	in.Name = strings.TrimSpace(in.Name)
+
 	if in.Name == "" {
 		return errors.InvalidArgument(
 			"name is required",
 			errors.WithID("kb.space.name_required"),
-		)
-	}
-
-	return nil
-}
-
-// validateSpaceState accepts the known state codes and the unset zero.
-func validateSpaceState(code int32) error {
-	if code < 0 || code > model.SpaceStateInactive {
-		return errors.InvalidArgument(
-			"unknown space state",
-			errors.WithID("kb.space.state_invalid"),
 		)
 	}
 

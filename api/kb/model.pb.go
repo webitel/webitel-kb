@@ -7,6 +7,7 @@
 package kb
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/webitel/webitel-go-kit/cmd/protoc-gen-go-webitel/gen/go/proto/webitel"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -472,7 +473,7 @@ func (x *LocateModelRequest) GetId() int64 {
 // CreateModelRequest wraps the model to create.
 type CreateModelRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Model fields.
+	// Model fields; the type is required.
 	Input         *InputEmbeddingModel `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -676,7 +677,7 @@ var File_model_proto protoreflect.FileDescriptor
 const file_model_proto_rawDesc = "" +
 	"\n" +
 	"\vmodel.proto\x12\n" +
-	"webitel.kb\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xf2\x02\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xf2\x02\n" +
 	"\x0eEmbeddingModel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -694,9 +695,9 @@ const file_model_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12.\n" +
 	"\n" +
-	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\xf1\x01\n" +
-	"\x13InputEmbeddingModel\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
+	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\x90\x02\n" +
+	"\x13InputEmbeddingModel\x121\n" +
+	"\x04type\x18\x01 \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x15R\tembeddingR\brerankerR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x03 \x01(\tR\bprovider\x12$\n" +
 	"\x0eis_self_hosted\x18\x04 \x01(\bR\fisSelfHosted\x12\x1b\n" +
@@ -715,19 +716,20 @@ const file_model_proto_rawDesc = "" +
 	"\x06fields\x18\x06 \x03(\tR\x06fields\"Z\n" +
 	"\x12EmbeddingModelList\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.EmbeddingModelR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"$\n" +
-	"\x12LocateModelRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"K\n" +
-	"\x12CreateModelRequest\x125\n" +
-	"\x05input\x18\x01 \x01(\v2\x1f.webitel.kb.InputEmbeddingModelR\x05input\"{\n" +
-	"\x12UpdateModelRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x125\n" +
-	"\x05input\x18\x02 \x01(\v2\x1f.webitel.kb.InputEmbeddingModelR\x05input\x12\x1e\n" +
-	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"$\n" +
-	"\x12DeleteModelRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"&\n" +
-	"\x14ValidateModelRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id2\xd3\x05\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"-\n" +
+	"\x12LocateModelRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"\x91\x01\n" +
+	"\x12CreateModelRequest\x12{\n" +
+	"\x05input\x18\x01 \x01(\v2\x1f.webitel.kb.InputEmbeddingModelBD\xbaHA\xba\x01;\n" +
+	"\x16kb.model.type_required\x12\x10type is required\x1a\x0fthis.type != ''\xc8\x01\x01R\x05input\"\x8c\x01\n" +
+	"\x12UpdateModelRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\x12=\n" +
+	"\x05input\x18\x02 \x01(\v2\x1f.webitel.kb.InputEmbeddingModelB\x06\xbaH\x03\xc8\x01\x01R\x05input\x12\x1e\n" +
+	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"-\n" +
+	"\x12DeleteModelRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"/\n" +
+	"\x14ValidateModelRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id2\xd3\x05\n" +
 	"\x0fEmbeddingModels\x12f\n" +
 	"\n" +
 	"ListModels\x12\x1d.webitel.kb.ListModelsRequest\x1a\x1e.webitel.kb.EmbeddingModelList\"\x19\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/kb/models\x12i\n" +

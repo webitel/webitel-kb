@@ -3,23 +3,11 @@ package grpc
 import (
 	"context"
 
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/webitel-kb/api/kb"
 	"github.com/webitel/webitel-kb/internal/etag"
 	"github.com/webitel/webitel-kb/internal/handler/grpc/options"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/service"
-)
-
-var errArticleInputRequired = errors.InvalidArgument(
-	"an article input is required",
-	errors.WithID("kb.article.input_required"),
-)
-
-var errArticleIDRequired = errors.InvalidArgument(
-	"an article id is required",
-	errors.WithID("kb.article.id_required"),
 )
 
 // ArticlesServer handles the Articles gRPC service: it decodes etags, builds
@@ -82,9 +70,6 @@ func (s *ArticlesServer) LocateArticle(ctx context.Context, req *kb.LocateArticl
 
 func (s *ArticlesServer) CreateArticle(ctx context.Context, req *kb.CreateArticleRequest) (*kb.Article, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errArticleInputRequired
-	}
 
 	body, err := bodyFromInput(in)
 	if err != nil {
@@ -106,9 +91,6 @@ func (s *ArticlesServer) CreateArticle(ctx context.Context, req *kb.CreateArticl
 
 func (s *ArticlesServer) UpdateArticle(ctx context.Context, req *kb.UpdateArticleRequest) (*kb.Article, error) {
 	in := req.GetInput()
-	if in == nil {
-		return nil, errArticleInputRequired
-	}
 
 	// Mutations require a full etag: the version it carries is the guard.
 	id, ver, err := etag.Parse(etag.TypeArticle, req.GetEtag())
@@ -195,12 +177,6 @@ func (s *ArticlesServer) ReindexArticle(ctx context.Context, req *kb.ReindexArti
 }
 
 func (s *ArticlesServer) ListChildren(ctx context.Context, req *kb.ListChildrenRequest) (*kb.ArticleList, error) {
-	// Without a parent the unpaged listing would fan out to every root of the
-	// domain, so a missing id is a caller mistake.
-	if req.GetId() <= 0 {
-		return nil, errArticleIDRequired
-	}
-
 	// The contract carries no paging here, and a parent may hold more children
 	// than a default page.
 	opts, err := options.NewSearchOptions(ctx, options.WithUnlimitedSize())

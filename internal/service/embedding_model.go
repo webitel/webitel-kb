@@ -522,13 +522,6 @@ func unsupportedProvider(err error) error {
 // cannot: provider-group consistency, role-specific dimensions and the
 // credential rules.
 func validateInput(in *model.EmbeddingModel, apiKey string, create bool) error {
-	if in.Type != model.ModelTypeEmbedding && in.Type != model.ModelTypeReranker {
-		return errors.InvalidArgument(
-			"type must be embedding or reranker",
-			errors.WithID("kb.model.type_invalid"),
-		)
-	}
-
 	if in.Name == "" {
 		return errors.InvalidArgument(
 			"name is required",

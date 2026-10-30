@@ -223,23 +223,3 @@ func TestListModelsRequiresSession(t *testing.T) {
 		t.Fatalf("ListModels error = %v, want unauthenticated", err)
 	}
 }
-
-func TestCreateModelRequiresInput(t *testing.T) {
-	server := NewEmbeddingModelsServer(nil)
-
-	_, err := server.CreateModel(context.Background(), &kb.CreateModelRequest{})
-
-	if err == nil || errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("CreateModel error = %v, want invalid argument", err)
-	}
-}
-
-func TestUpdateModelRequiresInput(t *testing.T) {
-	server := NewEmbeddingModelsServer(nil)
-
-	_, err := server.UpdateModel(context.Background(), &kb.UpdateModelRequest{Id: 5})
-
-	if err == nil || errors.Code(err) != codes.InvalidArgument {
-		t.Fatalf("UpdateModel error = %v, want invalid argument", err)
-	}
-}

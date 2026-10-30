@@ -268,7 +268,6 @@ func TestAttachmentAttachRejectsAFileStorageDoesNotKnow(t *testing.T) {
 		err    error
 		want   codes.Code
 	}{
-		{name: "no file id", fileID: 0, want: codes.InvalidArgument},
 		{name: "unknown file", fileID: 4, err: errors.NotFound("no such file"), want: codes.NotFound},
 		{name: "storage is down", fileID: 4, err: errors.Unavailable("storage is down"), want: codes.Unavailable},
 	}

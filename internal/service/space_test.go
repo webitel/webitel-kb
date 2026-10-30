@@ -386,11 +386,6 @@ func TestSpaceCreateValidation(t *testing.T) {
 			&model.Space{Name: "docs", Language: "uk", RerankerModelID: 3},
 			codes.InvalidArgument,
 		},
-		{
-			"unknown state",
-			&model.Space{Name: "docs", Language: "uk", State: 3},
-			codes.InvalidArgument,
-		},
 	}
 
 	for _, tt := range tests {
@@ -472,6 +467,41 @@ func TestSpaceCreateHappyPath(t *testing.T) {
 	}
 }
 
+func TestSpaceCreateName(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       string
+		wantName string
+		wantID   string
+	}{
+		{name: "trimmed", in: "  docs  ", wantName: "docs"},
+		{name: "blank rejected", in: "   ", wantID: "kb.space.name_required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+
+			_, err := svc.Create(context.Background(), creatorOpts(), &model.Space{Name: tt.in, Language: "uk"}, nil)
+			if tt.wantID != "" {
+				if errors.ID(err) != tt.wantID || uow.spaces.createCalls != 0 {
+					t.Fatalf("err = %v, creates = %d; want %s and no write", err, uow.spaces.createCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			if got := uow.spaces.createIn.Name; got != tt.wantName {
+				t.Fatalf("stored name = %q, want %q", got, tt.wantName)
+			}
+		})
+	}
+}
+
 func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
 	svc, uow := newSpaceFixture()
 
@@ -523,7 +553,6 @@ func TestSpaceUpdateState(t *testing.T) {
 		{name: "state deactivates", state: model.SpaceStateInactive, want: model.SpaceStateInactive},
 		{name: "masked state deactivates", state: model.SpaceStateInactive, mask: []string{"state"}, want: model.SpaceStateInactive},
 		{name: "unmasked state stays", state: model.SpaceStateInactive, mask: []string{"name"}, want: model.SpaceStateActive},
-		{name: "unknown state rejected", state: 3, wantID: "kb.space.state_invalid"},
 	}
 
 	for _, tt := range tests {
@@ -631,6 +660,10 @@ func TestSpaceUpdateAppliesMask(t *testing.T) {
 		{
 			name: "masked empty name rejected", in: &model.Space{},
 			mask: []string{"name"}, wantID: "kb.space.name_required",
+		},
+		{
+			name: "masked name trimmed", in: &model.Space{Name: "  new  "},
+			mask: []string{"name"}, wantName: "new", wantDesc: "about",
 		},
 	}
 

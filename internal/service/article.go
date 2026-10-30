@@ -143,21 +143,10 @@ func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher) (*mo
 func (s *ArticleService) Create(
 	ctx context.Context, opts options.Creator, in *model.Article, rawBody []byte,
 ) (*model.Article, error) {
-	if in.SpaceID <= 0 {
-		return nil, errors.InvalidArgument(
-			"a space is required",
-			errors.WithID("kb.article.space_required"),
-		)
-	}
-
 	normalizeInput(in)
 
 	if in.Subject == "" {
 		return nil, errSubjectRequired
-	}
-
-	if err := validateArticleCodes(in.Type, in.State); err != nil {
-		return nil, err
 	}
 
 	if err := validateHome(in); err != nil {
@@ -235,10 +224,6 @@ func (s *ArticleService) Create(
 func (s *ArticleService) Update(
 	ctx context.Context, opts options.Updator, in *model.Article, rawBody []byte, expectedVer int32,
 ) (*model.Article, error) {
-	if err := validateArticleCodes(in.Type, in.State); err != nil {
-		return nil, err
-	}
-
 	normalizeInput(in)
 
 	if in.Subject == "" && slices.Contains(opts.GetMask(), "subject") {
@@ -449,13 +434,6 @@ func (s *ArticleService) Tree(
 func (s *ArticleService) SuggestTags(
 	ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int,
 ) ([]string, error) {
-	if spaceID <= 0 {
-		return nil, errors.InvalidArgument(
-			"a space is required",
-			errors.WithID("kb.article.space_required"),
-		)
-	}
-
 	if size > options.MaxSearchSize {
 		size = options.MaxSearchSize
 	}
@@ -638,26 +616,6 @@ func validateMoveTarget(
 	}
 
 	return checkDepth(ctx, tx, session, newParentID, height, "kb.article.move_depth")
-}
-
-// validateArticleCodes accepts the known codes and the unset zero; anything
-// else is a caller mistake the schema would report only generically.
-func validateArticleCodes(typeCode, stateCode int32) error {
-	if typeCode < 0 || typeCode > model.ArticleTypeFAQ {
-		return errors.InvalidArgument(
-			"unknown article type",
-			errors.WithID("kb.article.code_invalid"),
-		)
-	}
-
-	if stateCode < 0 || stateCode > model.ArticleStateInactive {
-		return errors.InvalidArgument(
-			"unknown article state",
-			errors.WithID("kb.article.code_invalid"),
-		)
-	}
-
-	return nil
 }
 
 // rejectImmutableInput refuses update fields an update may not change: the

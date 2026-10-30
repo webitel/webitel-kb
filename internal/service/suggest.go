@@ -90,13 +90,6 @@ func (s *RetrievalService) suggestSpaces(ctx context.Context, domainID int64, q 
 		return q.SpaceIDs, nil
 	}
 
-	if q.TeamID <= 0 {
-		return nil, errors.InvalidArgument(
-			"a team or at least one space is required",
-			errors.WithID("kb.retrieval.space_required"),
-		)
-	}
-
 	bound, found, err := s.uow.SpaceStore().TeamSpaces(ctx, domainID, q.TeamID)
 	if err != nil {
 		return nil, err

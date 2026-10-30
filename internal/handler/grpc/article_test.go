@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -476,21 +475,6 @@ func TestListChildrenIsNotPaged(t *testing.T) {
 	}
 }
 
-func TestListChildrenRequiresAParent(t *testing.T) {
-	articles := &articleStoreFake{}
-	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
-
-	_, err := server.ListChildren(articleContext(), &kb.ListChildrenRequest{})
-
-	if errors.ID(err) != "kb.article.id_required" {
-		t.Fatalf("error = %v, want kb.article.id_required", err)
-	}
-
-	if articles.listCalls != 0 {
-		t.Fatal("a rejected listing must not reach the store")
-	}
-}
-
 func TestArticleEtagGuards(t *testing.T) {
 	articles := &articleStoreFake{
 		items:   []*model.Article{{ID: 7, Ver: 4}},
@@ -583,15 +567,6 @@ func TestCreateArticleCarriesTheBody(t *testing.T) {
 	}
 }
 
-func TestCreateArticleWithoutInput(t *testing.T) {
-	server, _, _ := newArticleServers(&articleUoWFake{articles: &articleStoreFake{}})
-
-	_, err := server.CreateArticle(articleContext(), &kb.CreateArticleRequest{})
-	if errors.ID(err) != "kb.article.input_required" {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func TestGetTreeMapsRecursively(t *testing.T) {
 	server, _, _ := newArticleServers(&articleUoWFake{articles: &articleStoreFake{}})
 
@@ -643,22 +618,6 @@ func TestListVersionsDefaultsToTheDisplayLimit(t *testing.T) {
 
 	if versions.size != options.DefaultSearchSize {
 		t.Fatalf("size = %d, want the display limit", versions.size)
-	}
-}
-
-func TestRestoreVersionRefusesALongNote(t *testing.T) {
-	_, versions, _ := newArticleServers(&articleUoWFake{
-		articles: &articleStoreFake{},
-		versions: &articleVersionStoreFake{},
-	})
-
-	_, err := versions.RestoreVersion(articleContext(), &kb.RestoreVersionRequest{
-		ArticleId: 7, VersionNumber: 1,
-		Notes: strings.Repeat("a", model.MaxVersionNotes+1),
-	})
-
-	if errors.ID(err) != "kb.article.notes_too_long" {
-		t.Fatalf("error = %v, want the note limit", err)
 	}
 }
 

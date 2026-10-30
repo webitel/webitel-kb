@@ -306,11 +306,6 @@ func TestDeleteFileGuards(t *testing.T) {
 		wantID   string
 	}{
 		{
-			name:     "the file id is required",
-			req:      &kb.DeleteFileRequest{ArticleEtag: "7"},
-			wantCode: codes.InvalidArgument, wantID: "kb.attachment.file_required",
-		},
-		{
 			name:     "the article locator must parse",
 			req:      &kb.DeleteFileRequest{ArticleEtag: "nope", Id: 4},
 			wantCode: codes.InvalidArgument, wantID: "kb.etag.invalid",
