@@ -477,10 +477,10 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 
 func TestArticleTreeScopesAndNests(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{
-		cols: []string{"id", "parent_id", "subject", "type", "depth"},
+		cols: []string{"id", "parent_id", "subject", "type", "depth", "state"},
 		vals: [][]any{
-			{int64(1), int64(0), "A", int32(1), int32(1)},
-			{int64(2), int64(1), "A1", int32(1), int32(2)},
+			{int64(1), int64(0), "A", int32(1), int32(1), int32(2)},
+			{int64(2), int64(1), "A1", int32(1), int32(2), int32(3)},
 		},
 	}}
 	s := &articleStore{db: f}
@@ -492,6 +492,10 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 
 	if len(roots) != 1 || len(roots[0].Children) != 1 || roots[0].Children[0].ID != 2 {
 		t.Fatalf("tree = %+v", roots)
+	}
+
+	if roots[0].State != model.ArticleStateActive || roots[0].Children[0].State != model.ArticleStateInactive {
+		t.Errorf("states = %d %d, want each node to carry its own", roots[0].State, roots[0].Children[0].State)
 	}
 
 	for _, want := range []string{
@@ -513,11 +517,11 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 func TestArticleTreeRefusesAnOversizedSpace(t *testing.T) {
 	vals := make([][]any, 0, maxTreeNodes+1)
 	for i := range maxTreeNodes + 1 {
-		vals = append(vals, []any{int64(i + 1), int64(0), "A", int32(1), int32(1)})
+		vals = append(vals, []any{int64(i + 1), int64(0), "A", int32(1), int32(1), int32(2)})
 	}
 
 	f := &fakeQuerier{rows: &fakeRows{
-		cols: []string{"id", "parent_id", "subject", "type", "depth"},
+		cols: []string{"id", "parent_id", "subject", "type", "depth", "state"},
 		vals: vals,
 	}}
 	s := &articleStore{db: f}

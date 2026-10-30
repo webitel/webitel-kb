@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Article type.
+// Article kind.
 type ArticleType int32
 
 const (
@@ -495,7 +495,9 @@ type TreeNode struct {
 	// Hierarchy depth (1..5).
 	Depth int32 `protobuf:"varint,4,opt,name=depth,proto3" json:"depth,omitempty"`
 	// Child nodes.
-	Children      []*TreeNode `protobuf:"bytes,5,rep,name=children,proto3" json:"children,omitempty"`
+	Children []*TreeNode `protobuf:"bytes,5,rep,name=children,proto3" json:"children,omitempty"`
+	// Lifecycle state.
+	State         ArticleState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -565,6 +567,13 @@ func (x *TreeNode) GetChildren() []*TreeNode {
 	return nil
 }
 
+func (x *TreeNode) GetState() ArticleState {
+	if x != nil {
+		return x.State
+	}
+	return ArticleState_ARTICLE_STATE_UNSPECIFIED
+}
+
 var File_common_proto protoreflect.FileDescriptor
 
 const file_common_proto_rawDesc = "" +
@@ -601,13 +610,14 @@ const file_common_proto_rawDesc = "" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x10\n" +
-	"\x03url\x18\x04 \x01(\tR\x03url\"\xa9\x01\n" +
+	"\x03url\x18\x04 \x01(\tR\x03url\"\xd9\x01\n" +
 	"\bTreeNode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12+\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x17.webitel.kb.ArticleTypeR\x04type\x12\x14\n" +
 	"\x05depth\x18\x04 \x01(\x05R\x05depth\x120\n" +
-	"\bchildren\x18\x05 \x03(\v2\x14.webitel.kb.TreeNodeR\bchildren*A\n" +
+	"\bchildren\x18\x05 \x03(\v2\x14.webitel.kb.TreeNodeR\bchildren\x12.\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateR\x05state*A\n" +
 	"\vArticleType\x12\x1c\n" +
 	"\x18ARTICLE_TYPE_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aARTICLE\x10\x01\x12\a\n" +
@@ -658,11 +668,12 @@ var file_common_proto_depIdxs = []int32{
 	1, // 1: webitel.kb.ArticleSummary.state:type_name -> webitel.kb.ArticleState
 	0, // 2: webitel.kb.TreeNode.type:type_name -> webitel.kb.ArticleType
 	6, // 3: webitel.kb.TreeNode.children:type_name -> webitel.kb.TreeNode
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 4: webitel.kb.TreeNode.state:type_name -> webitel.kb.ArticleState
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_common_proto_init() }

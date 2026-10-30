@@ -145,6 +145,7 @@ func treeToProto(nodes []*model.TreeNode) []*kb.TreeNode {
 			Subject:  node.Subject,
 			Type:     kb.ArticleType(node.Type),
 			Depth:    node.Depth,
+			State:    kb.ArticleState(node.State),
 			Children: treeToProto(node.Children),
 		})
 	}

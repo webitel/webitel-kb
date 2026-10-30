@@ -125,6 +125,7 @@ type TreeNode struct {
 	Subject  string
 	Type     int32
 	Depth    int32
+	State    int32
 	Children []*TreeNode
 }
 
