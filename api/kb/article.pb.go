@@ -735,13 +735,15 @@ func (x *DeleteArticleRequest) GetEtag() string {
 	return ""
 }
 
-// MoveArticleRequest reparents an article.
+// MoveArticleRequest reparents an article, possibly into another space.
 type MoveArticleRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Concurrency token of the article to move.
 	Etag string `protobuf:"bytes,1,opt,name=etag,proto3" json:"etag,omitempty"`
 	// New parent id; 0 to move to top level.
-	NewParentId   int64 `protobuf:"varint,2,opt,name=new_parent_id,json=newParentId,proto3" json:"new_parent_id,omitempty"`
+	NewParentId int64 `protobuf:"varint,2,opt,name=new_parent_id,json=newParentId,proto3" json:"new_parent_id,omitempty"`
+	// Target space id of the same language; 0 keeps the current space.
+	NewSpaceId    int64 `protobuf:"varint,3,opt,name=new_space_id,json=newSpaceId,proto3" json:"new_space_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -786,6 +788,13 @@ func (x *MoveArticleRequest) GetEtag() string {
 func (x *MoveArticleRequest) GetNewParentId() int64 {
 	if x != nil {
 		return x.NewParentId
+	}
+	return 0
+}
+
+func (x *MoveArticleRequest) GetNewSpaceId() int64 {
+	if x != nil {
+		return x.NewSpaceId
 	}
 	return 0
 }
@@ -1087,10 +1096,12 @@ const file_article_proto_rawDesc = "" +
 	"\x05input\x18\x02 \x01(\v2\x18.webitel.kb.InputArticleB\x06\xbaH\x03\xc8\x01\x01R\x05input\x12\x1e\n" +
 	"\vx_json_mask\x18\x03 \x03(\tR\txJsonMask\"*\n" +
 	"\x14DeleteArticleRequest\x12\x12\n" +
-	"\x04etag\x18\x01 \x01(\tR\x04etag\"U\n" +
+	"\x04etag\x18\x01 \x01(\tR\x04etag\"\x80\x01\n" +
 	"\x12MoveArticleRequest\x12\x12\n" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\x12+\n" +
-	"\rnew_parent_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\vnewParentId\"+\n" +
+	"\rnew_parent_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\vnewParentId\x12)\n" +
+	"\fnew_space_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
+	"newSpaceId\"+\n" +
 	"\x15ReindexArticleRequest\x12\x12\n" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\".\n" +
 	"\x13ListChildrenRequest\x12\x17\n" +

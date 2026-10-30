@@ -131,6 +131,15 @@ func (q *SpaceQuery) WithState(code int32) *SpaceQuery {
 	return q
 }
 
+// WithLanguage keeps spaces whose language has the given base; empty means any.
+func (q *SpaceQuery) WithLanguage(base string) *SpaceQuery {
+	if base != "" {
+		q.builder = q.builder.Where("split_part(m.language, '-', 1) = ?", base)
+	}
+
+	return q
+}
+
 // WithIDs keeps spaces with the given ids; empty means any.
 func (q *SpaceQuery) WithIDs(ids []int64) *SpaceQuery {
 	if len(ids) > 0 {

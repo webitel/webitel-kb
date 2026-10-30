@@ -60,6 +60,7 @@ func TestInputRules(t *testing.T) {
 		{name: "space delete with negative id", msg: &kb.DeleteSpaceRequest{Id: -1}, wantField: "id", wantRule: "int64.gt"},
 		{name: "space list unknown state", msg: &kb.ListSpacesRequest{State: 9}, wantField: "state", wantRule: "enum.defined_only"},
 		{name: "space list with lenient paging", msg: &kb.ListSpacesRequest{Size: -1, Page: -3}},
+		{name: "space list language is the service's to check", msg: &kb.ListSpacesRequest{Language: "Ukrainian"}},
 
 		{name: "article create without input", msg: &kb.CreateArticleRequest{}, wantField: "input", wantRule: "required"},
 		{name: "article create without space", msg: &kb.CreateArticleRequest{Input: &kb.InputArticle{Subject: "a"}}, wantField: "input", wantRule: "kb.article.space_required"},
@@ -73,6 +74,8 @@ func TestInputRules(t *testing.T) {
 		{name: "article list unknown tag match", msg: &kb.ListArticlesRequest{TagMatch: 5}, wantField: "tag_match", wantRule: "enum.defined_only"},
 		{name: "article move to negative parent", msg: &kb.MoveArticleRequest{Etag: "x", NewParentId: -1}, wantField: "new_parent_id", wantRule: "int64.gte"},
 		{name: "article move to top level", msg: &kb.MoveArticleRequest{Etag: "x"}},
+		{name: "article move to negative space", msg: &kb.MoveArticleRequest{Etag: "x", NewSpaceId: -1}, wantField: "new_space_id", wantRule: "int64.gte"},
+		{name: "article move into another space", msg: &kb.MoveArticleRequest{Etag: "x", NewParentId: 4, NewSpaceId: 9}},
 		{name: "children without parent", msg: &kb.ListChildrenRequest{}, wantField: "id", wantRule: "int64.gt"},
 		{name: "ancestors without article", msg: &kb.ListAncestorsRequest{}, wantField: "id", wantRule: "int64.gt"},
 		{name: "tree without space", msg: &kb.GetTreeRequest{}, wantField: "space_id", wantRule: "int64.gt"},

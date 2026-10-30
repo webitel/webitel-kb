@@ -149,7 +149,7 @@ func (s *ArticlesServer) MoveArticle(ctx context.Context, req *kb.MoveArticleReq
 		return nil, err
 	}
 
-	moved, err := s.service.Move(ctx, opts, req.GetNewParentId(), ver)
+	moved, err := s.service.Move(ctx, opts, req.GetNewParentId(), req.GetNewSpaceId(), ver)
 	if err != nil {
 		return nil, err
 	}

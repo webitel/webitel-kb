@@ -97,6 +97,13 @@ type fakeSpaceStore struct {
 	pendingScope [][2]int64
 	keptModels   []int64
 
+	// byID, when set, answers Locate per space id.
+	byID            map[int64]*model.Space
+	pendingArticles [][]int64
+	droppedIn       []int64
+	droppedArticles [][]int64
+	rescopedRoots   []int64
+
 	replaceErr error
 
 	lockedLocates int
@@ -110,14 +117,28 @@ type fakeSpaceStore struct {
 	replaceSpaceID, replaceDomainID, replaceUserID int64
 
 	updateIn *model.Space
+
+	listCalls  int
+	listFilter model.SpaceFilter
 }
 
-func (f *fakeSpaceStore) List(context.Context, options.Searcher, model.SpaceFilter) ([]*model.Space, bool, error) {
+func (f *fakeSpaceStore) List(_ context.Context, _ options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error) {
+	f.listCalls++
+	f.listFilter = filter
+
 	return nil, false, nil
 }
 
 func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*model.Space, error) {
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
+
+	if f.byID != nil {
+		if space, ok := f.byID[opts.GetIDs()[0]]; ok {
+			return space, nil
+		}
+
+		return nil, errors.NotFound("entity does not exist or access is denied")
+	}
 
 	if f.readBack == nil {
 		return nil, errors.NotFound("entity does not exist or access is denied")
@@ -195,16 +216,28 @@ func (f *fakeSpaceStore) LockArticles(_ context.Context, spaceID, domainID int64
 	return nil
 }
 
-func (f *fakeSpaceStore) MarkArticlesPending(_ context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error) {
+func (f *fakeSpaceStore) MarkArticlesPending(
+	_ context.Context, spaceID, domainID int64, articleIDs []int64,
+) ([]model.ReindexTarget, error) {
 	f.pendingScope = append(f.pendingScope, [2]int64{spaceID, domainID})
+	f.pendingArticles = append(f.pendingArticles, articleIDs)
 	f.note("mark-pending")
 
 	return f.pending, nil
 }
 
-func (f *fakeSpaceStore) DropForeignEmbeddings(_ context.Context, _, _, keepModelID int64) error {
+func (f *fakeSpaceStore) DropForeignEmbeddings(_ context.Context, spaceID, _, keepModelID int64, articleIDs []int64) error {
 	f.keptModels = append(f.keptModels, keepModelID)
+	f.droppedIn = append(f.droppedIn, spaceID)
+	f.droppedArticles = append(f.droppedArticles, articleIDs)
 	f.note("drop-embeddings")
+
+	return nil
+}
+
+func (f *fakeSpaceStore) RescopeEmbeddings(_ context.Context, rootID, _ int64) error {
+	f.rescopedRoots = append(f.rescopedRoots, rootID)
+	f.note("rescope-embeddings")
 
 	return nil
 }
@@ -511,6 +544,43 @@ func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
 
 	if got := uow.spaces.createIn.Language; got != "pt-BR" {
 		t.Fatalf("stored language = %q, want pt-BR", got)
+	}
+}
+
+func TestSpaceListNarrowsTheLanguage(t *testing.T) {
+	tests := []struct {
+		name      string
+		language  string
+		want      string
+		wantErrID string
+	}{
+		{"region narrows to the base", "uk-UA", "uk", ""},
+		{"base stays", "UK", "uk", ""},
+		{"empty means any", "", "", ""},
+		{"invalid tag", "Ukrainian", "", "kb.space.language_invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+
+			_, _, err := svc.List(context.Background(), nil, model.SpaceFilter{Language: tt.language})
+			if tt.wantErrID != "" {
+				if errors.ID(err) != tt.wantErrID || uow.spaces.listCalls != 0 {
+					t.Fatalf("err = %v, store calls = %d, want %s before the store", err, uow.spaces.listCalls, tt.wantErrID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+
+			if got := uow.spaces.listFilter.Language; got != tt.want {
+				t.Fatalf("store language = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -940,6 +1010,11 @@ func TestSpaceReindexQueuesTheLatestVersionOfEveryArticle(t *testing.T) {
 
 	if uow.spaces.lockedScope[0] != [2]int64{7, 5} || uow.spaces.pendingScope[0] != [2]int64{7, 5} {
 		t.Fatalf("scope: articles %v, pending %v", uow.spaces.lockedScope, uow.spaces.pendingScope)
+	}
+
+	// A model switch queues the whole space, not a branch of it.
+	if len(uow.spaces.pendingArticles) != 1 || uow.spaces.pendingArticles[0] != nil {
+		t.Fatalf("pending articles = %v, want the whole space", uow.spaces.pendingArticles)
 	}
 
 	got := make([][2]int64, 0, len(uow.outbox.events))

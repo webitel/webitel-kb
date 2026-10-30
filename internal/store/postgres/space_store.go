@@ -130,6 +130,7 @@ func (s *spaceStore) List(
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
 		WithState(filter.State).
+		WithLanguage(filter.Language).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).
@@ -358,7 +359,9 @@ func (s *spaceStore) LockArticles(ctx context.Context, spaceID, domainID int64) 
 	return nil
 }
 
-func (s *spaceStore) MarkArticlesPending(ctx context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error) {
+func (s *spaceStore) MarkArticlesPending(
+	ctx context.Context, spaceID, domainID int64, articleIDs []int64,
+) ([]model.ReindexTarget, error) {
 	const sql = `UPDATE kb.article a SET index_state = $3
 		FROM kb.space s, (
 			SELECT DISTINCT ON (v.article_id) v.article_id, v.id
@@ -368,9 +371,10 @@ func (s *spaceStore) MarkArticlesPending(ctx context.Context, spaceID, domainID 
 		) latest
 		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
 			AND a.deleted_at IS NULL AND latest.article_id = a.id
+			AND (coalesce(cardinality($4::bigint[]), 0) = 0 OR a.id = ANY($4::bigint[]))
 		RETURNING a.id, latest.id`
 
-	rows, err := s.db.Query(ctx, sql, spaceID, domainID, model.IndexStatePending)
+	rows, err := s.db.Query(ctx, sql, spaceID, domainID, model.IndexStatePending, articleIDs)
 	if err != nil {
 		return nil, ParseError(err)
 	}
@@ -383,11 +387,34 @@ func (s *spaceStore) MarkArticlesPending(ctx context.Context, spaceID, domainID 
 	return targets, nil
 }
 
-func (s *spaceStore) DropForeignEmbeddings(ctx context.Context, spaceID, domainID, keepModelID int64) error {
-	const sql = `DELETE FROM kb.chunk_embedding
-		WHERE space_id = $1 AND domain_id = $2 AND model_id IS DISTINCT FROM $3`
+func (s *spaceStore) DropForeignEmbeddings(
+	ctx context.Context, spaceID, domainID, keepModelID int64, articleIDs []int64,
+) error {
+	const sql = `DELETE FROM kb.chunk_embedding e
+		WHERE e.space_id = $1 AND e.domain_id = $2 AND e.model_id IS DISTINCT FROM $3
+		  AND (coalesce(cardinality($4::bigint[]), 0) = 0 OR EXISTS (
+			SELECT 1 FROM kb.chunk c JOIN kb.article_version v ON v.id = c.version_id
+			WHERE c.id = e.chunk_id AND v.article_id = ANY($4::bigint[])))`
 
-	if _, err := s.db.Exec(ctx, sql, spaceID, domainID, nullIfZero(keepModelID)); err != nil {
+	if _, err := s.db.Exec(ctx, sql, spaceID, domainID, nullIfZero(keepModelID), articleIDs); err != nil {
+		return ParseError(err)
+	}
+
+	return nil
+}
+
+func (s *spaceStore) RescopeEmbeddings(ctx context.Context, rootID, domainID int64) error {
+	const sql = `WITH RECURSIVE branch AS (
+		SELECT a.id, a.space_id FROM kb.article a WHERE a.id = $1
+		UNION ALL
+		SELECT c.id, c.space_id FROM kb.article c JOIN branch b ON c.parent_id = b.id
+	)
+	UPDATE kb.chunk_embedding e SET space_id = branch.space_id
+	FROM kb.chunk c, kb.article_version v, branch
+	WHERE c.id = e.chunk_id AND v.id = c.version_id AND v.article_id = branch.id
+	  AND e.domain_id = $2 AND e.space_id <> branch.space_id`
+
+	if _, err := s.db.Exec(ctx, sql, rootID, domainID); err != nil {
 		return ParseError(err)
 	}
 
