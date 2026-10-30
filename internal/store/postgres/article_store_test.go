@@ -317,7 +317,7 @@ func TestArticleMoveUnderParent(t *testing.T) {
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
 
-	moved, err := s.Move(context.Background(), opts, 21, 3)
+	moved, err := s.Move(context.Background(), opts, 21, 4, 3)
 	if err != nil {
 		t.Fatalf("Move: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestArticleMoveUnderParent(t *testing.T) {
 		// cannot slip past them.
 		"WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL",
 		"s.id = a.space_id AND s.domain_id = $2",
-		"p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL",
+		"p.id = $6 AND p.space_id = t.id AND p.deleted_at IS NULL",
 		"p.id NOT IN (SELECT id FROM subtree)",
 		fmt.Sprintf("p.depth + 1 + (SELECT value FROM height) <= %d", model.MaxArticleDepth),
 		// Descendants take an absolute depth from their level in the walk, so a
@@ -349,8 +349,8 @@ func TestArticleMoveUnderParent(t *testing.T) {
 		}
 	}
 
-	if f.gotArgs[4] != int64(21) {
-		t.Errorf("args[4] = %v, want the new parent", f.gotArgs[4])
+	if f.gotArgs[4] != int64(4) || f.gotArgs[5] != int64(21) {
+		t.Errorf("args[4:] = %v, want the target space and the new parent", f.gotArgs[4:])
 	}
 }
 
@@ -360,12 +360,12 @@ func TestArticleMoveToTopLevel(t *testing.T) {
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
 
-	if _, err := s.Move(context.Background(), opts, 0, 3); err != nil {
+	if _, err := s.Move(context.Background(), opts, 0, 4, 3); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
 
 	for _, want := range []string{
-		"SET parent_id = NULL, depth = 1, ver = a.ver + 1",
+		"SET parent_id = NULL, depth = 1, space_id = t.id, ver = a.ver + 1",
 		fmt.Sprintf("1 + (SELECT value FROM height) <= %d", model.MaxArticleDepth),
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -374,8 +374,8 @@ func TestArticleMoveToTopLevel(t *testing.T) {
 	}
 
 	// No parent argument: the top level has none to join.
-	if len(f.gotArgs) != 4 {
-		t.Errorf("args = %v, want four of them", f.gotArgs)
+	if len(f.gotArgs) != 5 || f.gotArgs[4] != int64(4) {
+		t.Errorf("args = %v, want four of them and the target space", f.gotArgs)
 	}
 }
 
@@ -412,7 +412,7 @@ func TestArticleMoveRejectionReasons(t *testing.T) {
 
 			opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5}, fields: []string{"id"}, id: 11}
 
-			_, err := s.Move(context.Background(), opts, 21, tt.expectVer)
+			_, err := s.Move(context.Background(), opts, 21, 4, tt.expectVer)
 
 			if errors.Code(err) != tt.wantCode {
 				t.Fatalf("error = %v, want %v", err, tt.wantCode)
@@ -433,7 +433,7 @@ func TestArticleMovePinsPositionalArgs(t *testing.T) {
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}, id: 11}
 
-	if _, err := s.Move(context.Background(), opts, 21, 3); err != nil {
+	if _, err := s.Move(context.Background(), opts, 21, 4, 3); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
 
@@ -625,15 +625,38 @@ func TestArticleListAppliesParentAndTagFilters(t *testing.T) {
 }
 
 func TestArticleLocateForUpdateLocks(t *testing.T) {
-	f := &fakeQuerier{rows: &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}}
-	s := &articleStore{db: f}
-
-	if _, err := s.LocateForUpdate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{1}}); err != nil {
-		t.Fatalf("LocateForUpdate: %v", err)
+	tests := []struct {
+		name     string
+		rows     *fakeRows
+		wantCode codes.Code
+	}{
+		{"a found article", &fakeRows{cols: []string{"id"}, vals: [][]any{{int64(1)}}}, codes.OK},
+		{"a missing article", &fakeRows{}, codes.NotFound},
 	}
 
-	if !strings.Contains(f.gotSQL, "FOR UPDATE OF m") {
-		t.Fatalf("SQL %q does not lock the row", f.gotSQL)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeQuerier{rows: tt.rows}
+
+			_, err := (&articleStore{db: f}).LocateForUpdate(context.Background(),
+				&fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{1}})
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("error = %v, want %v", err, tt.wantCode)
+			}
+
+			if len(f.sqls) != 2 {
+				t.Fatalf("statements = %q, want the lock and the read", f.sqls)
+			}
+
+			lock, read := f.sqls[0], f.sqls[1]
+			if !strings.Contains(lock, "FOR UPDATE") || strings.Contains(lock, "JOIN") || f.argsList[0][0] != int64(1) {
+				t.Fatalf("lock %q %v, want the article row alone", lock, f.argsList[0])
+			}
+
+			if strings.Contains(read, "FOR UPDATE") || !strings.Contains(read, "s.domain_id") {
+				t.Fatalf("read %q, want the scoped read without a lock", read)
+			}
+		})
 	}
 }
 

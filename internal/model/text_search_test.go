@@ -29,6 +29,31 @@ func TestCanonicalLanguage(t *testing.T) {
 	}
 }
 
+func TestBaseLanguage(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"code", "uk", "uk"},
+		{"region", "uk-UA", "uk"},
+		{"upper case", "PT-br", "pt"},
+		{"script", "zh-Hant", "zh"},
+		{"deprecated code", "iw", "he"},
+		{"undetermined", "und", ""},
+		{"empty", "", ""},
+		{"english name", "Ukrainian", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BaseLanguage(tt.in); got != tt.want {
+				t.Fatalf("BaseLanguage(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTextSearchDictionary(t *testing.T) {
 	tests := []struct {
 		name string

@@ -202,11 +202,15 @@ func (f fakeSpaces) PurgeArticles(context.Context, int64, int64) ([]int64, error
 
 func (f fakeSpaces) LockArticles(context.Context, int64, int64) error { return nil }
 
-func (f fakeSpaces) MarkArticlesPending(context.Context, int64, int64) ([]model.ReindexTarget, error) {
+func (f fakeSpaces) MarkArticlesPending(context.Context, int64, int64, []int64) ([]model.ReindexTarget, error) {
 	return nil, nil
 }
 
-func (f fakeSpaces) DropForeignEmbeddings(context.Context, int64, int64, int64) error { return nil }
+func (f fakeSpaces) DropForeignEmbeddings(context.Context, int64, int64, int64, []int64) error {
+	return nil
+}
+
+func (f fakeSpaces) RescopeEmbeddings(context.Context, int64, int64) error { return nil }
 
 func (f fakeSpaces) ResolveEmbedding(context.Context, int64) (*model.SpaceEmbedding, error) {
 	return f.u.embedding, nil
@@ -341,13 +345,19 @@ func TestSpacesServerPassesTeamsThrough(t *testing.T) {
 func TestSpacesServerListMapsPage(t *testing.T) {
 	server, uow, ctx := newSpacesFixture()
 
-	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE})
+	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{
+		Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE, Language: "uk-UA",
+	})
 	if err != nil {
 		t.Fatalf("ListSpaces: %v", err)
 	}
 
 	if got := uow.listFilter.State; got != model.SpaceStateActive {
 		t.Fatalf("list filter state = %d, want active", got)
+	}
+
+	if got := uow.listFilter.Language; got != "uk" {
+		t.Fatalf("list filter language = %q, want uk", got)
 	}
 
 	if len(page.GetItems()) != 1 || page.GetItems()[0].GetId() != 7 || !page.GetNext() {

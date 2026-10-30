@@ -420,7 +420,9 @@ type ListSpacesRequest struct {
 	// Set of fields to return.
 	Fields []string `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
 	// Optional state filter.
-	State         SpaceState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
+	State SpaceState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
+	// Optional language filter; matches the base language of the tag.
+	Language      string `protobuf:"bytes,7,opt,name=language,proto3" json:"language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -495,6 +497,13 @@ func (x *ListSpacesRequest) GetState() SpaceState {
 		return x.State
 	}
 	return SpaceState_SPACE_STATE_UNSPECIFIED
+}
+
+func (x *ListSpacesRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
 }
 
 // SpaceList is a page of spaces.
@@ -797,14 +806,15 @@ const file_space_proto_rawDesc = "" +
 	"\bteam_ids\x18\n" +
 	" \x03(\x03B\f\xbaH\t\x92\x01\x06\"\x04\"\x02 \x00R\ateamIds\x126\n" +
 	"\x05state\x18\v \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05stateB\x18\n" +
-	"\x16_vector_search_enabled\"\xad\x01\n" +
+	"\x16_vector_search_enabled\"\xc9\x01\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
 	"\x01q\x18\x03 \x01(\tR\x01q\x12\x12\n" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x16\n" +
 	"\x06fields\x18\x05 \x03(\tR\x06fields\x126\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\"H\n" +
+	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12\x1a\n" +
+	"\blanguage\x18\a \x01(\tR\blanguage\"H\n" +
 	"\tSpaceList\x12'\n" +
 	"\x05items\x18\x01 \x03(\v2\x11.webitel.kb.SpaceR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"-\n" +

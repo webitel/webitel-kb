@@ -32,11 +32,13 @@ type fakeArticleStore struct {
 	listNext bool
 
 	locateErr error
+	stale     *model.Article
 
 	createIn  *model.Article
 	updateIn  *model.Article
 	updateVer int32
 	moveTo    int64
+	moveSpace int64
 	moveVer   int32
 
 	lockedSpaceIDs    []int64 // tree locks
@@ -75,6 +77,12 @@ func (f *fakeArticleStore) Locate(_ context.Context, opts options.Searcher) (*mo
 
 	ids := opts.GetIDs()
 	if f.current != nil && len(ids) == 1 && ids[0] == f.current.ID {
+		if stale := f.stale; stale != nil {
+			f.stale = nil
+
+			return stale, nil
+		}
+
 		return f.current, nil
 	}
 
@@ -129,10 +137,13 @@ func (f *fakeArticleStore) Delete(_ context.Context, opts options.Deleter, expec
 	return f.written, nil
 }
 
-func (f *fakeArticleStore) Move(_ context.Context, opts options.Updator, newParentID int64, expectedVer int32) (*model.Article, error) {
+func (f *fakeArticleStore) Move(
+	_ context.Context, opts options.Updator, newParentID, spaceID int64, expectedVer int32,
+) (*model.Article, error) {
 	f.moveCalls++
 	f.writeFields = append(f.writeFields, opts.GetFields())
 	f.moveTo = newParentID
+	f.moveSpace = spaceID
 	f.moveVer = expectedVer
 	f.step("move")
 
@@ -269,7 +280,7 @@ func newArticleUow() *articleUow {
 			Subject: "stored", Type: model.ArticleTypeArticle,
 			State: model.ArticleStateActive, Tags: []string{"vpn"},
 		},
-		located: &model.Article{ID: 2, Depth: 2},
+		located: &model.Article{ID: 2, SpaceID: 3, Depth: 2},
 		written: &model.Article{ID: 7, Subject: "written"},
 		subtree: []model.SubtreeNode{{ID: 7, Depth: 2}, {ID: 8, Depth: 3}},
 	}
@@ -546,7 +557,7 @@ func TestArticleHomeStaysOutOfTheTree(t *testing.T) {
 		{
 			name: "move under the home page", parent: true, wantID: "kb.article.home_parent",
 			run: func(svc *ArticleService) error {
-				_, err := svc.Move(context.Background(), updaterOpts(), 2, 4)
+				_, err := svc.Move(context.Background(), updaterOpts(), 2, 0, 4)
 
 				return err
 			},
@@ -554,7 +565,7 @@ func TestArticleHomeStaysOutOfTheTree(t *testing.T) {
 		{
 			name: "move of the home page", home: true, wantID: "kb.article.home_move",
 			run: func(svc *ArticleService) error {
-				_, err := svc.Move(context.Background(), updaterOpts(), 0, 4)
+				_, err := svc.Move(context.Background(), updaterOpts(), 0, 0, 4)
 
 				return err
 			},
@@ -608,13 +619,18 @@ func TestArticleDeleteLocksTheSpaceFirst(t *testing.T) {
 	tests := []struct {
 		name      string
 		locateErr error
+		stale     *model.Article
 		wantOrder string
 		wantCode  codes.Code
 	}{
-		{name: "the space before the subtree", wantOrder: "locate,tree-lock,delete-article", wantCode: codes.OK},
+		{name: "the space before the subtree", wantOrder: "locate,tree-lock,locate,delete-article", wantCode: codes.OK},
 		{
 			name: "an unknown article deletes nothing", locateErr: errors.NotFound("entity does not exist"),
 			wantOrder: "locate", wantCode: codes.NotFound,
+		},
+		{
+			name: "an article moved out before the lock deletes nothing", stale: &model.Article{ID: 7, SpaceID: 4},
+			wantOrder: "locate,tree-lock,locate", wantCode: codes.Aborted,
 		},
 	}
 
@@ -623,6 +639,7 @@ func TestArticleDeleteLocksTheSpaceFirst(t *testing.T) {
 			svc, uow := newArticleFixture()
 			uow.articles.located = &model.Article{ID: 7, SpaceID: 3}
 			uow.articles.locateErr = tt.locateErr
+			uow.articles.stale = tt.stale
 
 			_, err := svc.Delete(context.Background(), updaterOpts(), 4)
 			if errors.Code(err) != tt.wantCode {
@@ -633,7 +650,8 @@ func TestArticleDeleteLocksTheSpaceFirst(t *testing.T) {
 				t.Fatalf("flow order = %s, want %s", order, tt.wantOrder)
 			}
 
-			if tt.locateErr == nil && (!slices.Equal(uow.articles.lockedSpaceIDs, []int64{3}) || uow.transactions != 1) {
+			if tt.locateErr == nil && tt.stale == nil &&
+				(!slices.Equal(uow.articles.lockedSpaceIDs, []int64{3}) || uow.transactions != 1) {
 				t.Fatalf("locked %v in %d transactions, want space 3 in one", uow.articles.lockedSpaceIDs, uow.transactions)
 			}
 		})
@@ -1073,7 +1091,7 @@ func TestArticleUpdateAcceptsMatchingHierarchyInput(t *testing.T) {
 func TestArticleMoveFlow(t *testing.T) {
 	svc, uow := newArticleFixture()
 
-	if _, err := svc.Move(context.Background(), updaterOpts(), 50, 4); err != nil {
+	if _, err := svc.Move(context.Background(), updaterOpts(), 50, 0, 4); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
 
@@ -1093,8 +1111,13 @@ func TestArticleMoveFlow(t *testing.T) {
 		t.Fatalf("locked spaces = %v, want the article's", uow.articles.lockedSpaceIDs)
 	}
 
-	if uow.articles.moveTo != 50 || uow.articles.moveVer != 4 {
-		t.Fatalf("move args = (%d, %d)", uow.articles.moveTo, uow.articles.moveVer)
+	if uow.articles.moveTo != 50 || uow.articles.moveSpace != 3 || uow.articles.moveVer != 4 {
+		t.Fatalf("move args = (%d, %d, %d)", uow.articles.moveTo, uow.articles.moveSpace, uow.articles.moveVer)
+	}
+
+	if len(uow.spaces.rescopedRoots) != 0 || len(uow.spaces.droppedIn) != 0 || len(uow.outbox.events) != 0 {
+		t.Fatalf("index touched: rescoped %v, dropped %v, events %v",
+			uow.spaces.rescopedRoots, uow.spaces.droppedIn, uow.outbox.events)
 	}
 }
 
@@ -1118,7 +1141,7 @@ func TestArticleMoveHonestErrors(t *testing.T) {
 				uow.articles.located = &model.Article{ID: tt.newParentID, Depth: tt.targetDepth}
 			}
 
-			_, err := svc.Move(context.Background(), updaterOpts(), tt.newParentID, 4)
+			_, err := svc.Move(context.Background(), updaterOpts(), tt.newParentID, 0, 4)
 
 			if errors.ID(err) != tt.wantID {
 				t.Fatalf("error = %v, want %s", err, tt.wantID)
@@ -1134,7 +1157,7 @@ func TestArticleMoveHonestErrors(t *testing.T) {
 func TestArticleMoveToTopSkipsTargetChecks(t *testing.T) {
 	svc, uow := newArticleFixture()
 
-	if _, err := svc.Move(context.Background(), updaterOpts(), 0, 4); err != nil {
+	if _, err := svc.Move(context.Background(), updaterOpts(), 0, 0, 4); err != nil {
 		t.Fatalf("Move: %v", err)
 	}
 
@@ -1145,6 +1168,141 @@ func TestArticleMoveToTopSkipsTargetChecks(t *testing.T) {
 
 	if uow.articles.moveCalls != 1 {
 		t.Fatal("the move must run")
+	}
+}
+
+func TestArticleMoveIntoAnotherSpace(t *testing.T) {
+	source := &model.Space{ID: 3, Language: "uk", EmbeddingModelID: 8, VectorSearchEnabled: true}
+
+	tests := []struct {
+		name        string
+		target      *model.Space
+		wantLocks   []int64
+		wantReindex bool
+		wantKeep    int64
+	}{
+		{
+			name:      "the same model keeps the vectors",
+			target:    &model.Space{ID: 9, Language: "uk-UA", EmbeddingModelID: 8, VectorSearchEnabled: true},
+			wantLocks: []int64{3, 9}, wantKeep: 8,
+		},
+		{
+			name: "an inactive target takes the branch",
+			target: &model.Space{
+				ID: 9, Language: "uk", EmbeddingModelID: 8, VectorSearchEnabled: true, State: model.SpaceStateInactive,
+			},
+			wantLocks: []int64{3, 9}, wantKeep: 8,
+		},
+		{
+			name:      "another model queues the branch",
+			target:    &model.Space{ID: 9, Language: "uk", EmbeddingModelID: 10, VectorSearchEnabled: true},
+			wantLocks: []int64{3, 9}, wantReindex: true, wantKeep: 10,
+		},
+		{
+			name:      "a target without vectors queues the branch",
+			target:    &model.Space{ID: 1, Language: "uk"},
+			wantLocks: []int64{1, 3}, wantReindex: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.spaces.byID = map[int64]*model.Space{3: source, tt.target.ID: tt.target}
+			uow.spaces.pending = []model.ReindexTarget{{ArticleID: 7, VersionID: 40}, {ArticleID: 8, VersionID: 41}}
+
+			if _, err := svc.Move(context.Background(), updaterOpts(), 0, tt.target.ID, 4); err != nil {
+				t.Fatalf("Move: %v", err)
+			}
+
+			if !slices.Equal(uow.articles.lockedSpaceIDs, tt.wantLocks) {
+				t.Fatalf("locked spaces = %v, want %v", uow.articles.lockedSpaceIDs, tt.wantLocks)
+			}
+
+			if uow.articles.moveSpace != tt.target.ID {
+				t.Fatalf("moved into %d, want %d", uow.articles.moveSpace, tt.target.ID)
+			}
+
+			if !slices.Equal(uow.spaces.rescopedRoots, []int64{7}) {
+				t.Fatalf("rescoped from %v, want the moved root", uow.spaces.rescopedRoots)
+			}
+
+			branch := []int64{7, 8}
+			if !slices.Equal(uow.spaces.keptModels, []int64{tt.wantKeep}) ||
+				!slices.EqualFunc(uow.spaces.droppedArticles, [][]int64{branch}, slices.Equal) {
+				t.Fatalf("dropped %v keeping %v, want the branch keeping %d",
+					uow.spaces.droppedArticles, uow.spaces.keptModels, tt.wantKeep)
+			}
+
+			if !tt.wantReindex {
+				if len(uow.spaces.pendingScope) != 0 || len(uow.outbox.events) != 0 {
+					t.Fatalf("queued %v, events %v, want none", uow.spaces.pendingScope, uow.outbox.events)
+				}
+
+				return
+			}
+
+			if !slices.EqualFunc(uow.spaces.pendingArticles, [][]int64{branch}, slices.Equal) ||
+				uow.spaces.pendingScope[0][0] != tt.target.ID {
+				t.Fatalf("pending %v in %v, want the branch in the target", uow.spaces.pendingArticles, uow.spaces.pendingScope)
+			}
+
+			if len(uow.outbox.events) != 2 || uow.outbox.events[0].SpaceID != tt.target.ID || uow.outbox.events[1].VersionID != 41 {
+				t.Fatalf("events = %+v, want the latest versions in the target", uow.outbox.events)
+			}
+		})
+	}
+}
+
+func TestArticleMoveIntoAnotherSpaceRefusals(t *testing.T) {
+	tests := []struct {
+		name        string
+		target      *model.Space
+		newParentID int64
+		stale       *model.Article
+		wantID      string
+		wantCode    codes.Code
+	}{
+		{
+			name:   "another language",
+			target: &model.Space{ID: 9, Language: "en"}, wantID: "kb.article.move_language", wantCode: codes.InvalidArgument,
+		},
+		{
+			name:   "a parent of the source space",
+			target: &model.Space{ID: 9, Language: "uk"}, newParentID: 50,
+			wantID: "kb.article.move_parent_space", wantCode: codes.InvalidArgument,
+		},
+		{
+			name:     "a space of another domain",
+			wantCode: codes.NotFound,
+		},
+		{
+			name:   "an article moved out meanwhile",
+			target: &model.Space{ID: 9, Language: "uk"}, stale: &model.Article{ID: 7, SpaceID: 4},
+			wantID: "kb.article.space_changed", wantCode: codes.Aborted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.spaces.byID = map[int64]*model.Space{3: {ID: 3, Language: "uk"}}
+
+			if tt.target != nil {
+				uow.spaces.byID[tt.target.ID] = tt.target
+			}
+
+			uow.articles.stale = tt.stale
+
+			_, err := svc.Move(context.Background(), updaterOpts(), tt.newParentID, 9, 4)
+			if errors.Code(err) != tt.wantCode || (tt.wantID != "" && errors.ID(err) != tt.wantID) {
+				t.Fatalf("error = %v, want %v %s", err, tt.wantCode, tt.wantID)
+			}
+
+			if uow.articles.moveCalls != 0 || len(uow.spaces.rescopedRoots) != 0 {
+				t.Fatal("a refused move must not write")
+			}
+		})
 	}
 }
 

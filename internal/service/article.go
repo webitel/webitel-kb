@@ -72,6 +72,18 @@ var (
 		"the home page does not move",
 		errors.WithID("kb.article.home_move"),
 	)
+	errMoveLanguage = errors.InvalidArgument(
+		"an article moves only to a space of the same language",
+		errors.WithID("kb.article.move_language"),
+	)
+	errMoveParentSpace = errors.InvalidArgument(
+		"the new parent belongs to another space",
+		errors.WithID("kb.article.move_parent_space"),
+	)
+	errMovedMeanwhile = errors.Aborted(
+		"the article moved to another space meanwhile",
+		errors.WithID("kb.article.space_changed"),
+	)
 	errHomeImmutable = errors.InvalidArgument(
 		"an article becomes the home page only on create",
 		errors.WithID("kb.article.home_immutable"),
@@ -168,7 +180,7 @@ func (s *ArticleService) Create(
 		}
 
 		if in.ParentID != 0 {
-			if err := checkDepth(ctx, tx, session, in.ParentID, 0, "kb.article.create_depth"); err != nil {
+			if _, err := checkDepth(ctx, tx, session, in.ParentID, 0, "kb.article.create_depth"); err != nil {
 				return err
 			}
 		}
@@ -352,6 +364,10 @@ func (s *ArticleService) Delete(
 			return err
 		}
 
+		if err := requireSameSpace(ctx, tx, session, located); err != nil {
+			return err
+		}
+
 		deleted, err = tx.ArticleStore().Delete(ctx, opts, expectedVer)
 
 		return err
@@ -363,11 +379,12 @@ func (s *ArticleService) Delete(
 	return deleted, nil
 }
 
-// Move reparents an article. The whole flow runs in one transaction and moves
+// Move reparents an article, into another space of the same language when
+// newSpaceID names one. The whole flow runs in one transaction and moves
 // within a space are serialized: two concurrent moves validated against their
 // own snapshots could otherwise weave a cycle neither of them sees.
 func (s *ArticleService) Move(
-	ctx context.Context, opts options.Updator, newParentID int64, expectedVer int32,
+	ctx context.Context, opts options.Updator, newParentID, newSpaceID int64, expectedVer int32,
 ) (*model.Article, error) {
 	session := opts.GetAuthOpts()
 
@@ -381,7 +398,12 @@ func (s *ArticleService) Move(
 			return err
 		}
 
-		if err := tx.ArticleStore().LockSpaceTree(ctx, located.SpaceID, session.GetDomainID()); err != nil {
+		targetSpaceID := located.SpaceID
+		if newSpaceID != 0 {
+			targetSpaceID = newSpaceID
+		}
+
+		if err := lockSpaceTrees(ctx, tx, session, located.SpaceID, targetSpaceID); err != nil {
 			return err
 		}
 
@@ -392,8 +414,21 @@ func (s *ArticleService) Move(
 			return err
 		}
 
+		if current.SpaceID != located.SpaceID {
+			return errMovedMeanwhile
+		}
+
 		if current.Home {
 			return errHomeMove
+		}
+
+		var source, target *model.Space
+
+		if targetSpaceID != current.SpaceID {
+			source, target, err = moveSpaces(ctx, tx, session, current.SpaceID, targetSpaceID)
+			if err != nil {
+				return err
+			}
 		}
 
 		subtree, err := tx.ArticleStore().Subtree(ctx, readOptions{auth: session}, current.ID)
@@ -402,20 +437,117 @@ func (s *ArticleService) Move(
 		}
 
 		if newParentID != 0 {
-			if err := validateMoveTarget(ctx, tx, session, current, subtree, newParentID); err != nil {
+			if err := validateMoveTarget(ctx, tx, session, current, subtree, newParentID, targetSpaceID); err != nil {
 				return err
 			}
 		}
 
-		moved, err = tx.ArticleStore().Move(ctx, opts, newParentID, expectedVer)
+		moved, err = tx.ArticleStore().Move(ctx, opts, newParentID, targetSpaceID, expectedVer)
+		if err != nil {
+			return err
+		}
 
-		return err
+		if target == nil {
+			return nil
+		}
+
+		return moveIndex(ctx, tx, session, source, target, current.ID, subtreeIDs(subtree))
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return moved, nil
+}
+
+// requireSameSpace refuses an article a move carried into another space
+// after it was read: the tree lock taken is then not the one of its space.
+func requireSameSpace(ctx context.Context, tx store.UnitOfWork, session auth.Auther, located *model.Article) error {
+	now, err := tx.ArticleStore().Locate(ctx, readOptions{
+		auth: session, ids: []int64{located.ID}, fields: []string{"id", "space"},
+	})
+	if err != nil {
+		return err
+	}
+
+	if now.SpaceID != located.SpaceID {
+		return errMovedMeanwhile
+	}
+
+	return nil
+}
+
+// lockSpaceTrees takes the tree locks of the spaces a move touches in id
+// order, so two moves between the same spaces in opposite directions cannot
+// deadlock.
+func lockSpaceTrees(ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceIDs ...int64) error {
+	ids := slices.Clone(spaceIDs)
+	slices.Sort(ids)
+
+	for _, id := range slices.Compact(ids) {
+		if err := tx.ArticleStore().LockSpaceTree(ctx, id, session.GetDomainID()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// moveSpaces reads both spaces of a move between them and refuses spaces of
+// different languages.
+func moveSpaces(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther, sourceID, targetID int64,
+) (*model.Space, *model.Space, error) {
+	fields := []string{"id", "language", "embedding_model_id", "vector_search_enabled"}
+
+	source, err := tx.SpaceStore().Locate(ctx, readOptions{auth: session, ids: []int64{sourceID}, fields: fields})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	target, err := tx.SpaceStore().Locate(ctx, readOptions{auth: session, ids: []int64{targetID}, fields: fields})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if model.BaseLanguage(source.Language) != model.BaseLanguage(target.Language) {
+		return nil, nil, errMoveLanguage
+	}
+
+	return source, target, nil
+}
+
+// moveIndex carries the vectors of the moved branch over to the target space.
+// Vectors of the model the target keeps only change their scope; the rest of
+// the live articles go, and a change of the search model queues them again.
+func moveIndex(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
+	source, target *model.Space, rootID int64, articleIDs []int64,
+) error {
+	if err := tx.SpaceStore().RescopeEmbeddings(ctx, rootID, session.GetDomainID()); err != nil {
+		return err
+	}
+
+	if err := tx.SpaceStore().DropForeignEmbeddings(
+		ctx, target.ID, session.GetDomainID(), target.EmbeddingModelID, articleIDs,
+	); err != nil {
+		return err
+	}
+
+	if source.SearchModelID() == target.SearchModelID() {
+		return nil
+	}
+
+	return requestSpaceReindex(ctx, tx, session, target.ID, articleIDs)
+}
+
+func subtreeIDs(subtree []model.SubtreeNode) []int64 {
+	ids := make([]int64, 0, len(subtree))
+	for _, node := range subtree {
+		ids = append(ids, node.ID)
+	}
+
+	return ids
 }
 
 func (s *ArticleService) Ancestors(
@@ -572,33 +704,34 @@ func reindexEvent(session auth.Auther, articleID, versionID, spaceID int64) even
 func checkDepth(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
 	parentID int64, height int32, errID string,
-) error {
+) (*model.Article, error) {
 	parent, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-		auth: session, ids: []int64{parentID}, fields: []string{"id", "depth", "home"},
+		auth: session, ids: []int64{parentID}, fields: []string{"id", "space", "depth", "home"},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if parent.Home {
-		return errHomeParent
+		return nil, errHomeParent
 	}
 
 	if parent.Depth+1+height > model.MaxArticleDepth {
-		return errors.InvalidArgument(
+		return nil, errors.InvalidArgument(
 			"maximum hierarchy depth is 5",
 			errors.WithID(errID),
 		)
 	}
 
-	return nil
+	return parent, nil
 }
 
 // validateMoveTarget explains a refusal the guarded write would only report
-// generically: a move under the own subtree and a move past the depth ceiling.
+// generically: a move under the own subtree, past the depth ceiling or under
+// an article of another space.
 func validateMoveTarget(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
-	current *model.Article, subtree []model.SubtreeNode, newParentID int64,
+	current *model.Article, subtree []model.SubtreeNode, newParentID, targetSpaceID int64,
 ) error {
 	height := int32(0)
 
@@ -615,7 +748,16 @@ func validateMoveTarget(
 		}
 	}
 
-	return checkDepth(ctx, tx, session, newParentID, height, "kb.article.move_depth")
+	parent, err := checkDepth(ctx, tx, session, newParentID, height, "kb.article.move_depth")
+	if err != nil {
+		return err
+	}
+
+	if parent.SpaceID != targetSpaceID {
+		return errMoveParentSpace
+	}
+
+	return nil
 }
 
 // rejectImmutableInput refuses update fields an update may not change: the

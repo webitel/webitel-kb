@@ -27,16 +27,23 @@ func CanonicalLanguage(tag string) (string, bool) {
 	return parsed.String(), true
 }
 
-// TextSearchDictionary names the stemmer a space language builds its search
-// vectors with.
-func TextSearchDictionary(tag string) string {
+// BaseLanguage returns the primary language of a BCP 47 tag, empty for an
+// invalid one: uk-UA and uk are one language.
+func BaseLanguage(tag string) string {
 	parsed, err := language.Parse(tag)
-	if err != nil {
-		return TextSearchFallback
+	if err != nil || parsed == language.Und {
+		return ""
 	}
 
 	base, _ := parsed.Base()
-	if name, ok := snowballByLanguage[base.String()]; ok {
+
+	return base.String()
+}
+
+// TextSearchDictionary names the stemmer a space language builds its search
+// vectors with.
+func TextSearchDictionary(tag string) string {
+	if name, ok := snowballByLanguage[BaseLanguage(tag)]; ok {
 		return name
 	}
 
