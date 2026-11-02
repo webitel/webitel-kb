@@ -64,14 +64,15 @@ func (s *AttachmentService) List(
 }
 
 // Attach binds a file the caller uploaded to Storage. Its metadata is read
-// from Storage rather than taken on trust, which also proves the file is there
-// and belongs to the caller's domain.
+// from Storage rather than taken on trust, which also proves the file is there,
+// belongs to the caller's domain and came through the knowledgebase channel.
 func (s *AttachmentService) Attach(
 	ctx context.Context, opts options.Creator, articleID, fileID int64,
 ) (*model.Attachment, error) {
 	file, err := s.files.Describe(ctx, opts.GetAuthOpts().GetDomainID(), fileID)
 	if err != nil {
-		if errors.Code(err) == codes.NotFound {
+		// Storage refuses a file of another channel.
+		if code := errors.Code(err); code == codes.NotFound || code == codes.PermissionDenied {
 			return nil, errors.NotFound(
 				"file is not found in storage",
 				errors.WithID("kb.attachment.file_not_found"),

@@ -178,6 +178,10 @@ func TestDescribeReadsMetadataAndLink(t *testing.T) {
 		t.Fatalf("request = %+v, want the file of domain 5 with its metadata", api.link)
 	}
 
+	if got := api.link.GetQuery()[requireChannel]; got != channelKnowledgebase {
+		t.Fatalf("required channel = %q, want %q", got, channelKnowledgebase)
+	}
+
 	if file.ID != 4 || file.Name != "guide.pdf" || file.Mime != "application/pdf" || file.Size != 2048 {
 		t.Fatalf("file = %+v", file)
 	}
