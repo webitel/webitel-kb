@@ -130,7 +130,7 @@ func (s *spaceStore) List(
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
 		WithState(filter.State).
-		WithLanguage(filter.Language).
+		WithLanguages(filter.Languages).
 		WithFields(opts.GetFields()).
 		WithSort(sorts...).
 		WithPaging(opts.GetSize(), opts.GetPage()).

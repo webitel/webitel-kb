@@ -740,9 +740,11 @@ type MoveArticleRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Concurrency token of the article to move.
 	Etag string `protobuf:"bytes,1,opt,name=etag,proto3" json:"etag,omitempty"`
-	// New parent id; 0 to move to top level.
+	// New parent id; 0 to move to top level. The article moves into the space
+	// of the parent.
 	NewParentId int64 `protobuf:"varint,2,opt,name=new_parent_id,json=newParentId,proto3" json:"new_parent_id,omitempty"`
-	// Target space id of the same language; 0 keeps the current space.
+	// Target space id of the same language for a move to top level; 0 keeps
+	// the current space. With a new parent it may only repeat its space.
 	NewSpaceId    int64 `protobuf:"varint,3,opt,name=new_space_id,json=newSpaceId,proto3" json:"new_space_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

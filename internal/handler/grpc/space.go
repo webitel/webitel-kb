@@ -33,8 +33,8 @@ func (s *SpacesServer) ListSpaces(ctx context.Context, req *kb.ListSpacesRequest
 	}
 
 	items, next, err := s.service.List(ctx, opts, model.SpaceFilter{
-		State:    int32(req.GetState()),
-		Language: req.GetLanguage(),
+		State:     int32(req.GetState()),
+		Languages: req.GetLanguages(),
 	})
 	if err != nil {
 		return nil, err

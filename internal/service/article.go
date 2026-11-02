@@ -77,12 +77,20 @@ var (
 		errors.WithID("kb.article.move_language"),
 	)
 	errMoveParentSpace = errors.InvalidArgument(
-		"the new parent belongs to another space",
+		"the new space is not the space of the new parent",
 		errors.WithID("kb.article.move_parent_space"),
 	)
 	errMovedMeanwhile = errors.Aborted(
 		"the article moved to another space meanwhile",
 		errors.WithID("kb.article.space_changed"),
+	)
+	errMoveCreateDenied = errors.Forbidden(
+		"a move to another space needs the right to create articles",
+		errors.WithID("kb.article.move_create_denied"),
+	)
+	errParentMovedMeanwhile = errors.Aborted(
+		"the new parent moved to another space meanwhile",
+		errors.WithID("kb.article.parent_space_changed"),
 	)
 	errHomeImmutable = errors.InvalidArgument(
 		"an article becomes the home page only on create",
@@ -379,10 +387,15 @@ func (s *ArticleService) Delete(
 	return deleted, nil
 }
 
-// Move reparents an article, into another space of the same language when
-// newSpaceID names one. The whole flow runs in one transaction and moves
-// within a space are serialized: two concurrent moves validated against their
-// own snapshots could otherwise weave a cycle neither of them sees.
+// articlesObjClass is the permission object of articles.
+const articlesObjClass = "kb_articles"
+
+// Move reparents an article. The target space is the one of the new parent,
+// or newSpaceID for a move to the top level; another space must have the same
+// language and needs the right to create articles. The whole flow runs in one
+// transaction and moves within a space are serialized: two concurrent moves
+// validated against their own snapshots could otherwise weave a cycle neither
+// of them sees.
 func (s *ArticleService) Move(
 	ctx context.Context, opts options.Updator, newParentID, newSpaceID int64, expectedVer int32,
 ) (*model.Article, error) {
@@ -398,9 +411,13 @@ func (s *ArticleService) Move(
 			return err
 		}
 
-		targetSpaceID := located.SpaceID
-		if newSpaceID != 0 {
-			targetSpaceID = newSpaceID
+		targetSpaceID, err := moveTargetSpace(ctx, tx, session, located.SpaceID, newParentID, newSpaceID)
+		if err != nil {
+			return err
+		}
+
+		if targetSpaceID != located.SpaceID && !session.CheckObacAccess(articlesObjClass, auth.Add) {
+			return errMoveCreateDenied
 		}
 
 		if err := lockSpaceTrees(ctx, tx, session, located.SpaceID, targetSpaceID); err != nil {
@@ -475,6 +492,33 @@ func requireSameSpace(ctx context.Context, tx store.UnitOfWork, session auth.Aut
 	}
 
 	return nil
+}
+
+// moveTargetSpace resolves the space a move goes to: the one of the new
+// parent, which newSpaceID may only repeat, else newSpaceID, else the current one.
+func moveTargetSpace(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther, currentSpaceID, newParentID, newSpaceID int64,
+) (int64, error) {
+	if newParentID == 0 {
+		if newSpaceID != 0 {
+			return newSpaceID, nil
+		}
+
+		return currentSpaceID, nil
+	}
+
+	parent, err := tx.ArticleStore().Locate(ctx, readOptions{
+		auth: session, ids: []int64{newParentID}, fields: []string{"id", "space"},
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	if newSpaceID != 0 && newSpaceID != parent.SpaceID {
+		return 0, errMoveParentSpace
+	}
+
+	return parent.SpaceID, nil
 }
 
 // lockSpaceTrees takes the tree locks of the spaces a move touches in id
@@ -728,7 +772,7 @@ func checkDepth(
 
 // validateMoveTarget explains a refusal the guarded write would only report
 // generically: a move under the own subtree, past the depth ceiling or under
-// an article of another space.
+// a parent that left the target space after it was read.
 func validateMoveTarget(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
 	current *model.Article, subtree []model.SubtreeNode, newParentID, targetSpaceID int64,
@@ -754,7 +798,7 @@ func validateMoveTarget(
 	}
 
 	if parent.SpaceID != targetSpaceID {
-		return errMoveParentSpace
+		return errParentMovedMeanwhile
 	}
 
 	return nil

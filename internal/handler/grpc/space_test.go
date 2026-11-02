@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -346,7 +347,7 @@ func TestSpacesServerListMapsPage(t *testing.T) {
 	server, uow, ctx := newSpacesFixture()
 
 	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{
-		Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE, Language: "uk-UA",
+		Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE, Languages: []string{"uk-UA", "en"},
 	})
 	if err != nil {
 		t.Fatalf("ListSpaces: %v", err)
@@ -356,8 +357,8 @@ func TestSpacesServerListMapsPage(t *testing.T) {
 		t.Fatalf("list filter state = %d, want active", got)
 	}
 
-	if got := uow.listFilter.Language; got != "uk" {
-		t.Fatalf("list filter language = %q, want uk", got)
+	if got := uow.listFilter.Languages; !slices.Equal(got, []string{"uk", "en"}) {
+		t.Fatalf("list filter languages = %q, want [uk en]", got)
 	}
 
 	if len(page.GetItems()) != 1 || page.GetItems()[0].GetId() != 7 || !page.GetNext() {

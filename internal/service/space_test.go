@@ -25,17 +25,18 @@ var errFakeUnused = errors.Internal("not implemented in fake")
 type fakeAuther struct {
 	domainID int64
 	userID   int64
+	denied   auth.AccessMode // actions the session has no right for
 }
 
-func (a fakeAuther) GetRoles() []int64                            { return nil }
-func (a fakeAuther) GetUserID() int64                             { return a.userID }
-func (a fakeAuther) GetUserIP() string                            { return "" }
-func (a fakeAuther) GetDomainID() int64                           { return a.domainID }
-func (a fakeAuther) GetPermissions() []string                     { return nil }
-func (a fakeAuther) GetObjectScope(string) auth.ObjectScoper      { return nil }
-func (a fakeAuther) GetAllObjectScopes() []auth.ObjectScoper      { return nil }
-func (a fakeAuther) CheckLicenseAccess(string) bool               { return true }
-func (a fakeAuther) CheckObacAccess(string, auth.AccessMode) bool { return true }
+func (a fakeAuther) GetRoles() []int64                                { return nil }
+func (a fakeAuther) GetUserID() int64                                 { return a.userID }
+func (a fakeAuther) GetUserIP() string                                { return "" }
+func (a fakeAuther) GetDomainID() int64                               { return a.domainID }
+func (a fakeAuther) GetPermissions() []string                         { return nil }
+func (a fakeAuther) GetObjectScope(string) auth.ObjectScoper          { return nil }
+func (a fakeAuther) GetAllObjectScopes() []auth.ObjectScoper          { return nil }
+func (a fakeAuther) CheckLicenseAccess(string) bool                   { return true }
+func (a fakeAuther) CheckObacAccess(_ string, m auth.AccessMode) bool { return m&a.denied == 0 }
 func (a fakeAuther) IsRbacCheckRequired(string, auth.AccessMode) bool {
 	return false
 }
@@ -547,24 +548,28 @@ func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
 	}
 }
 
-func TestSpaceListNarrowsTheLanguage(t *testing.T) {
+func TestSpaceListNarrowsTheLanguages(t *testing.T) {
 	tests := []struct {
 		name      string
-		language  string
-		want      string
+		languages []string
+		want      []string
 		wantErrID string
 	}{
-		{"region narrows to the base", "uk-UA", "uk", ""},
-		{"base stays", "UK", "uk", ""},
-		{"empty means any", "", "", ""},
-		{"invalid tag", "Ukrainian", "", "kb.space.language_invalid"},
+		{"region narrows to the base", []string{"uk-UA"}, []string{"uk"}, ""},
+		{"base stays", []string{"UK"}, []string{"uk"}, ""},
+		{"several languages", []string{"uk", "en-GB", "pl"}, []string{"uk", "en", "pl"}, ""},
+		{"regions of one base collapse", []string{"uk-UA", "uk", "en", "en-US"}, []string{"uk", "en"}, ""},
+		{"none means any", nil, []string{}, ""},
+		{"invalid tag", []string{"Ukrainian"}, nil, "kb.space.language_invalid"},
+		{"invalid tag among valid ones", []string{"uk", "Ukrainian"}, nil, "kb.space.language_invalid"},
+		{"empty tag", []string{""}, nil, "kb.space.language_invalid"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow := newSpaceFixture()
 
-			_, _, err := svc.List(context.Background(), nil, model.SpaceFilter{Language: tt.language})
+			_, _, err := svc.List(context.Background(), nil, model.SpaceFilter{Languages: tt.languages})
 			if tt.wantErrID != "" {
 				if errors.ID(err) != tt.wantErrID || uow.spaces.listCalls != 0 {
 					t.Fatalf("err = %v, store calls = %d, want %s before the store", err, uow.spaces.listCalls, tt.wantErrID)
@@ -577,8 +582,8 @@ func TestSpaceListNarrowsTheLanguage(t *testing.T) {
 				t.Fatalf("List: %v", err)
 			}
 
-			if got := uow.spaces.listFilter.Language; got != tt.want {
-				t.Fatalf("store language = %q, want %q", got, tt.want)
+			if got := uow.spaces.listFilter.Languages; !slices.Equal(got, tt.want) {
+				t.Fatalf("store languages = %q, want %q", got, tt.want)
 			}
 		})
 	}

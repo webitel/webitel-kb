@@ -60,7 +60,9 @@ func TestInputRules(t *testing.T) {
 		{name: "space delete with negative id", msg: &kb.DeleteSpaceRequest{Id: -1}, wantField: "id", wantRule: "int64.gt"},
 		{name: "space list unknown state", msg: &kb.ListSpacesRequest{State: 9}, wantField: "state", wantRule: "enum.defined_only"},
 		{name: "space list with lenient paging", msg: &kb.ListSpacesRequest{Size: -1, Page: -3}},
-		{name: "space list language is the service's to check", msg: &kb.ListSpacesRequest{Language: "Ukrainian"}},
+		{name: "space list languages are the service's to check", msg: &kb.ListSpacesRequest{Languages: []string{"uk", "Ukrainian"}}},
+		{name: "space list with 50 languages", msg: &kb.ListSpacesRequest{Languages: make([]string, 50)}},
+		{name: "space list with too many languages", msg: &kb.ListSpacesRequest{Languages: make([]string, 51)}, wantField: "languages", wantRule: "repeated.max_items"},
 
 		{name: "article create without input", msg: &kb.CreateArticleRequest{}, wantField: "input", wantRule: "required"},
 		{name: "article create without space", msg: &kb.CreateArticleRequest{Input: &kb.InputArticle{Subject: "a"}}, wantField: "input", wantRule: "kb.article.space_required"},

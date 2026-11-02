@@ -34,19 +34,40 @@ var errLanguageInvalid = errors.InvalidArgument(
 	errors.WithID("kb.space.language_invalid"),
 )
 
-// List narrows the language filter to its base language, so one tag finds
-// the spaces of every region of it.
+// List narrows the language filter to base languages, so one tag finds the
+// spaces of every region of it.
 func (s *SpaceService) List(
 	ctx context.Context, opts options.Searcher, filter model.SpaceFilter,
 ) ([]*model.Space, bool, error) {
-	if filter.Language != "" {
-		filter.Language = model.BaseLanguage(filter.Language)
-		if filter.Language == "" {
-			return nil, false, errLanguageInvalid
+	bases, err := baseLanguages(filter.Languages)
+	if err != nil {
+		return nil, false, err
+	}
+
+	filter.Languages = bases
+
+	return s.uow.SpaceStore().List(ctx, opts, filter)
+}
+
+// baseLanguages maps tags to their distinct base languages and refuses an
+// invalid tag.
+func baseLanguages(tags []string) ([]string, error) {
+	bases := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+
+	for _, tag := range tags {
+		base := model.BaseLanguage(tag)
+		if base == "" {
+			return nil, errLanguageInvalid
+		}
+
+		if _, ok := seen[base]; !ok {
+			seen[base] = struct{}{}
+			bases = append(bases, base)
 		}
 	}
 
-	return s.uow.SpaceStore().List(ctx, opts, filter)
+	return bases, nil
 }
 
 func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*model.Space, error) {
