@@ -29,10 +29,45 @@ func NewSpaceService(uow store.UnitOfWork, files storage.Files, log *slog.Logger
 	return &SpaceService{uow: uow, files: files, log: log}
 }
 
+var errLanguageInvalid = errors.InvalidArgument(
+	"language must be a BCP 47 tag",
+	errors.WithID("kb.space.language_invalid"),
+)
+
+// List narrows the language filter to base languages, so one tag finds the
+// spaces of every region of it.
 func (s *SpaceService) List(
 	ctx context.Context, opts options.Searcher, filter model.SpaceFilter,
 ) ([]*model.Space, bool, error) {
+	bases, err := baseLanguages(filter.Languages)
+	if err != nil {
+		return nil, false, err
+	}
+
+	filter.Languages = bases
+
 	return s.uow.SpaceStore().List(ctx, opts, filter)
+}
+
+// baseLanguages maps tags to their distinct base languages and refuses an
+// invalid tag.
+func baseLanguages(tags []string) ([]string, error) {
+	bases := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+
+	for _, tag := range tags {
+		base := model.BaseLanguage(tag)
+		if base == "" {
+			return nil, errLanguageInvalid
+		}
+
+		if _, ok := seen[base]; !ok {
+			seen[base] = struct{}{}
+			bases = append(bases, base)
+		}
+	}
+
+	return bases, nil
 }
 
 func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*model.Space, error) {
@@ -46,10 +81,7 @@ func (s *SpaceService) Create(
 ) (*model.Space, error) {
 	canonical, ok := model.CanonicalLanguage(in.Language)
 	if !ok {
-		return nil, errors.InvalidArgument(
-			"language must be a BCP 47 tag",
-			errors.WithID("kb.space.language_invalid"),
-		)
+		return nil, errLanguageInvalid
 	}
 
 	in.Language = canonical
@@ -186,14 +218,14 @@ func (s *SpaceService) Update(
 		}
 
 		if reindex {
-			if err := requestSpaceReindex(ctx, tx, session, space.ID); err != nil {
+			if err := requestSpaceReindex(ctx, tx, session, space.ID, nil); err != nil {
 				return err
 			}
 		}
 
 		if modelChanged {
 			if err := tx.SpaceStore().DropForeignEmbeddings(
-				ctx, space.ID, session.GetDomainID(), merged.EmbeddingModelID,
+				ctx, space.ID, session.GetDomainID(), merged.EmbeddingModelID, nil,
 			); err != nil {
 				return err
 			}
@@ -267,10 +299,13 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 	return deleted, nil
 }
 
-// requestSpaceReindex puts every article of the space with a version back to
-// pending and queues its latest version.
-func requestSpaceReindex(ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID int64) error {
-	targets, err := tx.SpaceStore().MarkArticlesPending(ctx, spaceID, session.GetDomainID())
+// requestSpaceReindex puts the articles of the space with a version back to
+// pending and queues their latest version: the given ones, or every article
+// when none is given.
+func requestSpaceReindex(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID int64, articleIDs []int64,
+) error {
+	targets, err := tx.SpaceStore().MarkArticlesPending(ctx, spaceID, session.GetDomainID(), articleIDs)
 	if err != nil {
 		return err
 	}

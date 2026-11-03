@@ -131,6 +131,8 @@ func (s Space) Merge(in *Space, mask []string) *Space {
 // SpaceFilter narrows space listings; zero values disable a criterion.
 type SpaceFilter struct {
 	State int32
+	// Languages keeps the spaces of the base language of any of these tags.
+	Languages []string
 }
 
 // maskOrAll returns mask, or all when mask is empty.

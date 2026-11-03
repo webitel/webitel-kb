@@ -36,6 +36,7 @@ type articleStoreFake struct {
 	written *model.Article
 
 	movedTo   int64
+	movedInto int64
 	suggested struct {
 		spaceID int64
 		prefix  string
@@ -84,9 +85,10 @@ func (f *articleStoreFake) Delete(context.Context, options.Deleter, int32) (*mod
 }
 
 func (f *articleStoreFake) Move(
-	_ context.Context, _ options.Updator, newParentID int64, _ int32,
+	_ context.Context, _ options.Updator, newParentID, spaceID int64, _ int32,
 ) (*model.Article, error) {
 	f.movedTo = newParentID
+	f.movedInto = spaceID
 
 	return f.written, nil
 }
@@ -472,6 +474,42 @@ func TestListChildrenIsNotPaged(t *testing.T) {
 
 	if articles.filter.ParentID == nil || *articles.filter.ParentID != 7 {
 		t.Fatalf("parent filter = %v", articles.filter.ParentID)
+	}
+}
+
+func TestMoveArticlePassesTheTarget(t *testing.T) {
+	tests := []struct {
+		name      string
+		spaceID   int64
+		wantSpace int64
+	}{
+		{"zero keeps the current space", 0, 3},
+		{"the current space named", 3, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			articles := &articleStoreFake{
+				items:   []*model.Article{{ID: 7, SpaceID: 3, Ver: 4}},
+				written: &model.Article{ID: 7, SpaceID: 3, Ver: 5},
+			}
+			server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
+
+			tag, err := kbetag.Encode(kbetag.TypeArticle, 7, 4)
+			if err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+
+			if _, err := server.MoveArticle(articleContext(), &kb.MoveArticleRequest{
+				Etag: tag, NewSpaceId: tt.spaceID,
+			}); err != nil {
+				t.Fatalf("MoveArticle: %v", err)
+			}
+
+			if articles.movedTo != 0 || articles.movedInto != tt.wantSpace {
+				t.Fatalf("moved to %d in space %d, want the top of %d", articles.movedTo, articles.movedInto, tt.wantSpace)
+			}
+		})
 	}
 }
 

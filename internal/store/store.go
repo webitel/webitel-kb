@@ -95,11 +95,14 @@ type ArticleStore interface {
 	// ends: the read a read-then-write flow bases its decisions on.
 	LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.Article, error)
 
-	// Move reparents the article opts identify, shifting the depth of its
-	// whole subtree. A zero newParentID moves it to the top level. The write
-	// rejects a cycle, a foreign parent and a subtree that would outgrow the
-	// maximum depth, and is guarded by the optimistic-lock version.
-	Move(ctx context.Context, opts options.Updator, newParentID int64, expectedVer int32) (*model.Article, error)
+	// Move reparents the article opts identify into spaceID, shifting the
+	// depth of its whole subtree and carrying it into that space. A zero
+	// newParentID moves it to the top level. The write rejects a cycle, a
+	// parent outside spaceID and a subtree that would outgrow the maximum
+	// depth, and is guarded by the optimistic-lock version.
+	Move(
+		ctx context.Context, opts options.Updator, newParentID, spaceID int64, expectedVer int32,
+	) (*model.Article, error)
 
 	// Ancestors returns the ancestor chain of an article, root first; the
 	// article itself is not part of it.
@@ -207,12 +210,19 @@ type SpaceStore interface {
 	LockArticles(ctx context.Context, spaceID, domainID int64) error
 
 	// MarkArticlesPending puts the live articles of a domain's space that have
-	// a version back to pending and returns the latest version of each.
-	MarkArticlesPending(ctx context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error)
+	// a version back to pending and returns the latest version of each. Given
+	// articleIDs narrow it to those articles.
+	MarkArticlesPending(ctx context.Context, spaceID, domainID int64, articleIDs []int64) ([]model.ReindexTarget, error)
 
 	// DropForeignEmbeddings removes the vectors of a domain's space made by
-	// any model but keepModelID; 0 keeps none.
-	DropForeignEmbeddings(ctx context.Context, spaceID, domainID, keepModelID int64) error
+	// any model but keepModelID; 0 keeps none. Given articleIDs narrow it to
+	// the vectors of those articles.
+	DropForeignEmbeddings(ctx context.Context, spaceID, domainID, keepModelID int64, articleIDs []int64) error
+
+	// RescopeEmbeddings scopes the vectors of a domain's branch, deleted rows
+	// included, to the space each article of it is in, so a search of that
+	// space finds them and the space they left keeps none.
+	RescopeEmbeddings(ctx context.Context, rootID, domainID int64) error
 
 	// ResolveEmbedding returns the embedding model of a space, credential
 	// included.

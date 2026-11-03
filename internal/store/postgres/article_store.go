@@ -71,49 +71,62 @@ const deleteArticleCTEs = `WITH RECURSIVE root AS (
 ) `
 
 // moveSubtreeCTEs reparent the article and rebase the depth of everything
-// below it. The root carries every guard in its own WHERE, so a concurrent
-// writer cannot slip past them, and the descendants join the root, so a guard
-// miss moves nothing. The root is excluded from the descendant update: one row
-// may not be written twice in the same statement. Descendants take an absolute
-// depth from their level in the walk rather than a relative shift, so a
-// concurrent move of an ancestor cannot leave the subtree skewed.
+// below it, carrying the subtree into the space of the root. The root carries
+// every guard in its own WHERE, so a concurrent writer cannot slip past them,
+// and the descendants join the root, so a guard miss moves nothing. The root
+// is excluded from the descendant update: one row may not be written twice in
+// the same statement. Descendants take an absolute depth from their level in
+// the walk rather than a relative shift, so a concurrent move of an ancestor
+// cannot leave the subtree skewed. The deleted rows below follow the space
+// only, so the space that is purged later takes them with their files.
 const moveSubtreeCTEs = `WITH RECURSIVE subtree AS (
 	SELECT a.id, 0 AS level FROM kb.article a WHERE a.id = $1 AND a.deleted_at IS NULL
 	UNION ALL
 	SELECT c.id, t.level + 1 FROM kb.article c JOIN subtree t ON c.parent_id = t.id
 	WHERE c.deleted_at IS NULL
+), buried AS (
+	SELECT c.id FROM kb.article c JOIN subtree t ON c.parent_id = t.id WHERE c.deleted_at IS NOT NULL
+	UNION ALL
+	SELECT c.id FROM kb.article c JOIN buried b ON c.parent_id = b.id
 ), height AS (
 	SELECT max(sub.level) AS value FROM subtree sub
 ), root AS (
 	%s
 ), descendants AS (
-	UPDATE kb.article a SET depth = root.depth + subtree.level, updated_at = now(), updated_by = $4
+	UPDATE kb.article a SET depth = root.depth + subtree.level, space_id = root.space_id,
+	    updated_at = now(), updated_by = $4
 	FROM subtree, root WHERE a.id = subtree.id AND a.id <> $1
+	RETURNING a.id
+), remains AS (
+	UPDATE kb.article a SET space_id = root.space_id
+	FROM buried, root WHERE a.id = buried.id
 	RETURNING a.id
 ), m AS (
 	SELECT * FROM root
 ) `
 
-// moveUnderRoot reparents under another article of the same space.
+// moveUnderRoot reparents under an article of the target space.
 var moveUnderRoot = fmt.Sprintf(`UPDATE kb.article a
-	SET parent_id = p.id, depth = p.depth + 1, ver = a.ver + 1,
+	SET parent_id = p.id, depth = p.depth + 1, space_id = t.id, ver = a.ver + 1,
 	    updated_at = now(), updated_by = $4
-	FROM kb.space s, kb.article p
+	FROM kb.space s, kb.space t, kb.article p
 	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
 	  AND s.id = a.space_id AND s.domain_id = $2
-	  AND p.id = $5 AND p.space_id = a.space_id AND p.deleted_at IS NULL
+	  AND t.id = $5 AND t.domain_id = $2
+	  AND p.id = $6 AND p.space_id = t.id AND p.deleted_at IS NULL
 	  AND p.id <> a.id AND p.id NOT IN (SELECT id FROM subtree)
 	  AND p.depth + 1 + (SELECT value FROM height) <= %d
 	RETURNING a.*`, model.MaxArticleDepth)
 
-// moveToTopRoot moves the article to the top level, where it has no parent to
-// derive the depth from.
+// moveToTopRoot moves the article to the top level of the target space, where
+// it has no parent to derive the depth from.
 var moveToTopRoot = fmt.Sprintf(`UPDATE kb.article a
-	SET parent_id = NULL, depth = 1, ver = a.ver + 1,
+	SET parent_id = NULL, depth = 1, space_id = t.id, ver = a.ver + 1,
 	    updated_at = now(), updated_by = $4
-	FROM kb.space s
+	FROM kb.space s, kb.space t
 	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
 	  AND s.id = a.space_id AND s.domain_id = $2
+	  AND t.id = $5 AND t.domain_id = $2
 	  AND 1 + (SELECT value FROM height) <= %d
 	RETURNING a.*`, model.MaxArticleDepth)
 
@@ -320,14 +333,28 @@ func (s *articleStore) List(
 }
 
 func (s *articleStore) Locate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
-	return s.locateArticle(ctx, opts, false)
+	return s.locateArticle(ctx, opts)
 }
+
+// lockArticleSQL locks the article row by itself. A locking read joined to
+// the space would, after waiting out a move into another space, recheck the
+// moved row against the space it left and skip it; the scoped read that
+// follows the lock sees the row as it is now.
+const lockArticleSQL = `SELECT 1 FROM kb.article WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
 
 func (s *articleStore) LocateForUpdate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
-	return s.locateArticle(ctx, opts, true)
+	if len(opts.GetIDs()) != 1 {
+		return nil, errLocateSingleID
+	}
+
+	if _, err := s.db.Exec(ctx, lockArticleSQL, opts.GetIDs()[0]); err != nil {
+		return nil, ParseError(err)
+	}
+
+	return s.locateArticle(ctx, opts)
 }
 
-func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher, lock bool) (*model.Article, error) {
+func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher) (*model.Article, error) {
 	if len(opts.GetIDs()) != 1 {
 		return nil, errLocateSingleID
 	}
@@ -337,10 +364,6 @@ func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher,
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithIDs(opts.GetIDs()).
 		WithFields(opts.GetFields())
-
-	if lock {
-		query.WithLockForUpdate()
-	}
 
 	sql, args, err := query.ToSQL()
 	if err != nil {
@@ -464,7 +487,7 @@ func (s *articleStore) Delete(
 }
 
 func (s *articleStore) Move(
-	ctx context.Context, opts options.Updator, newParentID int64, expectedVer int32,
+	ctx context.Context, opts options.Updator, newParentID, spaceID int64, expectedVer int32,
 ) (*model.Article, error) {
 	session := opts.GetAuthOpts()
 
@@ -476,7 +499,7 @@ func (s *articleStore) Move(
 	}
 
 	writeArgs := []any{
-		opts.GetID(), session.GetDomainID(), expectedVer, nullIfZero(session.GetUserID()),
+		opts.GetID(), session.GetDomainID(), expectedVer, nullIfZero(session.GetUserID()), spaceID,
 	}
 
 	rootSQL := moveToTopRoot

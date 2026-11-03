@@ -25,17 +25,18 @@ var errFakeUnused = errors.Internal("not implemented in fake")
 type fakeAuther struct {
 	domainID int64
 	userID   int64
+	denied   auth.AccessMode // actions the session has no right for
 }
 
-func (a fakeAuther) GetRoles() []int64                            { return nil }
-func (a fakeAuther) GetUserID() int64                             { return a.userID }
-func (a fakeAuther) GetUserIP() string                            { return "" }
-func (a fakeAuther) GetDomainID() int64                           { return a.domainID }
-func (a fakeAuther) GetPermissions() []string                     { return nil }
-func (a fakeAuther) GetObjectScope(string) auth.ObjectScoper      { return nil }
-func (a fakeAuther) GetAllObjectScopes() []auth.ObjectScoper      { return nil }
-func (a fakeAuther) CheckLicenseAccess(string) bool               { return true }
-func (a fakeAuther) CheckObacAccess(string, auth.AccessMode) bool { return true }
+func (a fakeAuther) GetRoles() []int64                                { return nil }
+func (a fakeAuther) GetUserID() int64                                 { return a.userID }
+func (a fakeAuther) GetUserIP() string                                { return "" }
+func (a fakeAuther) GetDomainID() int64                               { return a.domainID }
+func (a fakeAuther) GetPermissions() []string                         { return nil }
+func (a fakeAuther) GetObjectScope(string) auth.ObjectScoper          { return nil }
+func (a fakeAuther) GetAllObjectScopes() []auth.ObjectScoper          { return nil }
+func (a fakeAuther) CheckLicenseAccess(string) bool                   { return true }
+func (a fakeAuther) CheckObacAccess(_ string, m auth.AccessMode) bool { return m&a.denied == 0 }
 func (a fakeAuther) IsRbacCheckRequired(string, auth.AccessMode) bool {
 	return false
 }
@@ -97,6 +98,13 @@ type fakeSpaceStore struct {
 	pendingScope [][2]int64
 	keptModels   []int64
 
+	// byID, when set, answers Locate per space id.
+	byID            map[int64]*model.Space
+	pendingArticles [][]int64
+	droppedIn       []int64
+	droppedArticles [][]int64
+	rescopedRoots   []int64
+
 	replaceErr error
 
 	lockedLocates int
@@ -110,14 +118,28 @@ type fakeSpaceStore struct {
 	replaceSpaceID, replaceDomainID, replaceUserID int64
 
 	updateIn *model.Space
+
+	listCalls  int
+	listFilter model.SpaceFilter
 }
 
-func (f *fakeSpaceStore) List(context.Context, options.Searcher, model.SpaceFilter) ([]*model.Space, bool, error) {
+func (f *fakeSpaceStore) List(_ context.Context, _ options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error) {
+	f.listCalls++
+	f.listFilter = filter
+
 	return nil, false, nil
 }
 
 func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*model.Space, error) {
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
+
+	if f.byID != nil {
+		if space, ok := f.byID[opts.GetIDs()[0]]; ok {
+			return space, nil
+		}
+
+		return nil, errors.NotFound("entity does not exist or access is denied")
+	}
 
 	if f.readBack == nil {
 		return nil, errors.NotFound("entity does not exist or access is denied")
@@ -195,16 +217,28 @@ func (f *fakeSpaceStore) LockArticles(_ context.Context, spaceID, domainID int64
 	return nil
 }
 
-func (f *fakeSpaceStore) MarkArticlesPending(_ context.Context, spaceID, domainID int64) ([]model.ReindexTarget, error) {
+func (f *fakeSpaceStore) MarkArticlesPending(
+	_ context.Context, spaceID, domainID int64, articleIDs []int64,
+) ([]model.ReindexTarget, error) {
 	f.pendingScope = append(f.pendingScope, [2]int64{spaceID, domainID})
+	f.pendingArticles = append(f.pendingArticles, articleIDs)
 	f.note("mark-pending")
 
 	return f.pending, nil
 }
 
-func (f *fakeSpaceStore) DropForeignEmbeddings(_ context.Context, _, _, keepModelID int64) error {
+func (f *fakeSpaceStore) DropForeignEmbeddings(_ context.Context, spaceID, _, keepModelID int64, articleIDs []int64) error {
 	f.keptModels = append(f.keptModels, keepModelID)
+	f.droppedIn = append(f.droppedIn, spaceID)
+	f.droppedArticles = append(f.droppedArticles, articleIDs)
 	f.note("drop-embeddings")
+
+	return nil
+}
+
+func (f *fakeSpaceStore) RescopeEmbeddings(_ context.Context, rootID, _ int64) error {
+	f.rescopedRoots = append(f.rescopedRoots, rootID)
+	f.note("rescope-embeddings")
 
 	return nil
 }
@@ -511,6 +545,47 @@ func TestSpaceCreateStoresTheCanonicalLanguage(t *testing.T) {
 
 	if got := uow.spaces.createIn.Language; got != "pt-BR" {
 		t.Fatalf("stored language = %q, want pt-BR", got)
+	}
+}
+
+func TestSpaceListNarrowsTheLanguages(t *testing.T) {
+	tests := []struct {
+		name      string
+		languages []string
+		want      []string
+		wantErrID string
+	}{
+		{"region narrows to the base", []string{"uk-UA"}, []string{"uk"}, ""},
+		{"base stays", []string{"UK"}, []string{"uk"}, ""},
+		{"several languages", []string{"uk", "en-GB", "pl"}, []string{"uk", "en", "pl"}, ""},
+		{"regions of one base collapse", []string{"uk-UA", "uk", "en", "en-US"}, []string{"uk", "en"}, ""},
+		{"none means any", nil, []string{}, ""},
+		{"invalid tag", []string{"Ukrainian"}, nil, "kb.space.language_invalid"},
+		{"invalid tag among valid ones", []string{"uk", "Ukrainian"}, nil, "kb.space.language_invalid"},
+		{"empty tag", []string{""}, nil, "kb.space.language_invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+
+			_, _, err := svc.List(context.Background(), nil, model.SpaceFilter{Languages: tt.languages})
+			if tt.wantErrID != "" {
+				if errors.ID(err) != tt.wantErrID || uow.spaces.listCalls != 0 {
+					t.Fatalf("err = %v, store calls = %d, want %s before the store", err, uow.spaces.listCalls, tt.wantErrID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+
+			if got := uow.spaces.listFilter.Languages; !slices.Equal(got, tt.want) {
+				t.Fatalf("store languages = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -940,6 +1015,11 @@ func TestSpaceReindexQueuesTheLatestVersionOfEveryArticle(t *testing.T) {
 
 	if uow.spaces.lockedScope[0] != [2]int64{7, 5} || uow.spaces.pendingScope[0] != [2]int64{7, 5} {
 		t.Fatalf("scope: articles %v, pending %v", uow.spaces.lockedScope, uow.spaces.pendingScope)
+	}
+
+	// A model switch queues the whole space, not a branch of it.
+	if len(uow.spaces.pendingArticles) != 1 || uow.spaces.pendingArticles[0] != nil {
+		t.Fatalf("pending articles = %v, want the whole space", uow.spaces.pendingArticles)
 	}
 
 	got := make([][2]int64, 0, len(uow.outbox.events))
