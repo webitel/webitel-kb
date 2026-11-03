@@ -387,9 +387,6 @@ func (s *ArticleService) Delete(
 	return deleted, nil
 }
 
-// articlesObjClass is the permission object of articles.
-const articlesObjClass = "kb_articles"
-
 // Move reparents an article. The target space is the one of the new parent,
 // or newSpaceID for a move to the top level; another space must have the same
 // language and needs the right to create articles. The whole flow runs in one
@@ -416,7 +413,7 @@ func (s *ArticleService) Move(
 			return err
 		}
 
-		if targetSpaceID != located.SpaceID && !session.CheckObacAccess(articlesObjClass, auth.Add) {
+		if targetSpaceID != located.SpaceID && !session.CheckObacAccess(session.GetMainObjClassName(), auth.Add) {
 			return errMoveCreateDenied
 		}
 
