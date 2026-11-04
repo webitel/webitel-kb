@@ -69,9 +69,10 @@ func (f *fakeAttachmentStore) Unbound(_ context.Context, fileIDs []int64) ([]int
 	return fileIDs, f.err
 }
 
-// attachmentUow hands out the attachment fake only.
+// attachmentUow hands out the attachment fake and the article it belongs to.
 type attachmentUow struct {
-	files *fakeAttachmentStore
+	files    *fakeAttachmentStore
+	articles *fakeArticleStore
 }
 
 func (u *attachmentUow) WithinTransaction(
@@ -82,7 +83,13 @@ func (u *attachmentUow) WithinTransaction(
 
 func (u *attachmentUow) EmbeddingModelStore() store.EmbeddingModelStore { return nil }
 func (u *attachmentUow) SpaceStore() store.SpaceStore                   { return nil }
-func (u *attachmentUow) ArticleStore() store.ArticleStore               { return nil }
+func (u *attachmentUow) ArticleStore() store.ArticleStore {
+	if u.articles == nil {
+		u.articles = &fakeArticleStore{located: &model.Article{ID: 7}}
+	}
+
+	return u.articles
+}
 func (u *attachmentUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *attachmentUow) RetrievalStore() store.RetrievalStore           { return nil }
 func (u *attachmentUow) OutboxStore() store.OutboxStore                 { return nil }
@@ -130,13 +137,14 @@ type attachmentReadOpts struct {
 	fields []string
 }
 
-func (o *attachmentReadOpts) GetAuthOpts() auth.Auther { return o.auth }
-func (o *attachmentReadOpts) GetFields() []string      { return o.fields }
-func (o *attachmentReadOpts) GetSearch() string        { return "" }
-func (o *attachmentReadOpts) GetPage() int             { return 1 }
-func (o *attachmentReadOpts) GetSize() int             { return 10 }
-func (o *attachmentReadOpts) GetSort() string          { return "" }
-func (o *attachmentReadOpts) GetIDs() []int64          { return nil }
+func (o *attachmentReadOpts) GetAuthOpts() auth.Auther   { return o.auth }
+func (o *attachmentReadOpts) GetFields() []string        { return o.fields }
+func (o *attachmentReadOpts) GetSearch() string          { return "" }
+func (o *attachmentReadOpts) GetPage() int               { return 1 }
+func (o *attachmentReadOpts) GetSize() int               { return 10 }
+func (o *attachmentReadOpts) GetSort() string            { return "" }
+func (o *attachmentReadOpts) GetIDs() []int64            { return nil }
+func (o *attachmentReadOpts) GetAccess() auth.AccessMode { return auth.Read }
 
 func attachmentFixture(items ...*model.Attachment) (*AttachmentService, *fakeAttachmentStore, *fakeFiles, *bytes.Buffer) {
 	files := &fakeAttachmentStore{items: items, next: true}

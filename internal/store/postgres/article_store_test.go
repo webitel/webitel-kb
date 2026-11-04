@@ -15,6 +15,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
+	queryobject "github.com/webitel/webitel-kb/internal/store/query_object"
 )
 
 func TestArticleListRendersScopedQuery(t *testing.T) {
@@ -465,7 +466,7 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 		"FROM anc m",
 		"ORDER BY m.depth ASC",
 	} {
-		if !strings.Contains(f.gotSQL, want) {
+		if !strings.Contains(f.gotSQL, queryobject.CompactSQL(want)) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}

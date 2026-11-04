@@ -82,7 +82,9 @@ func (f *attachmentUoWFake) WithinTransaction(
 
 func (f *attachmentUoWFake) EmbeddingModelStore() store.EmbeddingModelStore { return nil }
 func (f *attachmentUoWFake) SpaceStore() store.SpaceStore                   { return nil }
-func (f *attachmentUoWFake) ArticleStore() store.ArticleStore               { return nil }
+func (f *attachmentUoWFake) ArticleStore() store.ArticleStore {
+	return &articleStoreFake{items: []*model.Article{{ID: 7}}}
+}
 func (f *attachmentUoWFake) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (f *attachmentUoWFake) OutboxStore() store.OutboxStore                 { return nil }
 func (f *attachmentUoWFake) RetrievalStore() store.RetrievalStore           { return nil }

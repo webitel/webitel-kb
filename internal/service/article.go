@@ -151,6 +151,18 @@ func withoutBodies(opts options.Searcher, bodies, fallback []string) options.Sea
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
 ) ([]*model.Article, bool, error) {
+	asked := filter.SpaceIDs
+	if filter.SpaceID > 0 {
+		asked = []int64{filter.SpaceID}
+	}
+
+	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, asked)
+	if err != nil || !reach {
+		return make([]*model.Article, 0), false, err
+	}
+
+	filter.SpaceIDs = ids
+
 	return s.uow.ArticleStore().List(ctx, withoutBodies(opts, articleBodyFields, nil), filter)
 }
 
@@ -191,6 +203,8 @@ func (s *ArticleService) Create(
 			if _, err := checkDepth(ctx, tx, session, in.ParentID, 0, "kb.article.create_depth"); err != nil {
 				return err
 			}
+		} else if err := requireSpace(ctx, tx, session, in.SpaceID, auth.Edit); err != nil {
+			return err
 		}
 
 		var err error
@@ -261,7 +275,7 @@ func (s *ArticleService) Update(
 
 	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: mergeReadFields,
+			auth: session, ids: []int64{opts.GetID()}, fields: mergeReadFields, access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -362,7 +376,7 @@ func (s *ArticleService) Delete(
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		located, err := tx.ArticleStore().Locate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"},
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"}, access: auth.Delete,
 		})
 		if err != nil {
 			return err
@@ -373,6 +387,15 @@ func (s *ArticleService) Delete(
 		}
 
 		if err := requireSameSpace(ctx, tx, session, located); err != nil {
+			return err
+		}
+
+		subtree, err := tx.ArticleStore().Subtree(ctx, readOptions{auth: session}, located.ID)
+		if err != nil {
+			return err
+		}
+
+		if err := requireBranch(ctx, tx, session, subtree, auth.Delete); err != nil {
 			return err
 		}
 
@@ -402,7 +425,7 @@ func (s *ArticleService) Move(
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		located, err := tx.ArticleStore().Locate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"},
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space"}, access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -422,7 +445,7 @@ func (s *ArticleService) Move(
 		}
 
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth", "home"},
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id", "space", "depth", "home"}, access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -450,10 +473,16 @@ func (s *ArticleService) Move(
 			return err
 		}
 
+		if err := requireBranch(ctx, tx, session, subtree, auth.Edit); err != nil {
+			return err
+		}
+
 		if newParentID != 0 {
 			if err := validateMoveTarget(ctx, tx, session, current, subtree, newParentID, targetSpaceID); err != nil {
 				return err
 			}
+		} else if err := requireSpace(ctx, tx, session, targetSpaceID, auth.Edit); err != nil {
+			return err
 		}
 
 		moved, err = tx.ArticleStore().Move(ctx, opts, newParentID, targetSpaceID, expectedVer)
@@ -597,9 +626,16 @@ func (s *ArticleService) Ancestors(
 	return s.uow.ArticleStore().Ancestors(ctx, opts, articleID)
 }
 
+// Tree reads the hierarchy of a space; a team whose binding leaves the space
+// out reads nothing.
 func (s *ArticleService) Tree(
-	ctx context.Context, opts options.Searcher, spaceID int64,
+	ctx context.Context, opts options.Searcher, spaceID, teamID int64,
 ) ([]*model.TreeNode, error) {
+	_, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, teamID, []int64{spaceID})
+	if err != nil || !reach {
+		return nil, err
+	}
+
 	return s.uow.ArticleStore().Tree(ctx, opts, spaceID)
 }
 
@@ -617,12 +653,20 @@ func (s *ArticleService) SuggestTags(
 func (s *ArticleService) ListVersions(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.ArticleVersion, bool, error) {
+	if err := requireArticle(ctx, s.uow, opts.GetAuthOpts(), articleID, auth.Read); err != nil {
+		return nil, false, err
+	}
+
 	return s.uow.ArticleVersionStore().List(ctx, withoutBodies(opts, versionBodyFields, versionListFields), articleID)
 }
 
 func (s *ArticleService) GetVersion(
 	ctx context.Context, opts options.Searcher, articleID int64, number int32,
 ) (*model.ArticleVersion, error) {
+	if err := requireArticle(ctx, s.uow, opts.GetAuthOpts(), articleID, auth.Read); err != nil {
+		return nil, err
+	}
+
 	return s.uow.ArticleVersionStore().Locate(ctx, opts, articleID, number)
 }
 
@@ -638,7 +682,7 @@ func (s *ArticleService) RestoreVersion(
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{articleID}, fields: mergeReadFields,
+			auth: session, ids: []int64{articleID}, fields: mergeReadFields, access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -690,7 +734,7 @@ func (s *ArticleService) Reindex(
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		current, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: reindexReadFields,
+			auth: session, ids: []int64{opts.GetID()}, fields: reindexReadFields, access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -740,14 +784,65 @@ func reindexEvent(session auth.Auther, articleID, versionID, spaceID int64) even
 	return event.NewArticleReindex(time.Now(), articleID, versionID, spaceID, session.GetDomainID())
 }
 
+// requireArticle refuses an article the caller may not reach in mode.
+func requireArticle(
+	ctx context.Context, uow store.UnitOfWork, session auth.Auther, articleID int64, mode auth.AccessMode,
+) error {
+	_, err := uow.ArticleStore().Locate(ctx, readOptions{
+		auth: session, ids: []int64{articleID}, fields: []string{"id"}, access: mode,
+	})
+
+	return err
+}
+
+// errBranchDenied refuses a change that would carry articles of the branch the
+// caller may not change.
+var errBranchDenied = errors.Forbidden(
+	"the branch holds articles the rules do not let you change",
+	errors.WithID("kb.article.branch_denied"),
+)
+
+// requireBranch refuses a branch holding an article the caller may not reach in mode.
+func requireBranch(
+	ctx context.Context, uow store.UnitOfWork, session auth.Auther, branch []model.SubtreeNode, mode auth.AccessMode,
+) error {
+	ids := make([]int64, 0, len(branch))
+	for _, node := range branch {
+		ids = append(ids, node.ID)
+	}
+
+	reached, err := uow.ArticleStore().Reachable(ctx, readOptions{auth: session, access: mode}, ids)
+	if err != nil {
+		return err
+	}
+
+	if len(reached) < len(ids) {
+		return errBranchDenied
+	}
+
+	return nil
+}
+
+// requireSpace refuses a space the caller may not reach in mode.
+func requireSpace(
+	ctx context.Context, uow store.UnitOfWork, session auth.Auther, spaceID int64, mode auth.AccessMode,
+) error {
+	_, err := uow.SpaceStore().Locate(ctx, readOptions{
+		auth: session, ids: []int64{spaceID}, fields: []string{"id"}, access: mode,
+	})
+
+	return err
+}
+
 // checkDepth refuses a placement past the depth ceiling; height is how far the
 // placed subtree reaches below its own root.
 func checkDepth(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther,
 	parentID int64, height int32, errID string,
 ) (*model.Article, error) {
+	// The parent holds the placed article, so placing under it changes it.
 	parent, err := tx.ArticleStore().LocateForUpdate(ctx, readOptions{
-		auth: session, ids: []int64{parentID}, fields: []string{"id", "space", "depth", "home"},
+		auth: session, ids: []int64{parentID}, fields: []string{"id", "space", "depth", "home"}, access: auth.Edit,
 	})
 	if err != nil {
 		return nil, err

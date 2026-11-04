@@ -83,14 +83,14 @@ func TestUnaryAuthInterceptor(t *testing.T) {
 			wantAccess:     auth.Read,
 		},
 		{
-			name:           "denied when the session lacks obac access",
+			name:           "creating needs the create right",
 			fullMethod:     "/webitel.kb.Spaces/CreateSpace",
-			manager:        &fakeManager{session: sessionWithScope("kb_spaces", "r")},
+			manager:        &fakeManager{session: sessionWithScope("kb_spaces", "rw")},
 			wantCode:       codes.PermissionDenied,
 			wantHandlerRun: false,
 			wantAuthorize:  true,
 			wantObjClass:   "kb_spaces",
-			wantAccess:     auth.Edit,
+			wantAccess:     auth.Add,
 		},
 		{
 			name:             "authorized call reaches the handler with the session in context",

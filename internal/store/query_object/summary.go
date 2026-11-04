@@ -181,6 +181,20 @@ func (h *SearchHits) WithScope(domainID int64, filter model.SearchFilter) *Searc
 	return h
 }
 
+// WithAccess keeps the articles the plan lets the caller reach in every list.
+func (h *SearchHits) WithAccess(plan AccessPlan) *SearchHits {
+	predicate := plan.ArticlePredicate()
+
+	h.subject = h.subject.Where(predicate)
+	h.body = h.body.Where(predicate)
+
+	for i := range h.similar {
+		h.similar[i] = h.similar[i].Where(predicate)
+	}
+
+	return h
+}
+
 // WithPaging cuts the ranked hits down to one page, one row past it.
 func (h *SearchHits) WithPaging(size, page int) *SearchHits {
 	h.size, h.page = size, page
@@ -288,6 +302,13 @@ func (q *SummaryQuery) WithDomainScope(domainID int64) *SummaryQuery {
 func (q *SummaryQuery) WithRetrievable() *SummaryQuery {
 	q.ensureJoins(summaryJoinSpace)
 	q.builder = whereRetrievable(q.builder)
+
+	return q
+}
+
+// WithAccess keeps the articles the plan lets the caller reach.
+func (q *SummaryQuery) WithAccess(plan AccessPlan) *SummaryQuery {
+	q.builder = q.builder.Where(plan.ArticlePredicate())
 
 	return q
 }

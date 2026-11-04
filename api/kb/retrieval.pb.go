@@ -92,7 +92,9 @@ type SearchRequest struct {
 	// Page size.
 	Size int32 `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
 	// Page number (1-based).
-	Page          int32 `protobuf:"varint,6,opt,name=page,proto3" json:"page,omitempty"`
+	Page int32 `protobuf:"varint,6,opt,name=page,proto3" json:"page,omitempty"`
+	// Operator team; its binding limits the spaces searched.
+	TeamId        int64 `protobuf:"varint,7,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -165,6 +167,13 @@ func (x *SearchRequest) GetSize() int32 {
 func (x *SearchRequest) GetPage() int32 {
 	if x != nil {
 		return x.Page
+	}
+	return 0
+}
+
+func (x *SearchRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
 	}
 	return 0
 }
@@ -714,14 +723,15 @@ var File_retrieval_proto protoreflect.FileDescriptor
 const file_retrieval_proto_rawDesc = "" +
 	"\n" +
 	"\x0fretrieval.proto\x12\n" +
-	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbb\x01\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xdd\x01\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\x12;\n" +
 	"\ttag_match\x18\x04 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12\x12\n" +
 	"\x04size\x18\x05 \x01(\x05R\x04size\x12\x12\n" +
-	"\x04page\x18\x06 \x01(\x05R\x04page\"V\n" +
+	"\x04page\x18\x06 \x01(\x05R\x04page\x12 \n" +
+	"\ateam_id\x18\a \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"V\n" +
 	"\x0eSearchResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"J\n" +

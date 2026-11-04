@@ -24,6 +24,8 @@ type ArticleSummary struct {
 type SearchFilter struct {
 	// SpaceIDs keeps the articles of those spaces.
 	SpaceIDs []int64
+	// TeamID is the operator team whose binding narrows the spaces.
+	TeamID int64
 	// Tags keeps articles carrying them.
 	Tags         []string
 	TagsMatchAll bool
@@ -81,7 +83,7 @@ type Citation struct {
 type SuggestQuery struct {
 	Message  string
 	SpaceIDs []int64
-	// TeamID picks the spaces bound to the team when SpaceIDs is empty.
+	// TeamID is the operator team whose binding narrows the spaces.
 	TeamID       int64
 	ReturnChunks bool
 }

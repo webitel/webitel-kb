@@ -46,6 +46,13 @@ func (s *SpaceService) List(
 
 	filter.Languages = bases
 
+	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, filter.IDs)
+	if err != nil || !reach {
+		return make([]*model.Space, 0), false, err
+	}
+
+	filter.IDs = ids
+
 	return s.uow.SpaceStore().List(ctx, opts, filter)
 }
 
@@ -154,6 +161,7 @@ func (s *SpaceService) Update(
 			auth:   session,
 			ids:    []int64{opts.GetID()},
 			fields: spaceMergeFields,
+			access: auth.Edit,
 		})
 		if err != nil {
 			return err
@@ -256,7 +264,7 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, tx store.UnitOfWork) error {
 		if _, err := tx.SpaceStore().LocateForUpdate(ctx, readOptions{
-			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id"},
+			auth: session, ids: []int64{opts.GetID()}, fields: []string{"id"}, access: auth.Delete,
 		}); err != nil {
 			return err
 		}
@@ -412,14 +420,16 @@ type readOptions struct {
 	auth   auth.Auther
 	ids    []int64
 	fields []string
+	access auth.AccessMode
 }
 
 var _ options.Searcher = readOptions{}
 
-func (o readOptions) GetAuthOpts() auth.Auther { return o.auth }
-func (o readOptions) GetFields() []string      { return o.fields }
-func (o readOptions) GetSearch() string        { return "" }
-func (o readOptions) GetPage() int             { return 1 }
-func (o readOptions) GetSize() int             { return 1 }
-func (o readOptions) GetSort() string          { return "" }
-func (o readOptions) GetIDs() []int64          { return o.ids }
+func (o readOptions) GetAuthOpts() auth.Auther   { return o.auth }
+func (o readOptions) GetFields() []string        { return o.fields }
+func (o readOptions) GetSearch() string          { return "" }
+func (o readOptions) GetPage() int               { return 1 }
+func (o readOptions) GetSize() int               { return 1 }
+func (o readOptions) GetSort() string            { return "" }
+func (o readOptions) GetIDs() []int64            { return o.ids }
+func (o readOptions) GetAccess() auth.AccessMode { return o.access }

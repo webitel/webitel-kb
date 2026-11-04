@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/webitel/webitel-go-kit/pkg/errors"
-
 	"github.com/webitel/webitel-kb/infra/embedding"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -38,9 +36,13 @@ func (s *RetrievalService) Suggest(
 
 	domainID := opts.GetAuthOpts().GetDomainID()
 
-	spaceIDs, err := s.suggestSpaces(ctx, domainID, q)
+	spaceIDs, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, q.TeamID, q.SpaceIDs)
 	if err != nil {
 		return nil, err
+	}
+
+	if !reach {
+		return answer, nil
 	}
 
 	spaces, err := s.uow.SpaceStore().ResolveEmbeddings(ctx, domainID, spaceIDs)
@@ -82,28 +84,6 @@ func (s *RetrievalService) Suggest(
 	answer.Articles = withMatchedSnippet(articles, best)
 
 	return answer, nil
-}
-
-// suggestSpaces picks the spaces of a suggest: the ones asked for, else the team binding.
-func (s *RetrievalService) suggestSpaces(ctx context.Context, domainID int64, q model.SuggestQuery) ([]int64, error) {
-	if len(q.SpaceIDs) > 0 {
-		return q.SpaceIDs, nil
-	}
-
-	bound, found, err := s.uow.SpaceStore().TeamSpaces(ctx, domainID, q.TeamID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !found {
-		return nil, errors.InvalidArgument(
-			"team is unknown in this domain",
-			errors.WithID("kb.retrieval.team_unknown"),
-		)
-	}
-
-	// A team without a binding sees every space.
-	return bound, nil
 }
 
 // rerankHits reorders the hits with the reranker of the spaces. Reranking is an

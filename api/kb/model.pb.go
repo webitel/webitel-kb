@@ -734,9 +734,9 @@ const file_model_proto_rawDesc = "" +
 	"\n" +
 	"ListModels\x12\x1d.webitel.kb.ListModelsRequest\x1a\x1e.webitel.kb.EmbeddingModelList\"\x19\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/kb/models\x12i\n" +
 	"\vLocateModel\x12\x1e.webitel.kb.LocateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1e\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/kb/models/{id}\x12k\n" +
-	"\vCreateModel\x12\x1e.webitel.kb.CreateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\" \x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x16:\x05input\"\r/v1/kb/models\x12\x8d\x01\n" +
+	"\vCreateModel\x12\x1e.webitel.kb.CreateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\" \x90\xb5\x18\x00\x82\xd3\xe4\x93\x02\x16:\x05input\"\r/v1/kb/models\x12\x8d\x01\n" +
 	"\vUpdateModel\x12\x1e.webitel.kb.UpdateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"B\x90\xb5\x18\x02\x82\xd3\xe4\x93\x028:\x05inputZ\x1b:\x05input2\x12/v1/kb/models/{id}\x1a\x12/v1/kb/models/{id}\x12i\n" +
-	"\vDeleteModel\x12\x1e.webitel.kb.DeleteModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1e\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x14*\x12/v1/kb/models/{id}\x12v\n" +
+	"\vDeleteModel\x12\x1e.webitel.kb.DeleteModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"\x1e\x90\xb5\x18\x03\x82\xd3\xe4\x93\x02\x14*\x12/v1/kb/models/{id}\x12v\n" +
 	"\rValidateModel\x12 .webitel.kb.ValidateModelRequest\x1a\x1a.webitel.kb.EmbeddingModel\"'\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x1d\"\x1b/v1/kb/models/{id}/validate\x1a\r\x8a\xb5\x18\tkb_modelsB\x8e\x01\n" +
 	"\x0ecom.webitel.kbB\n" +
 	"ModelProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +

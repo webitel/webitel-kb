@@ -423,7 +423,9 @@ type ListSpacesRequest struct {
 	State SpaceState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
 	// Optional language filter, at most 50 tags; matches the base language of
 	// any of them.
-	Languages     []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
+	Languages []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
+	// Operator team; its binding limits the spaces listed.
+	TeamId        int64 `protobuf:"varint,8,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -505,6 +507,13 @@ func (x *ListSpacesRequest) GetLanguages() []string {
 		return x.Languages
 	}
 	return nil
+}
+
+func (x *ListSpacesRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
 }
 
 // SpaceList is a page of spaces.
@@ -807,7 +816,7 @@ const file_space_proto_rawDesc = "" +
 	"\bteam_ids\x18\n" +
 	" \x03(\x03B\f\xbaH\t\x92\x01\x06\"\x04\"\x02 \x00R\ateamIds\x126\n" +
 	"\x05state\x18\v \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05stateB\x18\n" +
-	"\x16_vector_search_enabled\"\xd5\x01\n" +
+	"\x16_vector_search_enabled\"\xf7\x01\n" +
 	"\x11ListSpacesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
@@ -815,7 +824,8 @@ const file_space_proto_rawDesc = "" +
 	"\x04sort\x18\x04 \x01(\tR\x04sort\x12\x16\n" +
 	"\x06fields\x18\x05 \x03(\tR\x06fields\x126\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x16.webitel.kb.SpaceStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12&\n" +
-	"\tlanguages\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x102R\tlanguages\"H\n" +
+	"\tlanguages\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x102R\tlanguages\x12 \n" +
+	"\ateam_id\x18\b \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"H\n" +
 	"\tSpaceList\x12'\n" +
 	"\x05items\x18\x01 \x03(\v2\x11.webitel.kb.SpaceR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"-\n" +
@@ -839,9 +849,9 @@ const file_space_proto_rawDesc = "" +
 	"\n" +
 	"ListSpaces\x12\x1d.webitel.kb.ListSpacesRequest\x1a\x15.webitel.kb.SpaceList\"\x19\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/kb/spaces\x12`\n" +
 	"\vLocateSpace\x12\x1e.webitel.kb.LocateSpaceRequest\x1a\x11.webitel.kb.Space\"\x1e\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/kb/spaces/{id}\x12b\n" +
-	"\vCreateSpace\x12\x1e.webitel.kb.CreateSpaceRequest\x1a\x11.webitel.kb.Space\" \x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x16:\x05input\"\r/v1/kb/spaces\x12\x84\x01\n" +
+	"\vCreateSpace\x12\x1e.webitel.kb.CreateSpaceRequest\x1a\x11.webitel.kb.Space\" \x90\xb5\x18\x00\x82\xd3\xe4\x93\x02\x16:\x05input\"\r/v1/kb/spaces\x12\x84\x01\n" +
 	"\vUpdateSpace\x12\x1e.webitel.kb.UpdateSpaceRequest\x1a\x11.webitel.kb.Space\"B\x90\xb5\x18\x02\x82\xd3\xe4\x93\x028:\x05inputZ\x1b:\x05input2\x12/v1/kb/spaces/{id}\x1a\x12/v1/kb/spaces/{id}\x12`\n" +
-	"\vDeleteSpace\x12\x1e.webitel.kb.DeleteSpaceRequest\x1a\x11.webitel.kb.Space\"\x1e\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x14*\x12/v1/kb/spaces/{id}\x1a\r\x8a\xb5\x18\tkb_spacesB\x8e\x01\n" +
+	"\vDeleteSpace\x12\x1e.webitel.kb.DeleteSpaceRequest\x1a\x11.webitel.kb.Space\"\x1e\x90\xb5\x18\x03\x82\xd3\xe4\x93\x02\x14*\x12/v1/kb/spaces/{id}\x1a\r\x8a\xb5\x18\tkb_spacesB\x8e\x01\n" +
 	"\x0ecom.webitel.kbB\n" +
 	"SpaceProtoP\x01Z'github.com/webitel/webitel-kb/api/kb;kb\xa2\x02\x03WKX\xaa\x02\n" +
 	"Webitel.Kb\xca\x02\n" +

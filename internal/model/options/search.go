@@ -44,4 +44,8 @@ type Searcher interface {
 	// GetIDs returns the id filter, empty when not requested. The slice is owned
 	// by the options, so a store may sort or dedupe it in place.
 	GetIDs() []int64
+
+	// GetAccess returns the mode the read is for: a change locates the row it
+	// will write. auth.NONE means reading.
+	GetAccess() auth.AccessMode
 }
