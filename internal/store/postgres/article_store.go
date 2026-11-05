@@ -28,7 +28,7 @@ const createRootArticleSQL = `INSERT INTO kb.article
 	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
 	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
 	       setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')
-	FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2
+	FROM kb.space s WHERE s.id = $1 AND s.dc = $2
 	RETURNING *`
 
 // createChildArticleSQL inserts a child article, deriving depth from a live
@@ -39,7 +39,7 @@ const createChildArticleSQL = `INSERT INTO kb.article
 	       setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')
 	FROM kb.space s
 	JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL
-	WHERE s.id = $1 AND s.domain_id = $2
+	WHERE s.id = $1 AND s.dc = $2
 	RETURNING *`
 
 // deleteArticleCTEs soft-deletes the article and its subtree. The root is
@@ -50,7 +50,7 @@ const createChildArticleSQL = `INSERT INTO kb.article
 const deleteArticleCTEs = `WITH RECURSIVE root AS (
 	UPDATE kb.article a SET deleted_at = now(), state = $4, updated_at = now(), updated_by = $5
 	FROM kb.space s
-	WHERE a.id = $1 AND s.id = a.space_id AND s.domain_id = $2
+	WHERE a.id = $1 AND s.id = a.space_id AND s.dc = $2
 	  AND a.ver = $3 AND a.deleted_at IS NULL
 	RETURNING a.*
 ), tree AS (
@@ -111,8 +111,8 @@ var moveUnderRoot = fmt.Sprintf(`UPDATE kb.article a
 	    updated_at = now(), updated_by = $4
 	FROM kb.space s, kb.space t, kb.article p
 	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
-	  AND s.id = a.space_id AND s.domain_id = $2
-	  AND t.id = $5 AND t.domain_id = $2
+	  AND s.id = a.space_id AND s.dc = $2
+	  AND t.id = $5 AND t.dc = $2
 	  AND p.id = $6 AND p.space_id = t.id AND p.deleted_at IS NULL
 	  AND p.id <> a.id AND p.id NOT IN (SELECT id FROM subtree)
 	  AND p.depth + 1 + (SELECT value FROM height) <= %d
@@ -125,8 +125,8 @@ var moveToTopRoot = fmt.Sprintf(`UPDATE kb.article a
 	    updated_at = now(), updated_by = $4
 	FROM kb.space s, kb.space t
 	WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL
-	  AND s.id = a.space_id AND s.domain_id = $2
-	  AND t.id = $5 AND t.domain_id = $2
+	  AND s.id = a.space_id AND s.dc = $2
+	  AND t.id = $5 AND t.dc = $2
 	  AND 1 + (SELECT value FROM height) <= %d
 	RETURNING a.*`, model.MaxArticleDepth)
 
@@ -137,7 +137,7 @@ const ancestorsCTE = `WITH RECURSIVE anc AS (
 	SELECT p.* FROM kb.article a
 	JOIN kb.article p ON p.id = a.parent_id
 	JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+	WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL
 	UNION ALL
 	SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id
 	WHERE g.deleted_at IS NULL
@@ -146,7 +146,7 @@ const ancestorsCTE = `WITH RECURSIVE anc AS (
 // subtreeSQL lists an article and everything below it within the domain.
 const subtreeSQL = `WITH RECURSIVE subtree AS (
 	SELECT a.id, a.depth FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+	WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL
 	UNION ALL
 	SELECT c.id, c.depth FROM kb.article c JOIN subtree t ON c.parent_id = t.id
 	WHERE c.deleted_at IS NULL
@@ -158,7 +158,7 @@ SELECT id, depth FROM subtree`
 // ceiling to spot an oversized space.
 const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth, m.state
 	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
-	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
+	WHERE s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
 	  AND m.id IS DISTINCT FROM s.home_article_id
 	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id
 	LIMIT $3`
@@ -177,7 +177,7 @@ var errTreeTooLarge = errors.New(
 const suggestTagsSQL = `SELECT DISTINCT t FROM kb.article m
 	JOIN kb.space s ON s.id = m.space_id
 	CROSS JOIN LATERAL unnest(m.tags) AS t
-	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3
+	WHERE s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3
 	ORDER BY t LIMIT $4`
 
 // defaultSuggestSize bounds a suggestion listing the caller left unbounded.
@@ -194,7 +194,7 @@ var errVersionConflict = errors.Aborted(
 // conflict/not-found distinction after a guarded write matched nothing.
 const articleVerSQL = `SELECT m.ver FROM kb.article m
 	JOIN kb.space s ON s.id = m.space_id
-	WHERE m.id = $1 AND s.domain_id = $2 AND m.deleted_at IS NULL`
+	WHERE m.id = $1 AND s.dc = $2 AND m.deleted_at IS NULL`
 
 type articleStore struct {
 	db Querier
@@ -446,7 +446,7 @@ func (s *articleStore) Update(
 		Where("m.id = ?", opts.GetID()).
 		Where("m.ver = ?", expectedVer).
 		Where("m.deleted_at IS NULL").
-		Where("s.id = m.space_id AND s.domain_id = ?", session.GetDomainID()).
+		Where("s.id = m.space_id AND s.dc = ?", session.GetDomainID()).
 		Suffix("RETURNING m.*").
 		ToSql()
 	if err != nil {
@@ -636,7 +636,7 @@ func (s *articleStore) SuggestTags(
 }
 
 func (s *articleStore) LockSpaceTree(ctx context.Context, spaceID, domainID int64) error {
-	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR NO KEY UPDATE`
+	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND dc = $2 FOR NO KEY UPDATE`
 
 	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
 		return ParseError(err)
@@ -646,7 +646,7 @@ func (s *articleStore) LockSpaceTree(ctx context.Context, spaceID, domainID int6
 }
 
 func (s *articleStore) LockSpaceKey(ctx context.Context, spaceID, domainID int64) error {
-	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR KEY SHARE`
+	const sql = `SELECT 1 FROM kb.space WHERE id = $1 AND dc = $2 FOR KEY SHARE`
 
 	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
 		return ParseError(err)

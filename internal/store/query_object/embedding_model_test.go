@@ -42,7 +42,7 @@ func TestEmbeddingModelDomainScope(t *testing.T) {
 
 	sql, args := mustEmbeddingModelSQL(t, q)
 
-	if !strings.Contains(sql, "(m.domain_id=$1 OR m.domain_id IS NULL)") {
+	if !strings.Contains(sql, "(m.dc=$1 OR m.dc IS NULL)") {
 		t.Fatalf("SQL %q misses the domain scope", sql)
 	}
 
@@ -167,7 +167,7 @@ func TestEmbeddingModelDefaultsCoverReadModel(t *testing.T) {
 	sql, _ := mustEmbeddingModelSQL(t, q)
 
 	for _, want := range []string{
-		"m.id AS id", "m.domain_id AS domain_id", "m.validated_at AS validated_at",
+		"m.id AS id", "m.dc AS domain_id", "m.validated_at AS validated_at",
 		"created_by_name", "LEFT JOIN directory.wbt_user",
 	} {
 		if !strings.Contains(sql, want) {

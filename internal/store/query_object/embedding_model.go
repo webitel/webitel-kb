@@ -36,7 +36,7 @@ func (q *EmbeddingModelQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{
 			"id":             {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
-			"domain_id":      {sqlExpr: "m.domain_id", aliasedExpr: "m.domain_id AS domain_id"},
+			"domain_id":      {sqlExpr: "m.dc", aliasedExpr: "m.dc AS domain_id"},
 			"type":           {sqlExpr: "m.type", aliasedExpr: "m.type AS type", sortable: true},
 			"name":           {sqlExpr: "m.name", aliasedExpr: "m.name AS name", sortable: true},
 			"provider":       {sqlExpr: "m.provider", aliasedExpr: "m.provider AS provider", sortable: true},
@@ -72,7 +72,7 @@ func (q *EmbeddingModelQuery) EnsureJoins(required int) {
 // both, and global models stay read-only because writes scope to the domain
 // column alone.
 func (q *EmbeddingModelQuery) WithDomainScope(domainID int64) *EmbeddingModelQuery {
-	q.builder = q.builder.Where("(m.domain_id = ? OR m.domain_id IS NULL)", domainID)
+	q.builder = q.builder.Where("(m.dc = ? OR m.dc IS NULL)", domainID)
 
 	return q
 }

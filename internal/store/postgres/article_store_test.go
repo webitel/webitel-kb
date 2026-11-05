@@ -31,7 +31,7 @@ func TestArticleListRendersScopedQuery(t *testing.T) {
 	for _, want := range []string{
 		"JOIN kb.space s ON s.id=m.space_id",
 		"m.deleted_at IS NULL",
-		"s.domain_id=$1",
+		"s.dc=$1",
 		"m.subject ILIKE $2",
 		"m.space_id=$3",
 		"m.type=$4",
@@ -81,7 +81,7 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 		"SELECT s.id, NULL, 1,",
 		"updated_by, search_tsv)",
 		"setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')",
-		"FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2",
+		"FROM kb.space s WHERE s.id = $1 AND s.dc = $2",
 		"RETURNING *",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -110,7 +110,7 @@ func TestArticleCreateChildDerivesDepth(t *testing.T) {
 		"p.depth + 1",
 		"setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')",
 		"JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL",
-		"WHERE s.id = $1 AND s.domain_id = $2",
+		"WHERE s.id = $1 AND s.dc = $2",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
@@ -138,7 +138,7 @@ func TestArticleUpdateRendersGuardedCAS(t *testing.T) {
 		"ver = m.ver + 1",
 		"m.deleted_at IS NULL",
 		"FROM kb.space s WHERE",
-		"s.id = m.space_id AND s.domain_id = $",
+		"s.id = m.space_id AND s.dc = $",
 		"search_tsv = setweight(to_tsvector(s.text_search_config::regconfig, $2::text), 'A')",
 		"RETURNING m.*",
 	} {
@@ -223,7 +223,7 @@ func TestArticleDeleteRendersSubtreeCascade(t *testing.T) {
 		// The guards sit inside the root UPDATE, where a concurrent writer
 		// cannot slip past them.
 		"UPDATE kb.article a SET deleted_at = now(), state = $4,",
-		"WHERE a.id = $1 AND s.id = a.space_id AND s.domain_id = $2",
+		"WHERE a.id = $1 AND s.id = a.space_id AND s.dc = $2",
 		"AND a.ver = $3 AND a.deleted_at IS NULL",
 		// The walk starts from the written root, so a guard miss deletes nothing.
 		"SELECT root.id FROM root",
@@ -331,7 +331,7 @@ func TestArticleMoveUnderParent(t *testing.T) {
 		// The guards live inside the root UPDATE, where a concurrent writer
 		// cannot slip past them.
 		"WHERE a.id = $1 AND a.ver = $3 AND a.deleted_at IS NULL",
-		"s.id = a.space_id AND s.domain_id = $2",
+		"s.id = a.space_id AND s.dc = $2",
 		"p.id = $6 AND p.space_id = t.id AND p.deleted_at IS NULL",
 		"p.id NOT IN (SELECT id FROM subtree)",
 		fmt.Sprintf("p.depth + 1 + (SELECT value FROM height) <= %d", model.MaxArticleDepth),
@@ -460,7 +460,7 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 	for _, want := range []string{
 		"WITH RECURSIVE anc AS (",
 		"JOIN kb.article p ON p.id = a.parent_id",
-		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
+		"WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
 		"SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id",
 		"FROM anc m",
 		"ORDER BY m.depth ASC",
@@ -499,7 +499,7 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
+		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
 		"AND m.id IS DISTINCT FROM s.home_article_id",
 		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
 		"LIMIT $3",
@@ -551,7 +551,7 @@ func TestArticleSubtreeCarriesDepth(t *testing.T) {
 		t.Fatalf("nodes = %+v", nodes)
 	}
 
-	if !strings.Contains(f.gotSQL, "a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL") {
+	if !strings.Contains(f.gotSQL, "a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL") {
 		t.Errorf("SQL %q misses the scope", f.gotSQL)
 	}
 
@@ -576,7 +576,7 @@ func TestArticleSuggestTags(t *testing.T) {
 	for _, want := range []string{
 		"SELECT DISTINCT t FROM kb.article m",
 		"CROSS JOIN LATERAL unnest(m.tags) AS t",
-		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
+		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
 		"ORDER BY t LIMIT $4",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -657,7 +657,7 @@ func TestArticleLocateForUpdateLocks(t *testing.T) {
 				t.Fatalf("lock %q %v, want the article row alone", lock, f.argsList[0])
 			}
 
-			if strings.Contains(read, "FOR UPDATE") || !strings.Contains(read, "s.domain_id") {
+			if strings.Contains(read, "FOR UPDATE") || !strings.Contains(read, "s.dc") {
 				t.Fatalf("read %q, want the scoped read without a lock", read)
 			}
 		})
@@ -673,12 +673,12 @@ func TestArticleSpaceLocks(t *testing.T) {
 		{
 			name: "an insert",
 			lock: func(s *articleStore) error { return s.LockSpaceKey(context.Background(), 7, 5) },
-			want: "SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR KEY SHARE",
+			want: "SELECT 1 FROM kb.space WHERE id = $1 AND dc = $2 FOR KEY SHARE",
 		},
 		{
 			name: "a move or a subtree delete",
 			lock: func(s *articleStore) error { return s.LockSpaceTree(context.Background(), 7, 5) },
-			want: "SELECT 1 FROM kb.space WHERE id = $1 AND domain_id = $2 FOR NO KEY UPDATE",
+			want: "SELECT 1 FROM kb.space WHERE id = $1 AND dc = $2 FOR NO KEY UPDATE",
 		},
 	}
 

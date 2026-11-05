@@ -205,7 +205,7 @@ func (s *spaceStore) Create(ctx context.Context, opts options.Creator, in *model
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Insert(spaceTable).
 		Columns(
-			"domain_id", "name", "description", "language", "text_search_config",
+			"dc", "name", "description", "language", "text_search_config",
 			"embedding_model_id", "reranker_model_id",
 			"vector_search_enabled", "rerank_enabled", "chunking_strategy",
 			"state", "created_by", "updated_by",
@@ -240,7 +240,7 @@ func (s *spaceStore) Update(ctx context.Context, opts options.Updator, in *model
 		Set("updated_at", squirrel.Expr("now()")).
 		Set("updated_by", nullIfZero(opts.GetAuthOpts().GetUserID())).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
+		Where("dc = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -254,7 +254,7 @@ func (s *spaceStore) Delete(ctx context.Context, opts options.Deleter) (*model.S
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Delete(spaceTable).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
+		Where("dc = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -273,7 +273,7 @@ var errTeamUnknown = errors.InvalidArgument(
 // ReplaceTeams rewrites the binding to exactly the given set.
 func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID int64, teamIDs []int64) error {
 	const deleteSQL = `DELETE FROM kb.team_space ts USING kb.space s
-		WHERE ts.space_id = s.id AND ts.space_id = $1 AND s.domain_id = $2`
+		WHERE ts.space_id = s.id AND ts.space_id = $1 AND s.dc = $2`
 
 	if _, err := s.db.Exec(ctx, deleteSQL, spaceID, domainID); err != nil {
 		return ParseError(err)
@@ -285,8 +285,8 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 
 	const insertSQL = `INSERT INTO kb.team_space (team_id, space_id, created_by)
 		SELECT t.id, s.id, $3::bigint FROM kb.space s
-		JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id
-		WHERE s.id = $2 AND s.domain_id = $4`
+		JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.dc
+		WHERE s.id = $2 AND s.dc = $4`
 
 	tag, err := s.db.Exec(ctx, insertSQL, teamIDs, spaceID, nullIfZero(userID), domainID)
 	if err != nil {
@@ -303,7 +303,7 @@ func (s *spaceStore) ReplaceTeams(ctx context.Context, spaceID, domainID, userID
 func (s *spaceStore) HasActiveArticles(ctx context.Context, spaceID, domainID int64) (bool, error) {
 	const sql = `SELECT EXISTS (
 		SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND a.state = $3)`
+		WHERE a.space_id = $1 AND s.dc = $2 AND a.deleted_at IS NULL AND a.state = $3)`
 
 	var has bool
 	if err := s.db.QueryRow(ctx, sql, spaceID, domainID, model.ArticleStateActive).Scan(&has); err != nil {
@@ -315,7 +315,7 @@ func (s *spaceStore) HasActiveArticles(ctx context.Context, spaceID, domainID in
 
 func (s *spaceStore) SetHome(ctx context.Context, spaceID, articleID, domainID int64) (bool, error) {
 	const sql = `UPDATE kb.space SET home_article_id = $3
-		WHERE id = $1 AND domain_id = $2 AND home_article_id IS NULL`
+		WHERE id = $1 AND dc = $2 AND home_article_id IS NULL`
 
 	tag, err := s.db.Exec(ctx, sql, spaceID, domainID, articleID)
 	if err != nil {
@@ -328,7 +328,7 @@ func (s *spaceStore) SetHome(ctx context.Context, spaceID, articleID, domainID i
 func (s *spaceStore) PurgeArticles(ctx context.Context, spaceID, domainID int64) ([]int64, error) {
 	const sql = `WITH purged AS (
 		DELETE FROM kb.article a USING kb.space s
-		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.dc = $2
 		RETURNING a.id
 	)
 	SELECT DISTINCT f.file_id FROM kb.attachment f JOIN purged p ON p.id = f.article_id
@@ -349,7 +349,7 @@ func (s *spaceStore) PurgeArticles(ctx context.Context, spaceID, domainID int64)
 
 func (s *spaceStore) LockArticles(ctx context.Context, spaceID, domainID int64) error {
 	const sql = `SELECT a.id FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-		WHERE a.space_id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+		WHERE a.space_id = $1 AND s.dc = $2 AND a.deleted_at IS NULL
 		ORDER BY a.id FOR UPDATE OF a`
 
 	if _, err := s.db.Exec(ctx, sql, spaceID, domainID); err != nil {
@@ -369,7 +369,7 @@ func (s *spaceStore) MarkArticlesPending(
 			WHERE owner.space_id = $1
 			ORDER BY v.article_id, v.version_number DESC
 		) latest
-		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
+		WHERE s.id = a.space_id AND a.space_id = $1 AND s.dc = $2
 			AND a.deleted_at IS NULL AND latest.article_id = a.id
 			AND (coalesce(cardinality($4::bigint[]), 0) = 0 OR a.id = ANY($4::bigint[]))
 		RETURNING a.id, latest.id`
@@ -391,7 +391,7 @@ func (s *spaceStore) DropForeignEmbeddings(
 	ctx context.Context, spaceID, domainID, keepModelID int64, articleIDs []int64,
 ) error {
 	const sql = `DELETE FROM kb.chunk_embedding e
-		WHERE e.space_id = $1 AND e.domain_id = $2 AND e.model_id IS DISTINCT FROM $3
+		WHERE e.space_id = $1 AND e.dc = $2 AND e.model_id IS DISTINCT FROM $3
 		  AND (coalesce(cardinality($4::bigint[]), 0) = 0 OR EXISTS (
 			SELECT 1 FROM kb.chunk c JOIN kb.article_version v ON v.id = c.version_id
 			WHERE c.id = e.chunk_id AND v.article_id = ANY($4::bigint[])))`
@@ -412,7 +412,7 @@ func (s *spaceStore) RescopeEmbeddings(ctx context.Context, rootID, domainID int
 	UPDATE kb.chunk_embedding e SET space_id = branch.space_id
 	FROM kb.chunk c, kb.article_version v, branch
 	WHERE c.id = e.chunk_id AND v.id = c.version_id AND v.article_id = branch.id
-	  AND e.domain_id = $2 AND e.space_id <> branch.space_id`
+	  AND e.dc = $2 AND e.space_id <> branch.space_id`
 
 	if _, err := s.db.Exec(ctx, sql, rootID, domainID); err != nil {
 		return ParseError(err)
@@ -442,12 +442,12 @@ const resolveEmbeddingSQL = resolveEmbeddingSelect + `
 
 // resolveEmbeddingsSQL is the read of some of a domain's active spaces.
 const resolveEmbeddingsSQL = resolveEmbeddingSelect + `
-	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL AND s.state = $3
+	WHERE s.dc = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL AND s.state = $3
 	ORDER BY s.id`
 
 // resolveDomainEmbeddingsSQL is the read of every active space of a domain.
 const resolveDomainEmbeddingsSQL = resolveEmbeddingSelect + `
-	WHERE s.domain_id = $1 AND s.deleted_at IS NULL AND s.state = $2
+	WHERE s.dc = $1 AND s.deleted_at IS NULL AND s.state = $2
 	ORDER BY s.id`
 
 // resolveRerankersSQL reads spaces with their reranker. Outer join: a space
@@ -462,7 +462,7 @@ const resolveRerankersSQL = `SELECT
 	m.config
 	FROM kb.space s
 	LEFT JOIN kb.embedding_model m ON m.id = s.reranker_model_id
-	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
+	WHERE s.dc = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
 	ORDER BY s.id`
 
 // teamSpacesSQL reads the binding of a team within a domain. The outer joins
@@ -470,7 +470,7 @@ const resolveRerankersSQL = `SELECT
 const teamSpacesSQL = `SELECT s.id
 	FROM call_center.cc_team t
 	LEFT JOIN kb.team_space ts ON ts.team_id = t.id
-	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL
+	LEFT JOIN kb.space s ON s.id = ts.space_id AND s.dc = t.domain_id AND s.deleted_at IS NULL
 	WHERE t.id = $1 AND t.domain_id = $2
 	ORDER BY s.id`
 

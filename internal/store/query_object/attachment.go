@@ -66,7 +66,7 @@ func (q *AttachmentQuery) EnsureJoins(required int) {
 func (q *AttachmentQuery) WithDomainScope(domainID int64) *AttachmentQuery {
 	q.builder = q.builder.Where(
 		"EXISTS (SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id"+
-			" WHERE a.id = m.article_id AND s.domain_id = ? AND a.deleted_at IS NULL)",
+			" WHERE a.id = m.article_id AND s.dc = ? AND a.deleted_at IS NULL)",
 		domainID,
 	)
 

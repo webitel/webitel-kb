@@ -3,7 +3,7 @@ CREATE SCHEMA kb;
 
 CREATE TABLE kb.embedding_model (
     id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    domain_id      bigint NULL REFERENCES directory.wbt_domain (dc),  -- null = global model
+    dc             bigint NULL REFERENCES directory.wbt_domain (dc),  -- null = global model
     type           text NOT NULL DEFAULT 'embedding'
                        CHECK (type IN ('embedding', 'reranker')),
     name           text NOT NULL,
@@ -19,12 +19,12 @@ CREATE TABLE kb.embedding_model (
     created_at     timestamptz NOT NULL DEFAULT now(),
     created_by     bigint NULL,
     CHECK (type = 'reranker' OR dimensions IS NOT NULL),
-    UNIQUE NULLS NOT DISTINCT (domain_id, name)
+    UNIQUE NULLS NOT DISTINCT (dc, name)
 );
 
 CREATE TABLE kb.space (
     id                        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    domain_id                 bigint NOT NULL REFERENCES directory.wbt_domain (dc),
+    dc                        bigint NOT NULL REFERENCES directory.wbt_domain (dc),
     name                      text NOT NULL,
     description               text NULL,
     language                  text NOT NULL,  -- immutable; drives full-text search config

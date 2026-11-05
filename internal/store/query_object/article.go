@@ -42,7 +42,7 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{
 			"id":        {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
-			"domain_id": {sqlExpr: "s.domain_id", aliasedExpr: "s.domain_id AS domain_id", requiresJoin: articleJoinSpace},
+			"domain_id": {sqlExpr: "s.dc", aliasedExpr: "s.dc AS domain_id", requiresJoin: articleJoinSpace},
 			"space": {
 				sqlExpr:      "s.name",
 				aliasedExpr:  "s.id AS space_id, s.name AS space_name",
@@ -124,7 +124,7 @@ func (q *ArticleQuery) WithVisible() *ArticleQuery {
 // WithDomainScope keeps the articles of spaces owned by the domain.
 func (q *ArticleQuery) WithDomainScope(domainID int64) *ArticleQuery {
 	q.EnsureJoins(articleJoinSpace)
-	q.builder = q.builder.Where("s.domain_id = ?", domainID)
+	q.builder = q.builder.Where("s.dc = ?", domainID)
 
 	return q
 }

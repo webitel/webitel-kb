@@ -14,7 +14,7 @@ func TestAttachmentScopesToArticleAndDomain(t *testing.T) {
 	for _, want := range []string{
 		"FROM kb.attachment m",
 		"EXISTS(SELECT 1 FROM kb.article a JOIN kb.space s ON s.id=a.space_id",
-		"a.id=m.article_id AND s.domain_id=$1 AND a.deleted_at IS NULL",
+		"a.id=m.article_id AND s.dc=$1 AND a.deleted_at IS NULL",
 		"m.article_id=$2",
 	} {
 		if !strings.Contains(sql, want) {

@@ -214,7 +214,7 @@ func TestEmbeddingModelListRendersScopedQuery(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"(m.domain_id=$1 OR m.domain_id IS NULL)",
+		"(m.dc=$1 OR m.dc IS NULL)",
 		"m.type=$2",
 		"m.name ILIKE $3",
 		"ORDER BY m.name ASC,m.id ASC", // default sort + unique tiebreaker
@@ -448,7 +448,7 @@ func TestEmbeddingModelCreateRendersCTE(t *testing.T) {
 		}
 	}
 
-	// Column order: domain_id, type, name, provider, is_self_hosted, model_ref,
+	// Column order: dc, type, name, provider, is_self_hosted, model_ref,
 	// dimensions, endpoint, config, created_by.
 	if f.gotArgs[0] != int64(5) {
 		t.Errorf("args[0] = %v, want the domain id", f.gotArgs[0])
@@ -503,7 +503,7 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 				t.Errorf("write not scoped to id and domain: args %v", f.gotArgs)
 			}
 
-			if !strings.Contains(f.gotSQL, "WHERE id = $") || !strings.Contains(f.gotSQL, "AND domain_id = $") {
+			if !strings.Contains(f.gotSQL, "WHERE id = $") || !strings.Contains(f.gotSQL, "AND dc = $") {
 				t.Errorf("SQL %q is not scoped to id and domain", f.gotSQL)
 			}
 		})
@@ -555,7 +555,7 @@ func TestEmbeddingModelInUse(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"domain_id = $2 AND deleted_at IS NULL",
+		"dc = $2 AND deleted_at IS NULL",
 		"$1 IN (embedding_model_id, reranker_model_id, target_embedding_model_id)",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -585,7 +585,7 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 	}
 
 	// SET order: name, provider, is_self_hosted, model_ref, dimensions,
-	// endpoint, validated_at(NULL), config; WHERE: id, domain_id. type is
+	// endpoint, validated_at(NULL), config; WHERE: id, dc. type is
 	// immutable and must never appear in the statement.
 	assertArg := func(i int, want any) {
 		t.Helper()
@@ -645,7 +645,7 @@ func TestEmbeddingModelDeleteRendersScopedCTE(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	if !strings.Contains(f.gotSQL, "WITH m AS (DELETE FROM kb.embedding_model WHERE id = $1 AND domain_id = $2 RETURNING *)") {
+	if !strings.Contains(f.gotSQL, "WITH m AS (DELETE FROM kb.embedding_model WHERE id = $1 AND dc = $2 RETURNING *)") {
 		t.Fatalf("SQL %q is not a domain-scoped delete CTE", f.gotSQL)
 	}
 }
@@ -661,7 +661,7 @@ func TestEmbeddingModelMarkValidated(t *testing.T) {
 	}
 
 	// The database clock stamps the validation, scoped like every write.
-	if !strings.Contains(f.gotSQL, "SET validated_at = now() WHERE id = $1 AND domain_id = $2") {
+	if !strings.Contains(f.gotSQL, "SET validated_at = now() WHERE id = $1 AND dc = $2") {
 		t.Fatalf("SQL %q does not stamp validated_at in place", f.gotSQL)
 	}
 }
@@ -680,7 +680,7 @@ func TestEmbeddingModelGetConfig(t *testing.T) {
 	}
 
 	// Reads include global models: the runtime needs their credential too.
-	if !strings.Contains(f.gotSQL, "(domain_id = $2 OR domain_id IS NULL)") {
+	if !strings.Contains(f.gotSQL, "(dc = $2 OR dc IS NULL)") {
 		t.Fatalf("SQL %q misses the read scope", f.gotSQL)
 	}
 
