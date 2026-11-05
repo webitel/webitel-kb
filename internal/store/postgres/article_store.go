@@ -137,7 +137,7 @@ const ancestorsCTE = `WITH RECURSIVE anc AS (
 	SELECT p.* FROM kb.article a
 	JOIN kb.article p ON p.id = a.parent_id
 	JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = ? AND s.domain_id = ? AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+	WHERE a.id = ? AND s.dc = ? AND a.deleted_at IS NULL AND p.deleted_at IS NULL
 	UNION ALL
 	SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id
 	WHERE g.deleted_at IS NULL
@@ -160,7 +160,7 @@ func treeQuery(domainID, spaceID int64, plan queryobject.AccessPlan) squirrel.Se
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Select("m.id", "COALESCE(m.parent_id, 0)", "m.subject", "m.type", "m.depth", "m.state").
 		From("kb.article m JOIN kb.space s ON s.id = m.space_id").
-		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL"+
+		Where("s.dc = ? AND m.space_id = ? AND m.deleted_at IS NULL"+
 			" AND m.id IS DISTINCT FROM s.home_article_id", domainID, spaceID).
 		Where(plan.ArticlePredicate()).
 		OrderBy("m.parent_id NULLS FIRST", "m.subject", "m.id").
@@ -182,7 +182,7 @@ func suggestTagsQuery(domainID, spaceID int64, pattern string, size int, plan qu
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Select("t").Distinct().
 		From("kb.article m JOIN kb.space s ON s.id = m.space_id CROSS JOIN LATERAL unnest(m.tags) AS t").
-		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL AND t ILIKE ?", domainID, spaceID, pattern).
+		Where("s.dc = ? AND m.space_id = ? AND m.deleted_at IS NULL AND t ILIKE ?", domainID, spaceID, pattern).
 		Where(plan.ArticlePredicate()).
 		OrderBy("t").
 		Suffix("LIMIT ?", size)

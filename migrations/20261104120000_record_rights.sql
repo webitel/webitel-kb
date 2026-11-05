@@ -4,9 +4,6 @@
 -- of that subject on every article below it, and an article is shared only
 -- with a subject that may read its container.
 
--- The platform default rules address the domain as dc.
-ALTER TABLE kb.space ADD COLUMN dc bigint GENERATED ALWAYS AS (domain_id) STORED;
-
 CREATE TABLE kb.space_acl (
     dc      bigint   NOT NULL REFERENCES directory.wbt_domain (dc) ON DELETE CASCADE,
     grantor bigint   NULL REFERENCES directory.wbt_auth (id) ON DELETE SET NULL,
@@ -213,4 +210,3 @@ DROP FUNCTION kb.acl_reads(bigint, bigint, bigint, bigint);
 DROP FUNCTION kb.article_below(bigint);
 DROP TABLE kb.article_acl;
 DROP TABLE kb.space_acl;
-ALTER TABLE kb.space DROP COLUMN dc;
