@@ -30,7 +30,7 @@ func TestSpaceListRendersScopedQuery(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"m.domain_id=$1",
+		"m.dc=$1",
 		"m.name ILIKE $2",
 		"m.state=$3",
 		"ORDER BY m.name ASC,m.id ASC",
@@ -78,7 +78,7 @@ func TestSpaceCreateRendersCTE(t *testing.T) {
 		}
 	}
 
-	// Column order: domain_id, name, description, language,
+	// Column order: dc, name, description, language,
 	// text_search_config (the stemmer, bound inside the fallback expression),
 	// embedding_model_id, reranker_model_id, vector_search_enabled,
 	// rerank_enabled, [chunking_strategy = DEFAULT expr, no arg],
@@ -174,7 +174,7 @@ func TestSpaceUpdateNeverTouchesImmutableColumns(t *testing.T) {
 	for _, want := range []string{
 		"updated_at = now()",
 		"WHERE id = $",
-		"AND domain_id = $",
+		"AND dc = $",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
@@ -192,7 +192,7 @@ func TestSpaceDeleteRendersScopedCTE(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	if !strings.Contains(f.gotSQL, "WITH m AS (DELETE FROM kb.space WHERE id = $1 AND domain_id = $2 RETURNING *)") {
+	if !strings.Contains(f.gotSQL, "WITH m AS (DELETE FROM kb.space WHERE id = $1 AND dc = $2 RETURNING *)") {
 		t.Fatalf("SQL %q is not a domain-scoped delete CTE", f.gotSQL)
 	}
 }
@@ -211,15 +211,15 @@ func TestSpaceReplaceTeams(t *testing.T) {
 		}
 
 		// Both statements scope through kb.space to the domain.
-		if !strings.Contains(f.sqls[0], "DELETE FROM kb.team_space") || !strings.Contains(f.sqls[0], "s.domain_id = $2") {
+		if !strings.Contains(f.sqls[0], "DELETE FROM kb.team_space") || !strings.Contains(f.sqls[0], "s.dc = $2") {
 			t.Errorf("delete not domain-scoped: %s", f.sqls[0])
 		}
 
-		if !strings.Contains(f.sqls[1], "INSERT INTO kb.team_space") || !strings.Contains(f.sqls[1], "s.domain_id = $4") {
+		if !strings.Contains(f.sqls[1], "INSERT INTO kb.team_space") || !strings.Contains(f.sqls[1], "s.dc = $4") {
 			t.Errorf("insert not domain-scoped: %s", f.sqls[1])
 		}
 
-		if !strings.Contains(f.sqls[1], "JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.domain_id") {
+		if !strings.Contains(f.sqls[1], "JOIN call_center.cc_team t ON t.id = ANY($1::bigint[]) AND t.domain_id = s.dc") {
 			t.Errorf("insert does not check the team domain: %s", f.sqls[1])
 		}
 
@@ -279,7 +279,7 @@ func TestSpaceArticleChecks(t *testing.T) {
 			name: "has live active articles",
 			call: func(s *spaceStore) (bool, error) { return s.HasActiveArticles(context.Background(), 7, 5) },
 			want: []string{
-				"WHERE a.space_id = $1 AND s.domain_id = $2",
+				"WHERE a.space_id = $1 AND s.dc = $2",
 				"AND a.deleted_at IS NULL AND a.state = $3",
 			},
 			wantArgs: []any{int64(7), int64(5), model.ArticleStateActive},
@@ -322,7 +322,7 @@ func TestSpacePurgeArticles(t *testing.T) {
 
 	for _, want := range []string{
 		"DELETE FROM kb.article a USING kb.space s",
-		"a.space_id = $1 AND s.domain_id = $2",
+		"a.space_id = $1 AND s.dc = $2",
 		"FROM kb.attachment f JOIN purged p ON p.id = f.article_id",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
@@ -360,7 +360,7 @@ func TestSpaceSetHome(t *testing.T) {
 
 			for _, want := range []string{
 				"UPDATE kb.space SET home_article_id = $3",
-				"WHERE id = $1 AND domain_id = $2 AND home_article_id IS NULL",
+				"WHERE id = $1 AND dc = $2 AND home_article_id IS NULL",
 			} {
 				if !strings.Contains(f.gotSQL, want) {
 					t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
@@ -420,7 +420,7 @@ func TestSpaceUpdateBindsValuesInOrder(t *testing.T) {
 
 	// SET order: name, description, embedding_model_id, reranker_model_id,
 	// vector_search_enabled, rerank_enabled, chunking_strategy,
-	// state, updated_at=now() (no arg), updated_by; WHERE: id, domain_id.
+	// state, updated_at=now() (no arg), updated_by; WHERE: id, dc.
 	if len(f.gotArgs) != 11 {
 		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
 	}
@@ -435,7 +435,7 @@ func TestSpaceUpdateBindsValuesInOrder(t *testing.T) {
 	assertPinned(t, f.gotArgs, 7, model.SpaceStateInactive)
 	assertPinned(t, f.gotArgs, 8, ptrTo(int64(9))) // updated_by = caller
 	assertPinned(t, f.gotArgs, 9, int64(1))        // WHERE id
-	assertPinned(t, f.gotArgs, 10, int64(5))       // WHERE domain_id
+	assertPinned(t, f.gotArgs, 10, int64(5))       // WHERE dc
 }
 
 func TestSpaceLocateRequiresExactlyOneID(t *testing.T) {
@@ -653,7 +653,7 @@ func TestSpaceResolveEmbedding(t *testing.T) {
 	}
 
 	// Answered across domains on purpose.
-	if strings.Contains(f.gotSQL, "domain_id") {
+	if strings.Contains(f.gotSQL, ".dc") {
 		t.Errorf("statement scopes by domain: %s", f.gotSQL)
 	}
 
@@ -696,7 +696,7 @@ func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
 		"FROM kb.space s",
 		"LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id",
 		"s.vector_search_enabled AND s.embedding_model_id IS NOT NULL AS vector_search_enabled",
-		"s.domain_id = $1",
+		"s.dc = $1",
 		"s.id = ANY($2)",
 		"s.deleted_at IS NULL",
 		"s.state = $3",
@@ -723,7 +723,7 @@ func TestSpaceResolveEmbeddingsWithoutIDsReadsTheWholeDomain(t *testing.T) {
 		t.Fatalf("ResolveEmbeddings: %v", err)
 	}
 
-	if strings.Contains(f.gotSQL, "ANY(") || !strings.Contains(f.gotSQL, "s.domain_id = $1") ||
+	if strings.Contains(f.gotSQL, "ANY(") || !strings.Contains(f.gotSQL, "s.dc = $1") ||
 		!strings.Contains(f.gotSQL, "s.deleted_at IS NULL") || !strings.Contains(f.gotSQL, "s.state = $2") {
 		t.Fatalf("SQL = %s", f.gotSQL)
 	}
@@ -751,7 +751,7 @@ func TestSpaceResolveRerankersReadsTheDomainSpaces(t *testing.T) {
 	for _, want := range []string{
 		"s.rerank_enabled AND s.reranker_model_id IS NOT NULL AS enabled",
 		"LEFT JOIN kb.embedding_model m ON m.id = s.reranker_model_id",
-		"s.domain_id = $1",
+		"s.dc = $1",
 		"s.id = ANY($2)",
 		"s.deleted_at IS NULL",
 		"ORDER BY s.id",
@@ -813,7 +813,7 @@ func TestSpaceTeamSpaces(t *testing.T) {
 			for _, want := range []string{
 				"FROM call_center.cc_team t",
 				"LEFT JOIN kb.team_space ts ON ts.team_id = t.id",
-				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.domain_id = t.domain_id AND s.deleted_at IS NULL",
+				"LEFT JOIN kb.space s ON s.id = ts.space_id AND s.dc = t.domain_id AND s.deleted_at IS NULL",
 				"t.id = $1 AND t.domain_id = $2",
 				"ORDER BY s.id",
 			} {

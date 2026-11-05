@@ -22,7 +22,7 @@ const defaultAttachmentSort = "-created_at"
 const attachSQL = `INSERT INTO kb.attachment (article_id, file_id, name, mime, size, created_by)
 	SELECT a.id, $3::bigint, $4::text, $5::text, $6::bigint, $7::bigint
 	FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+	WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL
 	ON CONFLICT (article_id, file_id) DO UPDATE
 		SET name = EXCLUDED.name, mime = EXCLUDED.mime, size = EXCLUDED.size
 	RETURNING *`
@@ -38,7 +38,7 @@ const unboundFilesSQL = `SELECT f.id FROM unnest($1::bigint[]) AS f(id)
 const deleteAttachmentSQL = `DELETE FROM kb.attachment m
 	USING kb.article a JOIN kb.space s ON s.id = a.space_id
 	WHERE m.article_id = $1 AND m.file_id = $2
-	  AND a.id = m.article_id AND s.domain_id = $3 AND a.deleted_at IS NULL
+	  AND a.id = m.article_id AND s.dc = $3 AND a.deleted_at IS NULL
 	RETURNING m.*`
 
 type attachmentStore struct {

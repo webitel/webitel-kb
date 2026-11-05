@@ -38,13 +38,13 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 
 	for _, want := range []string{
 		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, $1) AS query FROM " +
-			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.domain_id = $2 AND s.id = ANY($3)) AS configs)",
+			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.dc = $2 AND s.id = ANY($3)) AS configs)",
 		", lex AS (SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (",
 		"FROM tq JOIN kb.space s ON s.text_search_config = tq.config JOIN kb.article m ON m.space_id = s.id" +
 			" JOIN kb.chunk c ON c.version_id = m.published_version_id",
 		"ts_rank_cd(c.tsv, tq.query) AS rank_key",
 		"c.tsv @@ tq.query",
-		"s.domain_id = $4",
+		"s.dc = $4",
 		"m.state = $5",
 		"s.state = $6",
 		"s.id = ANY($7)",
@@ -75,7 +75,7 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 func TestHybridHitsParsesTheTermPerDomainConfig(t *testing.T) {
 	sql, _ := mustSQLArgs(t, NewHybridHits(model.HybridQuery{Term: "vpn", TopK: 5}).WithScope(5))
 
-	if !strings.Contains(sql, "FROM kb.space s WHERE s.domain_id = $2) AS configs") {
+	if !strings.Contains(sql, "FROM kb.space s WHERE s.dc = $2) AS configs") {
 		t.Fatalf("SQL %q does not collect the configurations of the domain", sql)
 	}
 }
@@ -97,7 +97,7 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		"vec AS (SELECT id, row_number() OVER (ORDER BY rank_key, id) AS rank FROM (",
 		"FROM kb.chunk_embedding e JOIN kb.chunk c ON c.id = e.chunk_id JOIN kb.article m ON m.published_version_id = c.version_id WHERE",
 		"e.model_id = $",
-		"e.domain_id = $",
+		"e.dc = $",
 		"e.space_id = ANY($",
 		"e.embedding_768 <=> $",
 		"ORDER BY e.embedding_768 <=> $",

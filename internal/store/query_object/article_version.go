@@ -76,7 +76,7 @@ func (q *ArticleVersionQuery) EnsureJoins(required int) {
 func (q *ArticleVersionQuery) WithDomainScope(domainID int64) *ArticleVersionQuery {
 	q.builder = q.builder.Where(
 		"EXISTS (SELECT 1 FROM kb.article a JOIN kb.space s ON s.id = a.space_id"+
-			" WHERE a.id = m.article_id AND s.domain_id = ? AND a.deleted_at IS NULL)",
+			" WHERE a.id = m.article_id AND s.dc = ? AND a.deleted_at IS NULL)",
 		domainID,
 	)
 

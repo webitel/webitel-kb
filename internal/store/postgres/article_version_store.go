@@ -31,7 +31,7 @@ const createVersionSQL = `INSERT INTO kb.article_version
 	       (SELECT COALESCE(max(v.version_number), 0) + 1 FROM kb.article_version v WHERE v.article_id = a.id),
 	       $3, $4::jsonb, $5, $6, to_tsvector(s.text_search_config::regconfig, $6), $7::bigint, $8, $9::bigint
 	FROM kb.article a JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL
+	WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL
 	  AND ($7::bigint IS NULL OR EXISTS (
 	      SELECT 1 FROM kb.article_version src WHERE src.id = $7::bigint AND src.article_id = a.id))
 	RETURNING *`

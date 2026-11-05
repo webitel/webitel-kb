@@ -84,7 +84,7 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 	for i := range h.vec {
 		// The scope sits on the vector row, so the filter needs no join to apply;
 		// the spaces of a side arrive active already.
-		vec := whereLiveArticle(h.vec[i].builder.Where("e.domain_id = ?", domainID)).
+		vec := whereLiveArticle(h.vec[i].builder.Where("e.dc = ?", domainID)).
 			Where("e.space_id = ANY(?)", h.vec[i].spaces)
 		h.vec[i].builder = whereTags(vec, h.filter.Tags, h.filter.TagsMatchAll).
 			OrderByClause(h.vec[i].column+" <=> ?::vector, c.id", h.vec[i].literal).

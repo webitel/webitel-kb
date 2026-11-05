@@ -28,7 +28,7 @@ func TestAttachmentListRendersScopedQuery(t *testing.T) {
 
 	for _, want := range []string{
 		"FROM kb.attachment m",
-		"a.id=m.article_id AND s.domain_id=$1 AND a.deleted_at IS NULL",
+		"a.id=m.article_id AND s.dc=$1 AND a.deleted_at IS NULL",
 		"m.article_id=$2",
 		"m.name ILIKE $3",
 		"m.file_id=ANY($4)",
@@ -130,7 +130,7 @@ func TestAttachmentAttachBindsTheFileToTheArticle(t *testing.T) {
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.attachment (article_id, file_id, name, mime, size, created_by)",
 		"FROM kb.article a JOIN kb.space s ON s.id = a.space_id",
-		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL",
+		"WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL",
 		"ON CONFLICT (article_id, file_id) DO UPDATE",
 		"RETURNING *) SELECT m.file_id AS id FROM m",
 	} {
@@ -178,7 +178,7 @@ func TestAttachmentDeleteUnbindsTheRowOfTheArticle(t *testing.T) {
 		"WITH m AS (DELETE FROM kb.attachment m",
 		"USING kb.article a JOIN kb.space s ON s.id = a.space_id",
 		"WHERE m.article_id = $1 AND m.file_id = $2",
-		"AND a.id = m.article_id AND s.domain_id = $3 AND a.deleted_at IS NULL",
+		"AND a.id = m.article_id AND s.dc = $3 AND a.deleted_at IS NULL",
 		"RETURNING m.*) SELECT m.file_id AS id FROM m",
 	} {
 		if !strings.Contains(f.gotSQL, want) {

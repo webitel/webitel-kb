@@ -28,10 +28,10 @@ func TestRetrievalSearchRendersRankedPage(t *testing.T) {
 
 	for _, want := range []string{
 		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, $1) AS query",
-		"s.domain_id = $2 AND s.id = ANY($3)",
+		"s.dc = $2 AND s.id = ANY($3)",
 		", h AS (SELECT id, sum(1.0 / (60 + rank)) AS rank FROM (",
 		"UNION ALL",
-		"s.domain_id = $4",
+		"s.dc = $4",
 		"m.deleted_at IS NULL",
 		"m.state = $5",
 		"s.state = $6",
@@ -84,7 +84,7 @@ func TestRetrievalResolveKeepsTheAskedOrder(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"s.domain_id=$2",
+		"s.dc=$2",
 		"m.deleted_at IS NULL",
 		"m.state=$3",
 		"s.state=$4",
@@ -137,7 +137,7 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 
 			want := append([]string{
 				"WITH RECURSIVE menu AS(",
-				"s.domain_id=$1 AND c.space_id=$2 AND s.state=$3",
+				"s.dc=$1 AND c.space_id=$2 AND s.state=$3",
 				"AND c.id IS DISTINCT FROM s.home_article_id",
 				"UNION ALL",
 				"FROM menu JOIN kb.article m ON m.id=menu.id",
@@ -236,7 +236,7 @@ func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
 		"WITH tq AS MATERIALIZED (",
 		", lex AS (",
 		", vec AS (",
-		"s.domain_id = $",
+		"s.dc = $",
 		"m.state = $",
 		"e.model_id = $",
 		"LIMIT 10)",

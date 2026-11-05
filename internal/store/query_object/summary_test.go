@@ -38,7 +38,7 @@ func TestSummaryScope(t *testing.T) {
 
 	for _, want := range []string{
 		"JOIN kb.space s ON s.id=m.space_id",
-		"s.domain_id=$1",
+		"s.dc=$1",
 		"m.deleted_at IS NULL",
 		"m.state=$2",
 		"s.state=$3",
@@ -192,7 +192,7 @@ func TestSearchHitsFusesThreeRankings(t *testing.T) {
 
 	for _, want := range []string{
 		"WITH tq AS MATERIALIZED (SELECT config, websearch_to_tsquery(config::regconfig, ?) AS query FROM " +
-			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.domain_id = ? AND s.id = ANY(?)) AS configs)",
+			"(SELECT DISTINCT s.text_search_config AS config FROM kb.space s WHERE s.dc = ? AND s.id = ANY(?)) AS configs)",
 		", h AS (SELECT id, sum(1.0 / (60 + rank)) AS rank FROM (",
 		"SELECT id, row_number() OVER (ORDER BY rank_key DESC, id) AS rank FROM (",
 		// An article only meets the query of its own space configuration.

@@ -39,7 +39,7 @@ func newSpaceConfigs() squirrel.SelectBuilder {
 // scopeSpaceConfigs keeps the configurations of the spaces in scope; no spaces
 // means the whole domain.
 func scopeSpaceConfigs(configs squirrel.SelectBuilder, domainID int64, spaceIDs []int64) squirrel.SelectBuilder {
-	configs = configs.Where("s.domain_id = ?", domainID)
+	configs = configs.Where("s.dc = ?", domainID)
 
 	if len(spaceIDs) > 0 {
 		configs = configs.Where("s.id = ANY(?)", spaceIDs)
@@ -77,7 +77,7 @@ func rankedList(sql string) string {
 // The predicates below are shared by the summary projection and a search.
 
 func whereDomainScope(builder squirrel.SelectBuilder, domainID int64) squirrel.SelectBuilder {
-	return builder.Where("s.domain_id = ?", domainID)
+	return builder.Where("s.dc = ?", domainID)
 }
 
 // whereLiveArticle keeps live articles in the active state.

@@ -172,7 +172,7 @@ func (s *embeddingModelStore) Create(
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Insert(embeddingModelTable).
 		Columns(
-			"domain_id", "type", "name", "provider", "is_self_hosted",
+			"dc", "type", "name", "provider", "is_self_hosted",
 			"model_ref", "dimensions", "endpoint", "config", "created_by",
 		).
 		Values(
@@ -216,7 +216,7 @@ func (s *embeddingModelStore) Update(
 
 	sql, args, err := builder.
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
+		Where("dc = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -230,7 +230,7 @@ func (s *embeddingModelStore) Delete(ctx context.Context, opts options.Deleter) 
 	sql, args, err := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Delete(embeddingModelTable).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
+		Where("dc = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -245,7 +245,7 @@ func (s *embeddingModelStore) MarkValidated(ctx context.Context, opts options.Up
 		Update(embeddingModelTable).
 		Set("validated_at", squirrel.Expr("now()")).
 		Where("id = ?", opts.GetID()).
-		Where("domain_id = ?", opts.GetAuthOpts().GetDomainID()).
+		Where("dc = ?", opts.GetAuthOpts().GetDomainID()).
 		Suffix("RETURNING *").
 		ToSql()
 	if err != nil {
@@ -257,7 +257,7 @@ func (s *embeddingModelStore) MarkValidated(ctx context.Context, opts options.Up
 
 func (s *embeddingModelStore) InUse(ctx context.Context, id, domainID int64) (bool, error) {
 	const sql = `SELECT EXISTS (SELECT 1 FROM kb.space
-		WHERE domain_id = $2 AND deleted_at IS NULL
+		WHERE dc = $2 AND deleted_at IS NULL
 		AND $1 IN (embedding_model_id, reranker_model_id, target_embedding_model_id))`
 
 	var used bool
@@ -269,7 +269,7 @@ func (s *embeddingModelStore) InUse(ctx context.Context, id, domainID int64) (bo
 }
 
 func (s *embeddingModelStore) GetConfig(ctx context.Context, id, domainID int64) ([]byte, error) {
-	const sql = `SELECT config FROM kb.embedding_model WHERE id = $1 AND (domain_id = $2 OR domain_id IS NULL)`
+	const sql = `SELECT config FROM kb.embedding_model WHERE id = $1 AND (dc = $2 OR dc IS NULL)`
 
 	var config []byte
 	if err := s.db.QueryRow(ctx, sql, id, domainID).Scan(&config); err != nil {

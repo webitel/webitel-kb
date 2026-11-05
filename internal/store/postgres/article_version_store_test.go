@@ -28,7 +28,7 @@ func TestArticleVersionListNewestFirst(t *testing.T) {
 
 	for _, want := range []string{
 		"EXISTS(SELECT 1 FROM kb.article a JOIN kb.space s ON s.id=a.space_id",
-		"s.domain_id=$1 AND a.deleted_at IS NULL",
+		"s.dc=$1 AND a.deleted_at IS NULL",
 		"m.article_id=$2",
 		"ORDER BY m.version_number DESC",
 		"LIMIT 11",
@@ -114,7 +114,7 @@ func TestArticleVersionCreateNumbersAndVectorizes(t *testing.T) {
 		"WITH m AS (INSERT INTO kb.article_version",
 		"(SELECT COALESCE(max(v.version_number), 0) + 1 FROM kb.article_version v WHERE v.article_id = a.id)",
 		"to_tsvector(s.text_search_config::regconfig, $6)",
-		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL",
+		"WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)

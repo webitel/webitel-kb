@@ -12,7 +12,7 @@ const (
 // spaceTeamsExpr aggregates the team binding into a JSON array right in the
 // SELECT list.
 const spaceTeamsExpr = `(SELECT COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name) ORDER BY t.name), '[]')` +
-	` FROM kb.team_space ts JOIN call_center.cc_team t ON t.id = ts.team_id AND t.domain_id = m.domain_id` +
+	` FROM kb.team_space ts JOIN call_center.cc_team t ON t.id = ts.team_id AND t.domain_id = m.dc` +
 	` WHERE ts.space_id = m.id) AS teams`
 
 // SpaceQuery builds SELECTs over knowledge-base spaces.
@@ -47,7 +47,7 @@ func (q *SpaceQuery) FieldsMetadata() map[string]fieldMetadata {
 	if q.meta == nil {
 		q.meta = map[string]fieldMetadata{
 			"id":                        {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
-			"domain_id":                 {sqlExpr: "m.domain_id", aliasedExpr: "m.domain_id AS domain_id"},
+			"domain_id":                 {sqlExpr: "m.dc", aliasedExpr: "m.dc AS domain_id"},
 			"name":                      {sqlExpr: "m.name", aliasedExpr: "m.name AS name", sortable: true},
 			"description":               {sqlExpr: "m.description", aliasedExpr: "m.description AS description"},
 			"language":                  {sqlExpr: "m.language", aliasedExpr: "m.language AS language", sortable: true},
@@ -98,7 +98,7 @@ func (q *SpaceQuery) EnsureJoins(required int) {
 
 // WithDomainScope keeps the spaces of the given domain.
 func (q *SpaceQuery) WithDomainScope(domainID int64) *SpaceQuery {
-	q.builder = q.builder.Where("m.domain_id = ?", domainID)
+	q.builder = q.builder.Where("m.dc = ?", domainID)
 
 	return q
 }

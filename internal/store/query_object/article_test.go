@@ -11,7 +11,7 @@ func TestArticleDomainScopeJoinsSpace(t *testing.T) {
 
 	for _, want := range []string{
 		"JOIN kb.space s ON s.id=m.space_id",
-		"s.domain_id=$1",
+		"s.dc=$1",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("SQL %q does not contain %q", sql, want)
@@ -150,7 +150,7 @@ func TestArticleDefaultsCoverReadModel(t *testing.T) {
 	sql, _ := mustSQLArgs(t, q)
 
 	for _, want := range []string{
-		"m.id AS id", "s.domain_id AS domain_id", "space_name", "m.parent_id AS parent_id",
+		"m.id AS id", "s.dc AS domain_id", "space_name", "m.parent_id AS parent_id",
 		"m.depth AS depth", "m.tags AS tags", "m.ver AS ver", "m.published_version_id AS published_version_id",
 		"created_by_name", "updated_by_name", "JOIN kb.space s", "LEFT JOIN directory.wbt_user cb",
 		"COALESCE(s.home_article_id=m.id,false)AS home",
