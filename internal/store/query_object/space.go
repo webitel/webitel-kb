@@ -96,6 +96,13 @@ func (q *SpaceQuery) EnsureJoins(required int) {
 	q.joins |= required
 }
 
+// WithAccess keeps the spaces the plan lets the caller reach.
+func (q *SpaceQuery) WithAccess(plan AccessPlan) *SpaceQuery {
+	q.builder = q.builder.Where(plan.SpacePredicate())
+
+	return q
+}
+
 // WithDomainScope keeps the spaces of the given domain.
 func (q *SpaceQuery) WithDomainScope(domainID int64) *SpaceQuery {
 	q.builder = q.builder.Where("m.domain_id = ?", domainID)

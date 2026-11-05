@@ -13,6 +13,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/event"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
@@ -56,6 +57,24 @@ type fakeArticleStore struct {
 
 	// callOrder records the flow steps a test wants to assert on.
 	callOrder []string
+	// accesses records the mode of every locate.
+	accesses []auth.AccessMode
+	// hidden lists the articles Reachable leaves out; reachModes records its modes.
+	hidden     []int64
+	reachModes []auth.AccessMode
+}
+
+func (f *fakeArticleStore) Reachable(_ context.Context, opts options.Searcher, ids []int64) ([]int64, error) {
+	f.reachModes = append(f.reachModes, opts.GetAccess())
+
+	reached := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if !slices.Contains(f.hidden, id) {
+			reached = append(reached, id)
+		}
+	}
+
+	return reached, nil
 }
 
 func (f *fakeArticleStore) step(name string) { f.callOrder = append(f.callOrder, name) }
@@ -69,6 +88,7 @@ func (f *fakeArticleStore) List(_ context.Context, opts options.Searcher, filter
 
 func (f *fakeArticleStore) Locate(_ context.Context, opts options.Searcher) (*model.Article, error) {
 	f.plainLocates++
+	f.accesses = append(f.accesses, opts.GetAccess())
 	f.locateFields = append(f.locateFields, opts.GetFields())
 	f.step("locate")
 
@@ -96,6 +116,7 @@ func (f *fakeArticleStore) Locate(_ context.Context, opts options.Searcher) (*mo
 
 func (f *fakeArticleStore) LocateForUpdate(_ context.Context, opts options.Searcher) (*model.Article, error) {
 	f.lockedLocates++
+	f.accesses = append(f.accesses, opts.GetAccess())
 	f.locateFields = append(f.locateFields, opts.GetFields())
 	f.step("locate-for-update")
 
@@ -300,7 +321,7 @@ func newArticleUow() *articleUow {
 			order: articles,
 		},
 		outbox: &fakeOutbox{order: articles},
-		spaces: &fakeSpaceStore{order: articles},
+		spaces: &fakeSpaceStore{order: articles, readBack: &model.Space{ID: 3}},
 	}
 
 	return uow
@@ -628,7 +649,7 @@ func TestArticleDeleteLocksTheSpaceFirst(t *testing.T) {
 		wantOrder string
 		wantCode  codes.Code
 	}{
-		{name: "the space before the subtree", wantOrder: "locate,tree-lock,locate,delete-article", wantCode: codes.OK},
+		{name: "the space before the subtree", wantOrder: "locate,tree-lock,locate,subtree,delete-article", wantCode: codes.OK},
 		{
 			name: "an unknown article deletes nothing", locateErr: errors.NotFound("entity does not exist"),
 			wantOrder: "locate", wantCode: codes.NotFound,

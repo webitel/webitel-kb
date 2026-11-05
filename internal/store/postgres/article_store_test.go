@@ -15,6 +15,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
+	queryobject "github.com/webitel/webitel-kb/internal/store/query_object"
 )
 
 func TestArticleListRendersScopedQuery(t *testing.T) {
@@ -460,12 +461,12 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 	for _, want := range []string{
 		"WITH RECURSIVE anc AS (",
 		"JOIN kb.article p ON p.id = a.parent_id",
-		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
+		"WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
 		"SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id",
 		"FROM anc m",
 		"ORDER BY m.depth ASC",
 	} {
-		if !strings.Contains(f.gotSQL, want) {
+		if !strings.Contains(f.gotSQL, queryobject.CompactSQL(want)) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}
@@ -499,7 +500,7 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
+		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
 		"AND m.id IS DISTINCT FROM s.home_article_id",
 		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
 		"LIMIT $3",
@@ -576,7 +577,7 @@ func TestArticleSuggestTags(t *testing.T) {
 	for _, want := range []string{
 		"SELECT DISTINCT t FROM kb.article m",
 		"CROSS JOIN LATERAL unnest(m.tags) AS t",
-		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
+		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
 		"ORDER BY t LIMIT $4",
 	} {
 		if !strings.Contains(f.gotSQL, want) {

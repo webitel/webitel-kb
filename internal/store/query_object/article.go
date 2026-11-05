@@ -121,6 +121,13 @@ func (q *ArticleQuery) WithVisible() *ArticleQuery {
 	return q
 }
 
+// WithAccess keeps the articles the plan lets the caller reach.
+func (q *ArticleQuery) WithAccess(plan AccessPlan) *ArticleQuery {
+	q.builder = q.builder.Where(plan.ArticlePredicate())
+
+	return q
+}
+
 // WithDomainScope keeps the articles of spaces owned by the domain.
 func (q *ArticleQuery) WithDomainScope(domainID int64) *ArticleQuery {
 	q.EnsureJoins(articleJoinSpace)
@@ -174,6 +181,15 @@ func (q *ArticleQuery) WithTags(tags []string, matchAll bool) *ArticleQuery {
 func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
 	if spaceID > 0 {
 		q.builder = q.builder.Where("m.space_id = ?", spaceID)
+	}
+
+	return q
+}
+
+// WithSpaces keeps articles of the given spaces; empty means any.
+func (q *ArticleQuery) WithSpaces(spaceIDs []int64) *ArticleQuery {
+	if len(spaceIDs) > 0 {
+		q.builder = q.builder.Where("m.space_id = ANY(?)", spaceIDs)
 	}
 
 	return q

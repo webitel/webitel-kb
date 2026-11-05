@@ -55,7 +55,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"CreateArticle": WebitelMethod{
-				Access: 2,
+				Access: 0,
 				Input:  "CreateArticleRequest",
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
@@ -81,7 +81,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"DeleteArticle": WebitelMethod{
-				Access: 2,
+				Access: 3,
 				Input:  "DeleteArticleRequest",
 				Output: "Article",
 				HttpBindings: []*HttpBinding{
@@ -214,7 +214,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"CreateModel": WebitelMethod{
-				Access: 2,
+				Access: 0,
 				Input:  "CreateModelRequest",
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
@@ -240,7 +240,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"DeleteModel": WebitelMethod{
-				Access: 2,
+				Access: 3,
 				Input:  "DeleteModelRequest",
 				Output: "EmbeddingModel",
 				HttpBindings: []*HttpBinding{
@@ -351,7 +351,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"CreateSpace": WebitelMethod{
-				Access: 2,
+				Access: 0,
 				Input:  "CreateSpaceRequest",
 				Output: "Space",
 				HttpBindings: []*HttpBinding{
@@ -377,7 +377,7 @@ var WebitelAPI = WebitelServicesInfo{
 				},
 			},
 			"DeleteSpace": WebitelMethod{
-				Access: 2,
+				Access: 3,
 				Input:  "DeleteSpaceRequest",
 				Output: "Space",
 				HttpBindings: []*HttpBinding{

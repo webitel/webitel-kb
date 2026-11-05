@@ -11,6 +11,7 @@ import (
 
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -127,8 +128,10 @@ func (s *spaceStore) List(
 
 	sql, args, err := queryobject.NewSpaceQuery(queryobject.SpaceFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(queryobject.PlanSpaceAccess(opts.GetAuthOpts(), auth.Read)).
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
+		WithIDs(filter.IDs).
 		WithState(filter.State).
 		WithLanguages(filter.Languages).
 		WithFields(opts.GetFields()).
@@ -169,6 +172,7 @@ func (s *spaceStore) locateSpace(ctx context.Context, opts options.Searcher, loc
 
 	query := queryobject.NewSpaceQuery(queryobject.SpaceFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(queryobject.PlanSpaceAccess(opts.GetAuthOpts(), opts.GetAccess())).
 		WithIDs(opts.GetIDs()).
 		WithFields(opts.GetFields())
 
@@ -188,7 +192,7 @@ func (s *spaceStore) locateSpace(ctx context.Context, opts options.Searcher, loc
 
 	item, err := collectRow(rows, mapSpace)
 	if err != nil {
-		return nil, ParseError(err)
+		return nil, changeMiss(ctx, opts, err, errSpaceAccessDenied, s.Locate)
 	}
 
 	return item, nil

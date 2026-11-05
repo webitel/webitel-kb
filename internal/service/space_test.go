@@ -78,6 +78,8 @@ type fakeSpaceStore struct {
 	teamUnknown   bool
 	teamAsked     int64
 
+	accesses []auth.AccessMode
+
 	createIn    *model.Space // Create input
 	current     *model.Space // LocateForUpdate result (the stored space)
 	written     *model.Space // Create/Update/Delete result
@@ -131,6 +133,7 @@ func (f *fakeSpaceStore) List(_ context.Context, _ options.Searcher, filter mode
 }
 
 func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*model.Space, error) {
+	f.accesses = append(f.accesses, opts.GetAccess())
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
 
 	if f.byID != nil {
@@ -150,6 +153,7 @@ func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*mode
 
 func (f *fakeSpaceStore) LocateForUpdate(_ context.Context, opts options.Searcher) (*model.Space, error) {
 	f.lockedLocates++
+	f.accesses = append(f.accesses, opts.GetAccess())
 	f.trace = append(f.trace, "lock")
 	f.locateIDs = append(f.locateIDs, opts.GetIDs()...)
 	f.note("lock-space")

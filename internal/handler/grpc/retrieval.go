@@ -31,6 +31,7 @@ func (s *RetrievalServer) Search(ctx context.Context, req *kb.SearchRequest) (*k
 
 	items, next, err := s.service.Search(ctx, opts, model.SearchFilter{
 		SpaceIDs:     req.GetSpaceIds(),
+		TeamID:       req.GetTeamId(),
 		Tags:         req.GetTags(),
 		TagsMatchAll: req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
 	})
