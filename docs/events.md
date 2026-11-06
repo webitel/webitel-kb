@@ -144,8 +144,10 @@ change, for atomicity, but ordering no longer depends on it.
 
 Correctness comes from the version, not from delivery order:
 
-- every version is saved with its own envelope, so the newest version always
-  has a job;
+- every version of a published article is saved with its own envelope, so the
+  newest version always has a job;
+- a draft keeps one version, rewritten in place, and queues no job until it
+  leaves draft, which queues that version;
 - the published-version swap is monotonic;
 - `index_state` is written only by a job of the newest version, and codes 2
   and 4 never by a job of the version already published. The worker locks the
@@ -170,7 +172,7 @@ Numeric codes are authoritative:
 
 | Code | State | Written by |
 |---|---|---|
-| 1 | pending | kb-api on version save |
+| 1 | pending | kb-api on version save and on leaving draft; a draft stays here |
 | 2 | indexing | worker at job start, for the newest unpublished version |
 | 3 | indexed | worker after successful swap, for the newest version |
 | 4 | failed | worker before nack to DLQ, for the newest unpublished version; relay when delivery is given up |

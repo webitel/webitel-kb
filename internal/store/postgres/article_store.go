@@ -232,6 +232,13 @@ type articleRecord struct {
 	PublishedRichText []byte `db:"published_rich_text"`
 	PublishedMarkdown string `db:"published_markdown"`
 	PublishedPlain    string `db:"published_plain"`
+
+	LatestID       *int64 `db:"latest_id"`
+	LatestNumber   int32  `db:"latest_number"`
+	LatestSubject  string `db:"latest_subject"`
+	LatestRichText []byte `db:"latest_rich_text"`
+	LatestMarkdown string `db:"latest_markdown"`
+	LatestPlain    string `db:"latest_plain"`
 }
 
 func mapArticle(record *articleRecord) *model.Article {
@@ -265,19 +272,7 @@ func mapArticle(record *articleRecord) *model.Article {
 
 	out.CreatedBy = mapLookup(record.CreatedByID, record.CreatedByName)
 	out.UpdatedBy = mapLookup(record.UpdatedByID, record.UpdatedByName)
-	out.Published = mapPublished(record)
-
-	return out
-}
-
-// mapPublished builds the published version when it was requested and exists.
-func mapPublished(record *articleRecord) *model.ArticleVersion {
-	if record.PublishedID == nil {
-		return nil
-	}
-
-	return mapArticleVersion(&articleVersionRecord{
-		ID:            *record.PublishedID,
+	out.Published = mapJoinedVersion(record.PublishedID, articleVersionRecord{
 		ArticleID:     record.ID,
 		VersionNumber: record.PublishedNumber,
 		Subject:       record.PublishedSubject,
@@ -285,6 +280,28 @@ func mapPublished(record *articleRecord) *model.ArticleVersion {
 		BodyMarkdown:  record.PublishedMarkdown,
 		BodyPlain:     record.PublishedPlain,
 	})
+	out.Latest = mapJoinedVersion(record.LatestID, articleVersionRecord{
+		ArticleID:     record.ID,
+		VersionNumber: record.LatestNumber,
+		Subject:       record.LatestSubject,
+		BodyRichText:  record.LatestRichText,
+		BodyMarkdown:  record.LatestMarkdown,
+		BodyPlain:     record.LatestPlain,
+	})
+
+	return out
+}
+
+// mapJoinedVersion builds a version joined to the article when it was requested
+// and exists.
+func mapJoinedVersion(id *int64, record articleVersionRecord) *model.ArticleVersion {
+	if id == nil {
+		return nil
+	}
+
+	record.ID = *id
+
+	return mapArticleVersion(&record)
 }
 
 func (s *articleStore) List(
@@ -391,11 +408,6 @@ func (s *articleStore) Create(ctx context.Context, opts options.Creator, in *mod
 		typeCode = model.ArticleTypeArticle
 	}
 
-	stateCode := in.State
-	if stateCode == 0 {
-		stateCode = model.ArticleStateDraft
-	}
-
 	var (
 		writeSQL  string
 		writeArgs []any
@@ -405,13 +417,13 @@ func (s *articleStore) Create(ctx context.Context, opts options.Creator, in *mod
 		writeSQL = createRootArticleSQL
 		writeArgs = []any{
 			in.SpaceID, session.GetDomainID(),
-			typeCode, in.Subject, nonNilSlice(in.Tags), stateCode, nullIfZero(session.GetUserID()),
+			typeCode, in.Subject, nonNilSlice(in.Tags), in.State, nullIfZero(session.GetUserID()),
 		}
 	} else {
 		writeSQL = createChildArticleSQL
 		writeArgs = []any{
 			in.SpaceID, session.GetDomainID(), in.ParentID,
-			typeCode, in.Subject, nonNilSlice(in.Tags), stateCode, nullIfZero(session.GetUserID()),
+			typeCode, in.Subject, nonNilSlice(in.Tags), in.State, nullIfZero(session.GetUserID()),
 		}
 	}
 

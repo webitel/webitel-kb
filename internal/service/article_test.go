@@ -199,9 +199,11 @@ type fakeVersionStore struct {
 
 	locateErr error
 
-	createIn    *model.ArticleVersion
-	createCalls int
-	listFields  []string
+	createIn     *model.ArticleVersion
+	createCalls  int
+	rewriteIn    *model.ArticleVersion
+	rewriteCalls int
+	listFields   []string
 
 	order *fakeArticleStore // shared call-order recorder
 }
@@ -229,6 +231,13 @@ func (f *fakeVersionStore) Create(_ context.Context, _ options.Creator, in *mode
 	}
 
 	return f.created, nil
+}
+
+func (f *fakeVersionStore) Rewrite(_ context.Context, _ options.Updator, in *model.ArticleVersion) (*model.ArticleVersion, error) {
+	f.rewriteCalls++
+	f.rewriteIn = in
+
+	return in, nil
 }
 
 // fakeOutbox records the reindex events the save flow publishes.
@@ -522,7 +531,7 @@ func TestArticleCreateHome(t *testing.T) {
 			uow.spaces.homeTaken = tt.taken
 
 			created, err := svc.Create(context.Background(), creatorOpts(),
-				&model.Article{SpaceID: 3, Subject: "about", Home: tt.home}, []byte(validDoc))
+				&model.Article{SpaceID: 3, Subject: "about", Home: tt.home, State: model.ArticleStateActive}, []byte(validDoc))
 			if errors.ID(err) != tt.wantID {
 				t.Fatalf("error = %v, want %q", err, tt.wantID)
 			}
@@ -827,7 +836,7 @@ func TestArticleCreateRequestsReindex(t *testing.T) {
 	svc, uow := newArticleFixture()
 
 	if _, err := svc.Create(context.Background(), creatorOpts(),
-		&model.Article{SpaceID: 3, Subject: "a"}, []byte(validDoc)); err != nil {
+		&model.Article{SpaceID: 3, Subject: "a", State: model.ArticleStateActive}, []byte(validDoc)); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -848,6 +857,38 @@ func TestArticleCreateRequestsReindex(t *testing.T) {
 
 	if uow.articles.createIn.IndexState != 0 {
 		t.Fatalf("create index state = %d, want none", uow.articles.createIn.IndexState)
+	}
+}
+
+func TestArticleCreateIndexesAllButDrafts(t *testing.T) {
+	tests := []struct {
+		name      string
+		state     int32
+		wantIndex bool
+	}{
+		{name: "unset state is a draft", state: 0},
+		{name: "draft", state: model.ArticleStateDraft},
+		{name: "active", state: model.ArticleStateActive, wantIndex: true},
+		{name: "inactive", state: model.ArticleStateInactive, wantIndex: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+
+			if _, err := svc.Create(context.Background(), creatorOpts(),
+				&model.Article{SpaceID: 3, Subject: "a", State: tt.state}, []byte(validDoc)); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			if uow.versions.createCalls != 1 {
+				t.Fatalf("versions = %d, want one", uow.versions.createCalls)
+			}
+
+			if got := len(uow.outbox.events) == 1; got != tt.wantIndex {
+				t.Fatalf("reindex requested = %v, want %v", got, tt.wantIndex)
+			}
+		})
 	}
 }
 
@@ -1001,6 +1042,112 @@ func TestArticleUpdateVersioning(t *testing.T) {
 
 			if got := uow.versions.createIn; got.Subject != "renamed" || !strings.Contains(got.BodyMarkdown, tt.wantBody) {
 				t.Fatalf("version = %q / %q, want subject renamed over %q", got.Subject, got.BodyMarkdown, tt.wantBody)
+			}
+
+			if uow.articles.updateIn.IndexState != model.IndexStatePending {
+				t.Fatalf("index state = %d, want pending", uow.articles.updateIn.IndexState)
+			}
+		})
+	}
+}
+
+func TestArticleUpdateKeepsOneVersionForADraft(t *testing.T) {
+	const (
+		draft  = model.ArticleStateDraft
+		active = model.ArticleStateActive
+		off    = model.ArticleStateInactive
+	)
+
+	stored := func() []*model.ArticleVersion {
+		return []*model.ArticleVersion{{
+			ID: 31, VersionNumber: 1, Subject: "stored",
+			BodyRichText: []byte(validDoc), BodyMarkdown: "hi", BodyPlain: "hi",
+		}}
+	}
+
+	// The same document with its keys in the order jsonb stores them.
+	const reordered = `{"content":[{"content":[{"text":"hi","type":"text"}],"type":"paragraph"}],"type":"doc"}`
+
+	const otherDoc = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"other"}]}]}`
+
+	tests := []struct {
+		name        string
+		from, to    int32
+		subject     string
+		body        string
+		history     []*model.ArticleVersion
+		wantCreate  int
+		wantRewrite int
+		wantVersion int64 // version queued for indexing; zero queues nothing
+	}{
+		{name: "draft text rewrites", from: draft, to: draft, body: otherDoc, history: stored(), wantRewrite: 1},
+		{name: "draft subject rewrites", from: draft, to: draft, subject: "renamed", history: stored(), wantRewrite: 1},
+		{name: "first draft text creates", from: draft, to: draft, body: otherDoc, wantCreate: 1},
+		{name: "same draft text saves nothing", from: draft, to: draft, body: validDoc, history: stored()},
+		{name: "reordered draft text saves nothing", from: draft, to: draft, body: reordered, history: stored()},
+		{name: "publishing queues the draft", from: draft, to: active, history: stored(), wantVersion: 31},
+		{name: "deactivating queues the draft", from: draft, to: off, history: stored(), wantVersion: 31},
+		{
+			name: "publishing with text rewrites and queues", from: draft, to: active, body: otherDoc,
+			history: stored(), wantRewrite: 1, wantVersion: 31,
+		},
+		{name: "publishing an empty draft queues nothing", from: draft, to: active},
+		{
+			name: "publishing with the first text creates and queues", from: draft, to: active, body: otherDoc,
+			wantCreate: 1, wantVersion: 40,
+		},
+		{
+			name: "published text appends", from: active, to: active, body: otherDoc,
+			history: stored(), wantCreate: 1, wantVersion: 40,
+		},
+		{name: "same published text saves nothing", from: active, to: active, body: validDoc, history: stored()},
+		{name: "reordered published text saves nothing", from: active, to: active, body: reordered, history: stored()},
+		{name: "deactivating a published article saves nothing", from: active, to: off, history: stored()},
+		{
+			name: "inactive text appends", from: off, to: off, body: otherDoc,
+			history: stored(), wantCreate: 1, wantVersion: 40,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.current.State = tt.from
+			uow.versions.history = tt.history
+
+			opts := updaterOpts()
+			opts.mask = []string{"state"}
+			in := &model.Article{State: tt.to}
+
+			if tt.subject != "" {
+				opts.mask = append(opts.mask, "subject")
+				in.Subject = tt.subject
+			}
+
+			if _, err := svc.Update(context.Background(), opts, in, []byte(tt.body), 4); err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if uow.versions.createCalls != tt.wantCreate || uow.versions.rewriteCalls != tt.wantRewrite {
+				t.Fatalf("create = %d, rewrite = %d, want %d, %d",
+					uow.versions.createCalls, uow.versions.rewriteCalls, tt.wantCreate, tt.wantRewrite)
+			}
+
+			if tt.wantRewrite == 1 && uow.versions.rewriteIn.ID != 31 {
+				t.Fatalf("rewritten version = %d, want the stored one", uow.versions.rewriteIn.ID)
+			}
+
+			if tt.wantVersion == 0 {
+				if len(uow.outbox.events) != 0 || uow.articles.updateIn.IndexState != 0 {
+					t.Fatalf("events = %d, index state = %d, want none",
+						len(uow.outbox.events), uow.articles.updateIn.IndexState)
+				}
+
+				return
+			}
+
+			if len(uow.outbox.events) != 1 || uow.outbox.events[0].VersionID != tt.wantVersion {
+				t.Fatalf("events = %+v, want version %d", uow.outbox.events, tt.wantVersion)
 			}
 
 			if uow.articles.updateIn.IndexState != model.IndexStatePending {
@@ -1445,6 +1592,21 @@ func TestRestoreVersionFlow(t *testing.T) {
 	}
 }
 
+func TestRestoreVersionRefusesADraft(t *testing.T) {
+	svc, uow := newArticleFixture()
+	uow.articles.current.State = model.ArticleStateDraft
+
+	_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, "")
+
+	if errors.ID(err) != "kb.article.restore_draft" {
+		t.Fatalf("error = %v, want kb.article.restore_draft", err)
+	}
+
+	if uow.versions.createCalls != 0 || uow.articles.updateCalls != 0 {
+		t.Fatal("a refused restore must write nothing")
+	}
+}
+
 func TestRestoreVersionMissingSource(t *testing.T) {
 	svc, uow := newArticleFixture()
 	uow.versions.locateErr = errors.NotFound("entity does not exist or access is denied")
@@ -1654,6 +1816,7 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 	}{
 		{name: "articles keep the default", fields: nil, wantFields: nil},
 		{name: "articles drop the published body", fields: []string{"id", "published"}, wantFields: []string{"id"}},
+		{name: "articles drop the latest body", fields: []string{"id", "latest"}, wantFields: []string{"id"}},
 		{name: "articles asked only for the body get the default", fields: []string{"published"}, wantFields: nil},
 		{name: "history defaults to metadata", versions: true, fields: nil, wantFields: versionListFields},
 		{name: "history drops a body", versions: true, fields: []string{"id", "body_plain"}, wantFields: []string{"id"}},

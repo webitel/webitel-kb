@@ -65,7 +65,7 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 	s := &articleStore{db: f}
 
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5, userID: 9}, fields: []string{"id"}}
-	in := &model.Article{SpaceID: 7, Subject: "VPN setup", Tags: []string{"vpn"}}
+	in := &model.Article{SpaceID: 7, Subject: "VPN setup", Tags: []string{"vpn"}, State: model.ArticleStateDraft}
 
 	created, err := s.Create(context.Background(), opts, in)
 	if err != nil {
@@ -89,9 +89,9 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 		}
 	}
 
-	// Unset type and state fall back to the default codes.
+	// An unset type falls back to the default code.
 	if f.gotArgs[2] != model.ArticleTypeArticle || f.gotArgs[5] != model.ArticleStateDraft {
-		t.Errorf("args = %v, want default type and state codes", f.gotArgs)
+		t.Errorf("args = %v, want the default type and the given state", f.gotArgs)
 	}
 }
 
@@ -701,6 +701,13 @@ func TestArticleScanMapsPublished(t *testing.T) {
 	cols := []string{
 		"id", "ver", "published_id", "published_number", "published_subject",
 		"published_rich_text", "published_markdown", "published_plain",
+		"latest_id", "latest_number", "latest_subject", "latest_rich_text", "latest_markdown", "latest_plain",
+	}
+
+	latest := []any{ptrTo(int64(12)), int32(4), "VPN 2", []byte(`{"type":"doc"}`), "# VPN 2", "VPN 2"}
+	wantLatest := &model.ArticleVersion{
+		ID: 12, ArticleID: 1, VersionNumber: 4, Subject: "VPN 2",
+		BodyRichText: []byte(`{"type":"doc"}`), BodyMarkdown: "# VPN 2", BodyPlain: "VPN 2",
 	}
 
 	tests := []struct {
@@ -727,7 +734,8 @@ func TestArticleScanMapsPublished(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &articleStore{db: &fakeQuerier{rows: &fakeRows{cols: cols, vals: [][]any{tt.row}}}}
+			row := slices.Concat(tt.row, latest)
+			s := &articleStore{db: &fakeQuerier{rows: &fakeRows{cols: cols, vals: [][]any{row}}}}
 
 			got, err := s.Locate(context.Background(), &fakeSearchOpts{auth: fakeAuther{domainID: 5}, ids: []int64{1}})
 			if err != nil {
@@ -736,6 +744,10 @@ func TestArticleScanMapsPublished(t *testing.T) {
 
 			if !reflect.DeepEqual(got.Published, tt.want) {
 				t.Fatalf("published = %+v, want %+v", got.Published, tt.want)
+			}
+
+			if !reflect.DeepEqual(got.Latest, wantLatest) {
+				t.Fatalf("latest = %+v, want %+v", got.Latest, wantLatest)
 			}
 		})
 	}

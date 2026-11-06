@@ -63,8 +63,15 @@ type Article struct {
 	UpdatedBy *Lookup
 	// Published is the live version, read only on request.
 	Published *ArticleVersion
+	// Latest is the newest version, read only on request.
+	Latest *ArticleVersion
 	// Home marks the home page of the space; set on create only.
 	Home bool
+}
+
+// IsDraft reports whether the article is a draft.
+func (a Article) IsDraft() bool {
+	return a.State == ArticleStateDraft
 }
 
 // ReindexTarget is the version of an article a reindex event asks for.

@@ -15,6 +15,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/event"
+	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/outbox"
 	"github.com/webitel/webitel-kb/internal/store"
 )
@@ -139,11 +140,13 @@ SELECT count(*),
 	return count, time.Duration(seconds * float64(time.Second)), nil
 }
 
-// CountIndexStates reports how many live articles are in each index state,
-// across domains. A state no article is in is absent.
+// CountIndexStates reports how many live published articles are in each index
+// state, across domains: a draft waits for no indexing. A state no article is
+// in is absent.
 func (s *Store) CountIndexStates(ctx context.Context) (map[int32]int64, error) {
 	rows, err := s.Query(ctx,
-		`SELECT index_state, count(*) FROM kb.article WHERE deleted_at IS NULL GROUP BY index_state`)
+		`SELECT index_state, count(*) FROM kb.article WHERE deleted_at IS NULL AND state <> $1 GROUP BY index_state`,
+		model.ArticleStateDraft)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: count index states: %w", err)
 	}
