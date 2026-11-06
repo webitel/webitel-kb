@@ -6,7 +6,8 @@ import "time"
 // article within what the database, the transport and the index can carry.
 const MaxBodyBytes = 512 << 10
 
-// ArticleVersion is an immutable snapshot of article content.
+// ArticleVersion is a snapshot of article content, immutable once the article
+// leaves draft.
 type ArticleVersion struct {
 	ID        int64
 	ArticleID int64

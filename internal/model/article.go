@@ -27,6 +27,11 @@ func CanChangeState(from, to int32) bool {
 	return from == to || to != ArticleStateDraft
 }
 
+// IsDraft reports whether a state is draft; an unset state defaults to it.
+func IsDraft(state int32) bool {
+	return state == 0 || state == ArticleStateDraft
+}
+
 // Article indexing state codes.
 const (
 	IndexStatePending  int32 = 1

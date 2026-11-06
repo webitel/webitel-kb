@@ -147,6 +147,12 @@ func (f *articleVersionStoreFake) Locate(
 	return f.items[0], nil
 }
 
+func (f *articleVersionStoreFake) Rewrite(
+	_ context.Context, _ options.Updator, in *model.ArticleVersion,
+) (*model.ArticleVersion, error) {
+	return in, nil
+}
+
 func (f *articleVersionStoreFake) Create(
 	_ context.Context, _ options.Creator, in *model.ArticleVersion,
 ) (*model.ArticleVersion, error) {
@@ -669,7 +675,7 @@ func TestRestoreVersionTrimsTheNote(t *testing.T) {
 		created: &model.ArticleVersion{ID: 40},
 	}
 	_, versions, _ := newArticleServers(&articleUoWFake{
-		articles: &articleStoreFake{written: &model.Article{ID: 7, Ver: 4}},
+		articles: &articleStoreFake{written: &model.Article{ID: 7, Ver: 4, State: model.ArticleStateActive}},
 		versions: versionsFake,
 	})
 

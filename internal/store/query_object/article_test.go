@@ -309,7 +309,9 @@ func TestArticleWithFieldsLeavesTheCallerSliceAlone(t *testing.T) {
 }
 
 func TestArticlePublishedJoin(t *testing.T) {
-	const join = "LEFT JOIN kb.article_version pv ON pv.id=m.published_version_id"
+	const join = "LEFT JOIN LATERAL(SELECT v.*FROM kb.article_version v WHERE v.article_id=m.id" +
+		" AND(m.published_version_id IS NULL OR v.id=m.published_version_id)" +
+		"ORDER BY v.version_number DESC LIMIT 1)pv ON true"
 
 	tests := []struct {
 		name   string

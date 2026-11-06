@@ -107,7 +107,9 @@ func (q *ArticleQuery) EnsureJoins(required int) {
 	}
 
 	if missing&articleJoinPublished != 0 {
-		q.builder = q.builder.LeftJoin("kb.article_version pv ON pv.id = m.published_version_id")
+		q.builder = q.builder.LeftJoin("LATERAL (SELECT v.* FROM kb.article_version v WHERE v.article_id = m.id" +
+			" AND (m.published_version_id IS NULL OR v.id = m.published_version_id)" +
+			" ORDER BY v.version_number DESC LIMIT 1) pv ON true")
 	}
 
 	q.joins |= required

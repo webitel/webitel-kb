@@ -299,9 +299,9 @@ func (s *SpaceService) Delete(ctx context.Context, opts options.Deleter) (*model
 	return deleted, nil
 }
 
-// requestSpaceReindex puts the articles of the space with a version back to
-// pending and queues their latest version: the given ones, or every article
-// when none is given.
+// requestSpaceReindex puts the published articles of the space with a version
+// back to pending and queues their latest version: the given ones, or every
+// article when none is given. A draft is indexed when it leaves draft.
 func requestSpaceReindex(
 	ctx context.Context, tx store.UnitOfWork, session auth.Auther, spaceID int64, articleIDs []int64,
 ) error {
