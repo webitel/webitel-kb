@@ -27,11 +27,6 @@ func CanChangeState(from, to int32) bool {
 	return from == to || to != ArticleStateDraft
 }
 
-// IsDraft reports whether a state is draft; an unset state defaults to it.
-func IsDraft(state int32) bool {
-	return state == 0 || state == ArticleStateDraft
-}
-
 // Article indexing state codes.
 const (
 	IndexStatePending  int32 = 1
@@ -68,8 +63,15 @@ type Article struct {
 	UpdatedBy *Lookup
 	// Published is the live version, read only on request.
 	Published *ArticleVersion
+	// Latest is the newest version, read only on request.
+	Latest *ArticleVersion
 	// Home marks the home page of the space; set on create only.
 	Home bool
+}
+
+// IsDraft reports whether the article is a draft.
+func (a Article) IsDraft() bool {
+	return a.State == ArticleStateDraft
 }
 
 // ReindexTarget is the version of an article a reindex event asks for.

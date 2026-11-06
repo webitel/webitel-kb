@@ -326,19 +326,22 @@ func TestVersionToProtoBody(t *testing.T) {
 
 func TestArticleToProtoPublished(t *testing.T) {
 	tests := []struct {
-		name      string
-		published *model.ArticleVersion
-		wantBody  string
-		wantErr   codes.Code
+		name       string
+		published  *model.ArticleVersion
+		latest     *model.ArticleVersion
+		wantBody   string
+		wantLatest string
+		wantErr    codes.Code
 	}{
 		{name: "not requested", published: nil},
 		{name: "published body", published: &model.ArticleVersion{ID: 40, BodyMarkdown: "# VPN"}, wantBody: "# VPN"},
+		{name: "latest body", latest: &model.ArticleVersion{ID: 41, BodyMarkdown: "# new"}, wantLatest: "# new"},
 		{name: "broken document", published: &model.ArticleVersion{ID: 40, BodyRichText: []byte(`{`)}, wantErr: codes.Internal},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := articleToProto(&model.Article{ID: 7, Ver: 4, Published: tt.published})
+			got, err := articleToProto(&model.Article{ID: 7, Ver: 4, Published: tt.published, Latest: tt.latest})
 
 			if tt.wantErr != 0 {
 				if errors.Code(err) != tt.wantErr {
@@ -358,6 +361,10 @@ func TestArticleToProtoPublished(t *testing.T) {
 
 			if got.GetPublished().GetBodyMarkdown() != tt.wantBody {
 				t.Fatalf("body = %q, want %q", got.GetPublished().GetBodyMarkdown(), tt.wantBody)
+			}
+
+			if got.GetLatest().GetBodyMarkdown() != tt.wantLatest {
+				t.Fatalf("latest body = %q, want %q", got.GetLatest().GetBodyMarkdown(), tt.wantLatest)
 			}
 		})
 	}

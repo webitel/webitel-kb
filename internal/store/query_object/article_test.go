@@ -138,13 +138,13 @@ func TestArticleDefaultsCoverReadModel(t *testing.T) {
 	q := NewArticleQuery(ArticleFrom)
 
 	for field := range q.FieldsMetadata() {
-		if field != "published" && !slices.Contains(q.DefaultFields(), field) {
+		if field != "published" && field != "latest" && !slices.Contains(q.DefaultFields(), field) {
 			t.Fatalf("defaults leave out %q", field)
 		}
 	}
 
-	if slices.Contains(q.DefaultFields(), "published") {
-		t.Fatal("defaults read the published version")
+	if slices.Contains(q.DefaultFields(), "published") || slices.Contains(q.DefaultFields(), "latest") {
+		t.Fatal("defaults read a version body")
 	}
 
 	sql, _ := mustSQLArgs(t, q)
@@ -309,9 +309,7 @@ func TestArticleWithFieldsLeavesTheCallerSliceAlone(t *testing.T) {
 }
 
 func TestArticlePublishedJoin(t *testing.T) {
-	const join = "LEFT JOIN LATERAL(SELECT v.*FROM kb.article_version v WHERE v.article_id=m.id" +
-		" AND(m.published_version_id IS NULL OR v.id=m.published_version_id)" +
-		"ORDER BY v.version_number DESC LIMIT 1)pv ON true"
+	const join = "LEFT JOIN kb.article_version pv ON pv.id=m.published_version_id"
 
 	tests := []struct {
 		name   string

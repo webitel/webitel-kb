@@ -49,9 +49,12 @@ var mergeReadFields = []string{
 // reindexReadFields adds the indexing state the reindex checks to the merge read.
 var reindexReadFields = append(slices.Clone(mergeReadFields), "index_state")
 
-// versionContentFields is what a save compares and carries over from the
-// latest version.
-var versionContentFields = []string{"id", "subject", "body_rich_text", "body_markdown", "body_plain"}
+// A save compares a new body with the latest version; a save without a body
+// carries the latest one over.
+var (
+	versionCompareFields = []string{"id", "subject", "body_rich_text"}
+	versionCarryFields   = []string{"id", "subject", "body_rich_text", "body_markdown", "body_plain"}
+)
 
 // errStateTransition refuses to move an article back to draft.
 var errStateTransition = errors.InvalidArgument(
@@ -127,7 +130,7 @@ var errReindexNoVersion = errors.InvalidArgument(
 // A list never carries bodies: a page of them outgrows a response, and a body
 // is read one item at a time.
 var (
-	articleBodyFields = []string{"published"}
+	articleBodyFields = []string{"published", "latest"}
 	versionBodyFields = []string{"body_rich_text", "body_markdown", "body_plain"}
 )
 
@@ -182,6 +185,10 @@ func (s *ArticleService) Create(
 
 	if err := validateHome(in); err != nil {
 		return nil, err
+	}
+
+	if in.State == 0 {
+		in.State = model.ArticleStateDraft
 	}
 
 	body, err := s.convertBody(ctx, rawBody)
@@ -239,7 +246,7 @@ func (s *ArticleService) Create(
 			return err
 		}
 
-		if model.IsDraft(in.State) {
+		if in.IsDraft() {
 			return nil
 		}
 
@@ -298,14 +305,17 @@ func (s *ArticleService) Update(
 			return errHomeType
 		}
 
-		latest, err := latestVersion(ctx, tx, session, current.ID, versionContentFields...)
-		if err != nil {
-			return err
+		var latest *model.ArticleVersion
+
+		if fields := versionReadFields(current, merged, rawBody); fields != nil {
+			latest, err = latestVersion(ctx, tx, session, current.ID, fields...)
+			if err != nil {
+				return err
+			}
 		}
 
 		next := changedContent(current.ID, latest, merged.Subject, rawBody, body)
-		leavesDraft := model.IsDraft(current.State) && !model.IsDraft(merged.State)
-		index := !model.IsDraft(merged.State) && (next != nil || (leavesDraft && latest != nil))
+		index := needsIndex(current, merged, latest, next)
 
 		// Content to index invalidates what the pipeline indexed.
 		if index {
@@ -320,7 +330,7 @@ func (s *ArticleService) Update(
 		saved := latest
 
 		if next != nil {
-			saved, err = saveVersion(ctx, tx, opts, current.State, latest, next)
+			saved, err = saveVersion(ctx, tx, opts, current, latest, next)
 			if err != nil {
 				return err
 			}
@@ -337,6 +347,32 @@ func (s *ArticleService) Update(
 	}
 
 	return updated, nil
+}
+
+// versionReadFields is what a save needs from the latest version, nil when a
+// change of metadata needs nothing.
+func versionReadFields(current, merged *model.Article, rawBody []byte) []string {
+	switch {
+	case len(rawBody) == 0 && merged.Subject != current.Subject:
+		return versionCarryFields
+	case len(rawBody) != 0 || (current.IsDraft() && !merged.IsDraft()):
+		return versionCompareFields
+	default:
+		return nil
+	}
+}
+
+// needsIndex reports whether a save leaves a published article with content
+// the index has not seen yet.
+func needsIndex(current, merged *model.Article, latest, next *model.ArticleVersion) bool {
+	switch {
+	case merged.IsDraft():
+		return false // a draft is indexed once it is published
+	case next != nil:
+		return true // new content
+	default:
+		return current.IsDraft() && latest != nil // a draft published as it is
+	}
 }
 
 // latestVersion returns the newest version of an article, nil without versions.
@@ -404,9 +440,9 @@ func sameDocument(a, b []byte) bool {
 
 // saveVersion rewrites the version of a draft and appends one otherwise.
 func saveVersion(
-	ctx context.Context, tx store.UnitOfWork, opts options.Updator, state int32, latest, next *model.ArticleVersion,
+	ctx context.Context, tx store.UnitOfWork, opts options.Updator, current *model.Article, latest, next *model.ArticleVersion,
 ) (*model.ArticleVersion, error) {
-	if model.IsDraft(state) && latest != nil {
+	if current.IsDraft() && latest != nil {
 		next.ID = latest.ID
 
 		return tx.ArticleVersionStore().Rewrite(ctx, opts, next)
@@ -706,7 +742,7 @@ func (s *ArticleService) RestoreVersion(
 			return err
 		}
 
-		if model.IsDraft(current.State) {
+		if current.IsDraft() {
 			return errRestoreDraft
 		}
 

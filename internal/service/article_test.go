@@ -1816,6 +1816,7 @@ func TestArticleListsCarryNoBodies(t *testing.T) {
 	}{
 		{name: "articles keep the default", fields: nil, wantFields: nil},
 		{name: "articles drop the published body", fields: []string{"id", "published"}, wantFields: []string{"id"}},
+		{name: "articles drop the latest body", fields: []string{"id", "latest"}, wantFields: []string{"id"}},
 		{name: "articles asked only for the body get the default", fields: []string{"published"}, wantFields: nil},
 		{name: "history defaults to metadata", versions: true, fields: nil, wantFields: versionListFields},
 		{name: "history drops a body", versions: true, fields: []string{"id", "body_plain"}, wantFields: []string{"id"}},
