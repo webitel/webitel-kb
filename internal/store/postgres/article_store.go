@@ -25,8 +25,8 @@ const defaultArticleSort = "+subject"
 // caller's space enforces the domain scope in the same statement and gives
 // the subject vector its configuration.
 const createRootArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
-	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
+	(space_id, domain_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, s.domain_id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
 	       setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')
 	FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2
 	RETURNING *`
@@ -34,8 +34,8 @@ const createRootArticleSQL = `INSERT INTO kb.article
 // createChildArticleSQL inserts a child article, deriving depth from a live
 // parent of the same space; the depth constraint backstops the maximum.
 const createChildArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
-	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
+	(space_id, domain_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, s.domain_id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
 	       setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')
 	FROM kb.space s
 	JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL
@@ -137,7 +137,7 @@ const ancestorsCTE = `WITH RECURSIVE anc AS (
 	SELECT p.* FROM kb.article a
 	JOIN kb.article p ON p.id = a.parent_id
 	JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = ? AND s.dc = ? AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+	WHERE a.id = ? AND s.domain_id = ? AND a.deleted_at IS NULL AND p.deleted_at IS NULL
 	UNION ALL
 	SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id
 	WHERE g.deleted_at IS NULL
@@ -160,7 +160,7 @@ func treeQuery(domainID, spaceID int64, plan queryobject.AccessPlan) squirrel.Se
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Select("m.id", "COALESCE(m.parent_id, 0)", "m.subject", "m.type", "m.depth", "m.state").
 		From("kb.article m JOIN kb.space s ON s.id = m.space_id").
-		Where("s.dc = ? AND m.space_id = ? AND m.deleted_at IS NULL"+
+		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL"+
 			" AND m.id IS DISTINCT FROM s.home_article_id", domainID, spaceID).
 		Where(plan.ArticlePredicate()).
 		OrderBy("m.parent_id NULLS FIRST", "m.subject", "m.id").
@@ -182,7 +182,7 @@ func suggestTagsQuery(domainID, spaceID int64, pattern string, size int, plan qu
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
 		Select("t").Distinct().
 		From("kb.article m JOIN kb.space s ON s.id = m.space_id CROSS JOIN LATERAL unnest(m.tags) AS t").
-		Where("s.dc = ? AND m.space_id = ? AND m.deleted_at IS NULL AND t ILIKE ?", domainID, spaceID, pattern).
+		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL AND t ILIKE ?", domainID, spaceID, pattern).
 		Where(plan.ArticlePredicate()).
 		OrderBy("t").
 		Suffix("LIMIT ?", size)

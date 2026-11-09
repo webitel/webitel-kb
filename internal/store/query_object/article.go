@@ -188,9 +188,7 @@ func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
 
 // WithSpaces keeps articles of the given spaces; empty means any.
 func (q *ArticleQuery) WithSpaces(spaceIDs []int64) *ArticleQuery {
-	if len(spaceIDs) > 0 {
-		q.builder = q.builder.Where("m.space_id = ANY(?)", spaceIDs)
-	}
+	q.builder = whereSpaces(q.builder, spaceIDs)
 
 	return q
 }

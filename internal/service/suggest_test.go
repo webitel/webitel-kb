@@ -53,7 +53,7 @@ func TestSuggestGuards(t *testing.T) {
 		{
 			name:  "an unknown team is refused, not answered with the whole domain",
 			query: model.SuggestQuery{Message: "vpn", TeamID: 7}, unknownTeam: true,
-			wantCode: codes.InvalidArgument, wantID: "kb.retrieval.team_unknown",
+			wantCode: codes.InvalidArgument, wantID: "kb.space.team_unknown",
 		},
 		{
 			name:  "spaces outside the binding suggest nothing",

@@ -47,8 +47,12 @@ func (s *SpaceService) List(
 	filter.Languages = bases
 
 	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, filter.IDs)
-	if err != nil || !reach {
-		return make([]*model.Space, 0), false, err
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !reach {
+		return make([]*model.Space, 0), false, nil
 	}
 
 	filter.IDs = ids

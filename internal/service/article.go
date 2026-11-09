@@ -157,8 +157,12 @@ func (s *ArticleService) List(
 	}
 
 	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, asked)
-	if err != nil || !reach {
-		return make([]*model.Article, 0), false, err
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !reach {
+		return make([]*model.Article, 0), false, nil
 	}
 
 	filter.SpaceIDs = ids

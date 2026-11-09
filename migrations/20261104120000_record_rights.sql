@@ -2,36 +2,73 @@
 -- Access rules of spaces and articles in the platform layout. Rules flow down
 -- the hierarchy: a change of a rule on a space or an article rewrites the rule
 -- of that subject on every article below it, and an article is shared only
--- with a subject that may read its container.
+-- with a subject that may read its container. Rules keep the domain of their
+-- object and subject.
 
 CREATE TABLE kb.space_acl (
     dc      bigint   NOT NULL REFERENCES directory.wbt_domain (dc) ON DELETE CASCADE,
     grantor bigint   NULL REFERENCES directory.wbt_auth (id) ON DELETE SET NULL,
-    subject bigint   NOT NULL REFERENCES directory.wbt_auth (id) ON DELETE CASCADE,
-    object  bigint   NOT NULL REFERENCES kb.space (id) ON DELETE CASCADE,
-    access  smallint NOT NULL
+    subject bigint   NOT NULL,
+    object  bigint   NOT NULL,
+    access  smallint NOT NULL,
+    CONSTRAINT space_acl_object_fk FOREIGN KEY (dc, object)
+        REFERENCES kb.space (domain_id, id) ON DELETE CASCADE,
+    CONSTRAINT space_acl_subject_fk FOREIGN KEY (dc, subject)
+        REFERENCES directory.wbt_auth (dc, id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX space_acl_object_subject_uindex ON kb.space_acl (object, subject);
-CREATE UNIQUE INDEX space_acl_subject_object_uindex ON kb.space_acl (subject, object);
+CREATE UNIQUE INDEX space_acl_object_subject_uindex ON kb.space_acl (object, subject) INCLUDE (access);
+CREATE UNIQUE INDEX space_acl_subject_object_uindex ON kb.space_acl (subject, object) INCLUDE (access);
 CREATE INDEX space_acl_grantor_index ON kb.space_acl (grantor);
 
 CREATE TABLE kb.article_acl (
     dc      bigint   NOT NULL REFERENCES directory.wbt_domain (dc) ON DELETE CASCADE,
     grantor bigint   NULL REFERENCES directory.wbt_auth (id) ON DELETE SET NULL,
-    subject bigint   NOT NULL REFERENCES directory.wbt_auth (id) ON DELETE CASCADE,
-    object  bigint   NOT NULL REFERENCES kb.article (id) ON DELETE CASCADE,
-    access  smallint NOT NULL
+    subject bigint   NOT NULL,
+    object  bigint   NOT NULL,
+    access  smallint NOT NULL,
+    CONSTRAINT article_acl_object_fk FOREIGN KEY (dc, object)
+        REFERENCES kb.article (domain_id, id) ON DELETE CASCADE,
+    CONSTRAINT article_acl_subject_fk FOREIGN KEY (dc, subject)
+        REFERENCES directory.wbt_auth (dc, id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX article_acl_object_subject_uindex ON kb.article_acl (object, subject);
-CREATE UNIQUE INDEX article_acl_subject_object_uindex ON kb.article_acl (subject, object);
+CREATE UNIQUE INDEX article_acl_object_subject_uindex ON kb.article_acl (object, subject) INCLUDE (access);
+CREATE UNIQUE INDEX article_acl_subject_object_uindex ON kb.article_acl (subject, object) INCLUDE (access);
 CREATE INDEX article_acl_grantor_index ON kb.article_acl (grantor);
 
--- A new space gets the owner and the default rules of its class.
-CREATE TRIGGER tg_space_rbac AFTER INSERT ON kb.space
-    FOR EACH ROW WHEN (NEW.created_by IS NOT NULL)
-    EXECUTE FUNCTION directory.tg_obj_default_rbac('kb_spaces');
-
 -- +goose StatementBegin
+-- kb.tg_obj_default_rbac gives a new object its owner and the default rules of
+-- its class, as the platform one does for objects that keep the domain as dc.
+CREATE FUNCTION kb.tg_obj_default_rbac() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $_$
+BEGIN
+    EXECUTE format(
+'INSERT INTO %I.%I AS acl (dc, object, grantor, subject, access)
+ SELECT $1, $2, rbac.grantor, rbac.subject, rbac.access
+   FROM (
+    SELECT $3, $3, (255)::int2
+     UNION ALL
+    SELECT DISTINCT ON (rbac.subject)
+        first_value(rbac.grantor) OVER sub
+      , rbac.subject
+      , bit_or(rbac.access) OVER sub
+      FROM directory.wbt_default_acl AS rbac
+      JOIN directory.wbt_class AS oc ON (oc.dc, oc.name) = ($1, %L)
+     WHERE rbac.object = oc.id
+       AND rbac.subject <> $3
+       AND (rbac.grantor = $3 OR EXISTS (SELECT 1 FROM directory.wbt_auth_member sup
+             WHERE sup.member_id = $3 AND sup.role_id = rbac.grantor))
+    WINDOW sub AS (PARTITION BY rbac.subject ORDER BY rbac.access DESC)
+   ) AS rbac(grantor, subject, access)',
+        tg_table_schema,
+        tg_table_name || '_acl',
+        tg_argv[0]::name
+    )
+    USING NEW.domain_id, NEW.id, NEW.created_by;
+
+    RETURN NEW;
+END
+$_$;
+
 -- kb.article_below lists the articles under an article.
 CREATE FUNCTION kb.article_below(root bigint) RETURNS SETOF bigint
 LANGUAGE sql STABLE AS $$
@@ -171,6 +208,11 @@ END
 $$;
 -- +goose StatementEnd
 
+-- A new space gets the owner and the default rules of its class.
+CREATE TRIGGER tg_space_rbac AFTER INSERT ON kb.space
+    FOR EACH ROW WHEN (NEW.created_by IS NOT NULL)
+    EXECUTE FUNCTION kb.tg_obj_default_rbac('kb_spaces');
+
 CREATE TRIGGER tg_space_acl_guard BEFORE INSERT OR UPDATE OR DELETE ON kb.space_acl
     FOR EACH ROW EXECUTE FUNCTION kb.tg_acl_guard();
 
@@ -201,6 +243,7 @@ DROP TRIGGER tg_space_acl_cascade ON kb.space_acl;
 DROP TRIGGER tg_article_acl_guard ON kb.article_acl;
 DROP TRIGGER tg_space_acl_guard ON kb.space_acl;
 DROP TRIGGER tg_space_rbac ON kb.space;
+DROP FUNCTION kb.tg_obj_default_rbac();
 DROP FUNCTION kb.tg_article_acl_rebase();
 DROP FUNCTION kb.tg_article_acl_inherit();
 DROP FUNCTION kb.tg_acl_cascade();

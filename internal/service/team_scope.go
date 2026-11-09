@@ -10,7 +10,13 @@ import (
 	"github.com/webitel/webitel-kb/internal/store"
 )
 
-// teamSpaces narrows the asked spaces to the binding of the operator team.
+// errTeamUnknown reports a team id that is not a team of the domain.
+var errTeamUnknown = errors.InvalidArgument(
+	"team is unknown in this domain",
+	errors.WithID("kb.space.team_unknown"),
+)
+
+// teamSpaces narrows the asked spaces to the space binding of the team.
 // reach is false when nothing is left to read; ids empty with reach true
 // means every space. A team without a binding narrows nothing.
 func teamSpaces(
@@ -26,10 +32,7 @@ func teamSpaces(
 	}
 
 	if !found {
-		return nil, false, errors.InvalidArgument(
-			"team is unknown in this domain",
-			errors.WithID("kb.retrieval.team_unknown"),
-		)
+		return nil, false, errTeamUnknown
 	}
 
 	switch {

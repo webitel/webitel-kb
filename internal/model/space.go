@@ -133,7 +133,7 @@ type SpaceFilter struct {
 	State int32
 	// Languages keeps the spaces of the base language of any of these tags.
 	Languages []string
-	// TeamID is the operator team whose binding narrows the spaces.
+	// TeamID is the team whose space binding narrows the spaces.
 	TeamID int64
 	// IDs keeps those spaces; empty means any.
 	IDs []int64

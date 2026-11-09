@@ -41,19 +41,19 @@ func TestPlanArticleAccess(t *testing.T) {
 	}{
 		{
 			name:    "select only hides drafts",
-			session: session(map[string]string{model.ScopeArticles: "r"}),
+			session: session(map[string]string{model.ScopeSpaces: "r", model.ScopeArticles: "r"}),
 			mode:    auth.Read,
 			want:    AccessPlan{Mode: auth.Read, SpaceMode: auth.Read, Drafts: DraftsNone},
 		},
 		{
 			name:    "an edit right keeps drafts",
-			session: session(map[string]string{model.ScopeArticles: "rw"}),
+			session: session(map[string]string{model.ScopeSpaces: "r", model.ScopeArticles: "rw"}),
 			mode:    auth.Read,
 			want:    AccessPlan{Mode: auth.Read, SpaceMode: auth.Read, Drafts: DraftsAll},
 		},
 		{
 			name:    "a change never filters drafts",
-			session: session(map[string]string{model.ScopeArticles: "r"}),
+			session: session(map[string]string{model.ScopeSpaces: "r", model.ScopeArticles: "r"}),
 			mode:    auth.Edit,
 			want:    AccessPlan{Mode: auth.Edit, SpaceMode: auth.Edit, Drafts: DraftsAll},
 		},
@@ -105,8 +105,25 @@ func TestPlanArticleAccess(t *testing.T) {
 			want: AccessPlan{Mode: auth.Read, SpaceMode: auth.Read, Drafts: DraftsAll},
 		},
 		{
+			name:    "without the spaces scope nothing is reached",
+			session: session(map[string]string{model.ScopeArticles: "rw"}, model.ScopeArticles),
+			mode:    auth.Read,
+			want:    AccessPlan{Mode: auth.Read, Denied: true, SpaceMode: auth.Read, Article: true, Drafts: DraftsByArticle},
+		},
+		{
+			name: "a super right of the mode passes the missing spaces scope",
+			session: func() *user_session.UserAuthSession {
+				s := session(map[string]string{model.ScopeArticles: "r"})
+				s.SuperSelect = true
+
+				return s
+			}(),
+			mode: auth.Read,
+			want: AccessPlan{Mode: auth.Read, SpaceMode: auth.Read, Drafts: DraftsNone},
+		},
+		{
 			name:    "no mode means reading",
-			session: session(map[string]string{model.ScopeArticles: "rw"}),
+			session: session(map[string]string{model.ScopeSpaces: "r", model.ScopeArticles: "rw"}),
 			mode:    auth.NONE,
 			want:    AccessPlan{Mode: auth.Read, SpaceMode: auth.Read, Drafts: DraftsAll},
 		},
@@ -159,6 +176,11 @@ func TestPlanSpaceAccess(t *testing.T) {
 	}
 }
 
+const (
+	domain    = 9
+	ancestors = "ancestors"
+)
+
 // ruleChecks lists the rule tables a predicate reads with the mode of each.
 func ruleChecks(t *testing.T, pred squirrel.Sqlizer) map[string]int16 {
 	t.Helper()
@@ -187,9 +209,20 @@ func ruleChecks(t *testing.T, pred squirrel.Sqlizer) map[string]int16 {
 			}
 
 			for _, table := range []string{spaceACL, articleACL} {
-				if strings.Contains(sql, table) {
-					got[table] = args[1].(int16)
+				if !strings.Contains(sql, table) {
+					continue
 				}
+
+				if args[0] != int64(domain) {
+					t.Errorf("rules read in domain %v, want %d", args[0], domain)
+				}
+
+				mode := args[2]
+				if strings.Contains(sql, "WITH RECURSIVE open") {
+					table, mode = ancestors, args[3]
+				}
+
+				got[table] = mode.(int16)
 			}
 		}
 	}
@@ -210,7 +243,7 @@ func TestArticlePredicateChecksTheRulesOfThePlan(t *testing.T) {
 		{
 			name: "article rules in the mode and the space for reading",
 			plan: AccessPlan{Mode: auth.Delete, Article: true, Space: true, SpaceMode: auth.Read},
-			want: map[string]int16{articleACL: int16(auth.Delete), spaceACL: int16(auth.Read)},
+			want: map[string]int16{articleACL: int16(auth.Delete), spaceACL: int16(auth.Read), ancestors: int16(auth.Read)},
 		},
 		{
 			name: "space rules standing for the articles",
@@ -231,6 +264,7 @@ func TestArticlePredicateChecksTheRulesOfThePlan(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.plan.Domain = domain
 			if got := ruleChecks(t, tt.plan.ArticlePredicate()); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("rule checks = %v, want %v", got, tt.want)
 			}
@@ -248,6 +282,7 @@ func TestAccessPredicates(t *testing.T) {
 		{name: "nothing to check renders nothing", plan: AccessPlan{Mode: auth.Read}},
 		{name: "hidden drafts filter articles only", plan: AccessPlan{Mode: auth.Read, Drafts: DraftsNone}, wantArticle: true},
 		{name: "space rules filter both", plan: AccessPlan{Mode: auth.Read, Space: true, SpaceMode: auth.Read}, wantArticle: true, wantSpace: true},
+		{name: "a caller without spaces gets both shut", plan: AccessPlan{Mode: auth.Read, Denied: true}, wantArticle: true, wantSpace: true},
 	}
 
 	for _, tt := range tests {

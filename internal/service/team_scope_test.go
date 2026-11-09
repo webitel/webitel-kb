@@ -43,7 +43,7 @@ func TestTeamSpaces(t *testing.T) {
 				t.Fatalf("code = %v, want %v (err: %v)", errors.Code(err), tt.wantCode, err)
 			}
 
-			if tt.wantCode == codes.InvalidArgument && errors.ID(err) != "kb.retrieval.team_unknown" {
+			if tt.wantCode == codes.InvalidArgument && errors.ID(err) != "kb.space.team_unknown" {
 				t.Errorf("id = %q", errors.ID(err))
 			}
 

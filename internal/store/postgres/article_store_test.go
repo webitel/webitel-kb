@@ -79,7 +79,7 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.article",
-		"SELECT s.id, NULL, 1,",
+		"SELECT s.id, s.domain_id, NULL, 1,",
 		"updated_by, search_tsv)",
 		"setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')",
 		"FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2",
@@ -461,7 +461,7 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 	for _, want := range []string{
 		"WITH RECURSIVE anc AS (",
 		"JOIN kb.article p ON p.id = a.parent_id",
-		"WHERE a.id = $1 AND s.dc = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
+		"WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL",
 		"SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id",
 		"FROM anc m",
 		"ORDER BY m.depth ASC",
@@ -500,7 +500,7 @@ func TestArticleTreeScopesAndNests(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
+		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL",
 		"AND m.id IS DISTINCT FROM s.home_article_id",
 		"ORDER BY m.parent_id NULLS FIRST, m.subject, m.id",
 		"LIMIT $3",
@@ -577,7 +577,7 @@ func TestArticleSuggestTags(t *testing.T) {
 	for _, want := range []string{
 		"SELECT DISTINCT t FROM kb.article m",
 		"CROSS JOIN LATERAL unnest(m.tags) AS t",
-		"s.dc = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
+		"s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3",
 		"ORDER BY t LIMIT $4",
 	} {
 		if !strings.Contains(f.gotSQL, want) {
