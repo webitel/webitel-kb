@@ -239,6 +239,8 @@ type articleRecord struct {
 	LatestRichText []byte `db:"latest_rich_text"`
 	LatestMarkdown string `db:"latest_markdown"`
 	LatestPlain    string `db:"latest_plain"`
+
+	VersionCount int64 `db:"version_count"`
 }
 
 func mapArticle(record *articleRecord) *model.Article {
@@ -255,6 +257,8 @@ func mapArticle(record *articleRecord) *model.Article {
 		CreatedAt:  record.CreatedAt,
 		UpdatedAt:  record.UpdatedAt,
 		Home:       record.Home,
+
+		VersionCount: record.VersionCount,
 	}
 
 	out.Space = mapLookup(record.SpaceID, record.SpaceName)

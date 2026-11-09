@@ -58,6 +58,8 @@ type Article struct {
 	Home bool `protobuf:"varint,14,opt,name=home,proto3" json:"home,omitempty"`
 	// Newest saved version, only when requested in fields.
 	Latest *ArticleVersion `protobuf:"bytes,15,opt,name=latest,proto3" json:"latest,omitempty"`
+	// Number of saved versions, only when requested in fields.
+	VersionCount int64 `protobuf:"varint,16,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -205,6 +207,13 @@ func (x *Article) GetLatest() *ArticleVersion {
 		return x.Latest
 	}
 	return nil
+}
+
+func (x *Article) GetVersionCount() int64 {
+	if x != nil {
+		return x.VersionCount
+	}
+	return 0
 }
 
 func (x *Article) GetCreatedAt() int64 {
@@ -1045,7 +1054,7 @@ var File_article_proto protoreflect.FileDescriptor
 const file_article_proto_rawDesc = "" +
 	"\n" +
 	"\rarticle.proto\x12\n" +
-	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\xcc\x05\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\xf1\x05\n" +
 	"\aArticle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12%\n" +
@@ -1063,7 +1072,8 @@ const file_article_proto_rawDesc = "" +
 	"\x03ver\x18\f \x01(\x05R\x03ver\x128\n" +
 	"\tpublished\x18\r \x01(\v2\x1a.webitel.kb.ArticleVersionR\tpublished\x12\x12\n" +
 	"\x04home\x18\x0e \x01(\bR\x04home\x122\n" +
-	"\x06latest\x18\x0f \x01(\v2\x1a.webitel.kb.ArticleVersionR\x06latest\x12\x1d\n" +
+	"\x06latest\x18\x0f \x01(\v2\x1a.webitel.kb.ArticleVersionR\x06latest\x12#\n" +
+	"\rversion_count\x18\x10 \x01(\x03R\fversionCount\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +

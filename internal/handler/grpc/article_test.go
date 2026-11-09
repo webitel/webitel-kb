@@ -331,17 +331,21 @@ func TestArticleToProtoPublished(t *testing.T) {
 		latest     *model.ArticleVersion
 		wantBody   string
 		wantLatest string
+		versions   int64
 		wantErr    codes.Code
 	}{
 		{name: "not requested", published: nil},
 		{name: "published body", published: &model.ArticleVersion{ID: 40, BodyMarkdown: "# VPN"}, wantBody: "# VPN"},
 		{name: "latest body", latest: &model.ArticleVersion{ID: 41, BodyMarkdown: "# new"}, wantLatest: "# new"},
+		{name: "version count", versions: 3},
 		{name: "broken document", published: &model.ArticleVersion{ID: 40, BodyRichText: []byte(`{`)}, wantErr: codes.Internal},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := articleToProto(&model.Article{ID: 7, Ver: 4, Published: tt.published, Latest: tt.latest})
+			got, err := articleToProto(&model.Article{
+				ID: 7, Ver: 4, Published: tt.published, Latest: tt.latest, VersionCount: tt.versions,
+			})
 
 			if tt.wantErr != 0 {
 				if errors.Code(err) != tt.wantErr {
@@ -365,6 +369,10 @@ func TestArticleToProtoPublished(t *testing.T) {
 
 			if got.GetLatest().GetBodyMarkdown() != tt.wantLatest {
 				t.Fatalf("latest body = %q, want %q", got.GetLatest().GetBodyMarkdown(), tt.wantLatest)
+			}
+
+			if got.GetVersionCount() != tt.versions {
+				t.Fatalf("version count = %d, want %d", got.GetVersionCount(), tt.versions)
 			}
 		})
 	}

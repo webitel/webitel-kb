@@ -65,6 +65,8 @@ type Article struct {
 	Published *ArticleVersion
 	// Latest is the newest version, read only on request.
 	Latest *ArticleVersion
+	// VersionCount is the number of saved versions, read only on request.
+	VersionCount int64
 	// Home marks the home page of the space; set on create only.
 	Home bool
 }
