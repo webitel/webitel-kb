@@ -56,6 +56,8 @@ type Article struct {
 	Published *ArticleVersion `protobuf:"bytes,13,opt,name=published,proto3" json:"published,omitempty"`
 	// Whether the article is the home page of its space.
 	Home bool `protobuf:"varint,14,opt,name=home,proto3" json:"home,omitempty"`
+	// Newest saved version, only when requested in fields.
+	Latest *ArticleVersion `protobuf:"bytes,15,opt,name=latest,proto3" json:"latest,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -196,6 +198,13 @@ func (x *Article) GetHome() bool {
 		return x.Home
 	}
 	return false
+}
+
+func (x *Article) GetLatest() *ArticleVersion {
+	if x != nil {
+		return x.Latest
+	}
+	return nil
 }
 
 func (x *Article) GetCreatedAt() int64 {
@@ -1036,7 +1045,7 @@ var File_article_proto protoreflect.FileDescriptor
 const file_article_proto_rawDesc = "" +
 	"\n" +
 	"\rarticle.proto\x12\n" +
-	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\x98\x05\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\fcommon.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1aproto/webitel/option.proto\x1a\x0fretrieval.proto\x1a\rversion.proto\"\xcc\x05\n" +
 	"\aArticle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12%\n" +
@@ -1053,7 +1062,8 @@ const file_article_proto_rawDesc = "" +
 	"\x14published_version_id\x18\v \x01(\x03R\x12publishedVersionId\x12\x10\n" +
 	"\x03ver\x18\f \x01(\x05R\x03ver\x128\n" +
 	"\tpublished\x18\r \x01(\v2\x1a.webitel.kb.ArticleVersionR\tpublished\x12\x12\n" +
-	"\x04home\x18\x0e \x01(\bR\x04home\x12\x1d\n" +
+	"\x04home\x18\x0e \x01(\bR\x04home\x122\n" +
+	"\x06latest\x18\x0f \x01(\v2\x1a.webitel.kb.ArticleVersionR\x06latest\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -1172,43 +1182,44 @@ var file_article_proto_depIdxs = []int32{
 	16, // 2: webitel.kb.Article.state:type_name -> webitel.kb.ArticleState
 	17, // 3: webitel.kb.Article.index_state:type_name -> webitel.kb.IndexState
 	18, // 4: webitel.kb.Article.published:type_name -> webitel.kb.ArticleVersion
-	14, // 5: webitel.kb.Article.created_by:type_name -> general.Lookup
-	14, // 6: webitel.kb.Article.updated_by:type_name -> general.Lookup
-	15, // 7: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
-	16, // 8: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
-	19, // 9: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
-	16, // 10: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
-	15, // 11: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
-	20, // 12: webitel.kb.ListArticlesRequest.tag_match:type_name -> webitel.kb.TagMatch
-	0,  // 13: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
-	1,  // 14: webitel.kb.CreateArticleRequest.input:type_name -> webitel.kb.InputArticle
-	1,  // 15: webitel.kb.UpdateArticleRequest.input:type_name -> webitel.kb.InputArticle
-	21, // 16: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
-	2,  // 17: webitel.kb.Articles.ListArticles:input_type -> webitel.kb.ListArticlesRequest
-	4,  // 18: webitel.kb.Articles.LocateArticle:input_type -> webitel.kb.LocateArticleRequest
-	5,  // 19: webitel.kb.Articles.CreateArticle:input_type -> webitel.kb.CreateArticleRequest
-	6,  // 20: webitel.kb.Articles.UpdateArticle:input_type -> webitel.kb.UpdateArticleRequest
-	7,  // 21: webitel.kb.Articles.DeleteArticle:input_type -> webitel.kb.DeleteArticleRequest
-	8,  // 22: webitel.kb.Articles.MoveArticle:input_type -> webitel.kb.MoveArticleRequest
-	9,  // 23: webitel.kb.Articles.ReindexArticle:input_type -> webitel.kb.ReindexArticleRequest
-	10, // 24: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
-	11, // 25: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
-	12, // 26: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
-	3,  // 27: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
-	0,  // 28: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
-	0,  // 29: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
-	0,  // 30: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
-	0,  // 31: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
-	0,  // 32: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
-	0,  // 33: webitel.kb.Articles.ReindexArticle:output_type -> webitel.kb.Article
-	3,  // 34: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
-	3,  // 35: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
-	13, // 36: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
-	27, // [27:37] is the sub-list for method output_type
-	17, // [17:27] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	18, // 5: webitel.kb.Article.latest:type_name -> webitel.kb.ArticleVersion
+	14, // 6: webitel.kb.Article.created_by:type_name -> general.Lookup
+	14, // 7: webitel.kb.Article.updated_by:type_name -> general.Lookup
+	15, // 8: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
+	16, // 9: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
+	19, // 10: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
+	16, // 11: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
+	15, // 12: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
+	20, // 13: webitel.kb.ListArticlesRequest.tag_match:type_name -> webitel.kb.TagMatch
+	0,  // 14: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
+	1,  // 15: webitel.kb.CreateArticleRequest.input:type_name -> webitel.kb.InputArticle
+	1,  // 16: webitel.kb.UpdateArticleRequest.input:type_name -> webitel.kb.InputArticle
+	21, // 17: webitel.kb.GetTreeResponse.nodes:type_name -> webitel.kb.TreeNode
+	2,  // 18: webitel.kb.Articles.ListArticles:input_type -> webitel.kb.ListArticlesRequest
+	4,  // 19: webitel.kb.Articles.LocateArticle:input_type -> webitel.kb.LocateArticleRequest
+	5,  // 20: webitel.kb.Articles.CreateArticle:input_type -> webitel.kb.CreateArticleRequest
+	6,  // 21: webitel.kb.Articles.UpdateArticle:input_type -> webitel.kb.UpdateArticleRequest
+	7,  // 22: webitel.kb.Articles.DeleteArticle:input_type -> webitel.kb.DeleteArticleRequest
+	8,  // 23: webitel.kb.Articles.MoveArticle:input_type -> webitel.kb.MoveArticleRequest
+	9,  // 24: webitel.kb.Articles.ReindexArticle:input_type -> webitel.kb.ReindexArticleRequest
+	10, // 25: webitel.kb.Articles.ListChildren:input_type -> webitel.kb.ListChildrenRequest
+	11, // 26: webitel.kb.Articles.ListAncestors:input_type -> webitel.kb.ListAncestorsRequest
+	12, // 27: webitel.kb.Articles.GetTree:input_type -> webitel.kb.GetTreeRequest
+	3,  // 28: webitel.kb.Articles.ListArticles:output_type -> webitel.kb.ArticleList
+	0,  // 29: webitel.kb.Articles.LocateArticle:output_type -> webitel.kb.Article
+	0,  // 30: webitel.kb.Articles.CreateArticle:output_type -> webitel.kb.Article
+	0,  // 31: webitel.kb.Articles.UpdateArticle:output_type -> webitel.kb.Article
+	0,  // 32: webitel.kb.Articles.DeleteArticle:output_type -> webitel.kb.Article
+	0,  // 33: webitel.kb.Articles.MoveArticle:output_type -> webitel.kb.Article
+	0,  // 34: webitel.kb.Articles.ReindexArticle:output_type -> webitel.kb.Article
+	3,  // 35: webitel.kb.Articles.ListChildren:output_type -> webitel.kb.ArticleList
+	3,  // 36: webitel.kb.Articles.ListAncestors:output_type -> webitel.kb.ArticleList
+	13, // 37: webitel.kb.Articles.GetTree:output_type -> webitel.kb.GetTreeResponse
+	28, // [28:38] is the sub-list for method output_type
+	18, // [18:28] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_article_proto_init() }

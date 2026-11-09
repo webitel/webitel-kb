@@ -81,6 +81,15 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 		out.Published = published
 	}
 
+	if in.Latest != nil {
+		latest, err := versionToProto(in.Latest)
+		if err != nil {
+			return nil, err
+		}
+
+		out.Latest = latest
+	}
+
 	return out, nil
 }
 

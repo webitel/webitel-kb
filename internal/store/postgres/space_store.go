@@ -371,10 +371,11 @@ func (s *spaceStore) MarkArticlesPending(
 		) latest
 		WHERE s.id = a.space_id AND a.space_id = $1 AND s.domain_id = $2
 			AND a.deleted_at IS NULL AND latest.article_id = a.id
+			AND a.state <> $5
 			AND (coalesce(cardinality($4::bigint[]), 0) = 0 OR a.id = ANY($4::bigint[]))
 		RETURNING a.id, latest.id`
 
-	rows, err := s.db.Query(ctx, sql, spaceID, domainID, model.IndexStatePending, articleIDs)
+	rows, err := s.db.Query(ctx, sql, spaceID, domainID, model.IndexStatePending, articleIDs, model.ArticleStateDraft)
 	if err != nil {
 		return nil, ParseError(err)
 	}

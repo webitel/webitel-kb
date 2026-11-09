@@ -145,7 +145,8 @@ type RetrievalStore interface {
 	SemanticSearch(ctx context.Context, opts options.Searcher, q model.HybridQuery) ([]*model.ChunkHit, error)
 }
 
-// ArticleVersionStore persists the immutable version history of articles.
+// ArticleVersionStore persists the version history of articles, immutable but
+// for the single version of a draft.
 // Reads and writes are scoped to the caller's domain through the owning
 // article and its space.
 type ArticleVersionStore interface {
@@ -160,6 +161,10 @@ type ArticleVersionStore interface {
 	// last one and building the search vector with the given text search
 	// configuration.
 	Create(ctx context.Context, opts options.Creator, in *model.ArticleVersion) (*model.ArticleVersion, error)
+
+	// Rewrite replaces the content of the version in.ID in place, under the
+	// caller's name; the search vector follows the new text.
+	Rewrite(ctx context.Context, opts options.Updator, in *model.ArticleVersion) (*model.ArticleVersion, error)
 }
 
 // SpaceStore persists knowledge-base spaces and their team binding. Every read
@@ -209,9 +214,9 @@ type SpaceStore interface {
 	// transaction ends, so no version of theirs commits meanwhile.
 	LockArticles(ctx context.Context, spaceID, domainID int64) error
 
-	// MarkArticlesPending puts the live articles of a domain's space that have
-	// a version back to pending and returns the latest version of each. Given
-	// articleIDs narrow it to those articles.
+	// MarkArticlesPending puts the live published articles of a domain's space
+	// that have a version back to pending and returns the latest version of
+	// each. Given articleIDs narrow it to those articles.
 	MarkArticlesPending(ctx context.Context, spaceID, domainID int64, articleIDs []int64) ([]model.ReindexTarget, error)
 
 	// DropForeignEmbeddings removes the vectors of a domain's space made by

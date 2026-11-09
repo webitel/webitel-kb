@@ -36,6 +36,15 @@ const createVersionSQL = `INSERT INTO kb.article_version
 	      SELECT 1 FROM kb.article_version src WHERE src.id = $7::bigint AND src.article_id = a.id))
 	RETURNING *`
 
+// rewriteVersionSQL replaces the content of a version of a live article of the
+// caller's domain.
+const rewriteVersionSQL = `UPDATE kb.article_version v
+	SET subject = $3, body_rich_text = $4::jsonb, body_markdown = $5, body_plain = $6,
+	    tsv = to_tsvector(s.text_search_config::regconfig, $6), created_at = now(), created_by = $7::bigint
+	FROM kb.article a JOIN kb.space s ON s.id = a.space_id
+	WHERE v.id = $1 AND a.id = v.article_id AND s.domain_id = $2 AND a.deleted_at IS NULL
+	RETURNING v.*`
+
 // versionNumberConstraint marks a lost race for the next version number.
 const versionNumberConstraint = "article_version_article_id_version_number_key"
 
@@ -173,6 +182,24 @@ func (s *articleVersionStore) Create(
 	}
 
 	return created, nil
+}
+
+func (s *articleVersionStore) Rewrite(
+	ctx context.Context, opts options.Updator, in *model.ArticleVersion,
+) (*model.ArticleVersion, error) {
+	session := opts.GetAuthOpts()
+
+	readSQL, readArgs, err := queryobject.NewArticleVersionQuery("m").
+		WithFields(opts.GetFields()).
+		ToSQL()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	return cteReadBack(ctx, s.db, rewriteVersionSQL, []any{
+		in.ID, session.GetDomainID(), in.Subject, in.BodyRichText,
+		in.BodyMarkdown, in.BodyPlain, nullIfZero(session.GetUserID()),
+	}, readSQL, readArgs, mapArticleVersion)
 }
 
 // versionWriteError reports a lost race for the next version number as a

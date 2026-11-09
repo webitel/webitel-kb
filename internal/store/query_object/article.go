@@ -1,5 +1,7 @@
 package queryobject
 
+import "fmt"
+
 // ArticleFrom is the base relation of the article query object.
 const ArticleFrom = "kb.article m"
 
@@ -9,6 +11,7 @@ const (
 	articleJoinCreatedBy
 	articleJoinUpdatedBy
 	articleJoinPublished
+	articleJoinLatest
 )
 
 // ArticleQuery builds SELECTs over knowledge-base articles.
@@ -77,16 +80,27 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 				requiresJoin: articleJoinSpace,
 			},
 			"published": {
-				sqlExpr: "pv.id",
-				aliasedExpr: "pv.id AS published_id, COALESCE(pv.version_number, 0) AS published_number, " +
-					"COALESCE(pv.subject, '') AS published_subject, pv.body_rich_text AS published_rich_text, " +
-					"COALESCE(pv.body_markdown, '') AS published_markdown, COALESCE(pv.body_plain, '') AS published_plain",
+				sqlExpr:      "pv.id",
+				aliasedExpr:  versionColumns("pv", "published"),
 				requiresJoin: articleJoinPublished,
+			},
+			"latest": {
+				sqlExpr:      "lv.id",
+				aliasedExpr:  versionColumns("lv", "latest"),
+				requiresJoin: articleJoinLatest,
 			},
 		}
 	}
 
 	return q.meta
+}
+
+// versionColumns selects a joined version under a prefix.
+func versionColumns(alias, prefix string) string {
+	return fmt.Sprintf("%[1]s.id AS %[2]s_id, COALESCE(%[1]s.version_number, 0) AS %[2]s_number, "+
+		"COALESCE(%[1]s.subject, '') AS %[2]s_subject, %[1]s.body_rich_text AS %[2]s_rich_text, "+
+		"COALESCE(%[1]s.body_markdown, '') AS %[2]s_markdown, COALESCE(%[1]s.body_plain, '') AS %[2]s_plain",
+		alias, prefix)
 }
 
 // EnsureJoins appends the join clauses of newly required bits; repeated calls
@@ -108,6 +122,11 @@ func (q *ArticleQuery) EnsureJoins(required int) {
 
 	if missing&articleJoinPublished != 0 {
 		q.builder = q.builder.LeftJoin("kb.article_version pv ON pv.id = m.published_version_id")
+	}
+
+	if missing&articleJoinLatest != 0 {
+		q.builder = q.builder.LeftJoin("LATERAL (SELECT v.* FROM kb.article_version v WHERE v.article_id = m.id" +
+			" ORDER BY v.version_number DESC LIMIT 1) lv ON true")
 	}
 
 	q.joins |= required

@@ -3,7 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -46,6 +48,13 @@ var mergeReadFields = []string{
 
 // reindexReadFields adds the indexing state the reindex checks to the merge read.
 var reindexReadFields = append(slices.Clone(mergeReadFields), "index_state")
+
+// A save compares a new body with the latest version; a save without a body
+// carries the latest one over.
+var (
+	versionCompareFields = []string{"id", "subject", "body_rich_text"}
+	versionCarryFields   = []string{"id", "subject", "body_rich_text", "body_markdown", "body_plain"}
+)
 
 // errStateTransition refuses to move an article back to draft.
 var errStateTransition = errors.InvalidArgument(
@@ -103,6 +112,11 @@ var (
 	)
 )
 
+var errRestoreDraft = errors.InvalidArgument(
+	"a draft has no history to restore from",
+	errors.WithID("kb.article.restore_draft"),
+)
+
 var errReindexNotFailed = errors.InvalidArgument(
 	"only an article that failed indexing can be reindexed",
 	errors.WithID("kb.article.reindex_not_failed"),
@@ -116,7 +130,7 @@ var errReindexNoVersion = errors.InvalidArgument(
 // A list never carries bodies: a page of them outgrows a response, and a body
 // is read one item at a time.
 var (
-	articleBodyFields = []string{"published"}
+	articleBodyFields = []string{"published", "latest"}
 	versionBodyFields = []string{"body_rich_text", "body_markdown", "body_plain"}
 )
 
@@ -159,7 +173,7 @@ func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher) (*mo
 }
 
 // Create inserts an article and, when a body came along, its first version in
-// the same transaction.
+// the same transaction. A draft waits for its publication to be indexed.
 func (s *ArticleService) Create(
 	ctx context.Context, opts options.Creator, in *model.Article, rawBody []byte,
 ) (*model.Article, error) {
@@ -171,6 +185,10 @@ func (s *ArticleService) Create(
 
 	if err := validateHome(in); err != nil {
 		return nil, err
+	}
+
+	if in.State == 0 {
+		in.State = model.ArticleStateDraft
 	}
 
 	body, err := s.convertBody(ctx, rawBody)
@@ -228,6 +246,10 @@ func (s *ArticleService) Create(
 			return err
 		}
 
+		if in.IsDraft() {
+			return nil
+		}
+
 		return requestReindex(ctx, tx, session, created.ID, version.ID, in.SpaceID)
 	})
 	if err != nil {
@@ -238,9 +260,11 @@ func (s *ArticleService) Create(
 }
 
 // Update merges the input over the stored article under a row lock, rewrites
-// it guarded by the client's version, and appends a version when the body or
-// the subject changes: the subject is part of the indexed content. Other
-// metadata changes record no version.
+// it guarded by the client's version, and saves a version when the body or the
+// subject changes: the subject is part of the indexed content. A draft keeps
+// one version, rewritten until it leaves draft and is indexed; a published
+// article appends one and is indexed on every change. Other metadata changes
+// record no version.
 func (s *ArticleService) Update(
 	ctx context.Context, opts options.Updator, in *model.Article, rawBody []byte, expectedVer int32,
 ) (*model.Article, error) {
@@ -281,30 +305,20 @@ func (s *ArticleService) Update(
 			return errHomeType
 		}
 
-		var next *model.ArticleVersion
+		var latest *model.ArticleVersion
 
-		switch {
-		case len(rawBody) != 0:
-			next = &model.ArticleVersion{
-				ArticleID:    current.ID,
-				Subject:      merged.Subject,
-				BodyRichText: rawBody,
-				BodyMarkdown: body.Markdown,
-				BodyPlain:    body.Plain,
-			}
-		case merged.Subject != current.Subject:
-			retitled, ok, err := retitleLatest(ctx, tx, session, current.ID, merged.Subject)
+		if fields := versionReadFields(current, merged, rawBody); fields != nil {
+			latest, err = latestVersion(ctx, tx, session, current.ID, fields...)
 			if err != nil {
 				return err
 			}
-
-			if ok {
-				next = &retitled
-			}
 		}
 
-		// New content invalidates what the pipeline indexed.
-		if next != nil {
+		next := changedContent(current.ID, latest, merged.Subject, rawBody, body)
+		index := needsIndex(current, merged, latest, next)
+
+		// Content to index invalidates what the pipeline indexed.
+		if index {
 			merged.IndexState = model.IndexStatePending
 		}
 
@@ -313,16 +327,20 @@ func (s *ArticleService) Update(
 			return err
 		}
 
-		if next == nil {
+		saved := latest
+
+		if next != nil {
+			saved, err = saveVersion(ctx, tx, opts, current, latest, next)
+			if err != nil {
+				return err
+			}
+		}
+
+		if !index {
 			return nil
 		}
 
-		version, err := tx.ArticleVersionStore().Create(ctx, opts, next)
-		if err != nil {
-			return err
-		}
-
-		return requestReindex(ctx, tx, session, opts.GetID(), version.ID, current.SpaceID)
+		return requestReindex(ctx, tx, session, opts.GetID(), saved.ID, current.SpaceID)
 	})
 	if err != nil {
 		return nil, err
@@ -331,26 +349,106 @@ func (s *ArticleService) Update(
 	return updated, nil
 }
 
-// retitleLatest copies the latest version under a new subject; ok is false for
-// an article without versions.
-func retitleLatest(
-	ctx context.Context, tx store.UnitOfWork, session auth.Auther, articleID int64, subject string,
-) (model.ArticleVersion, bool, error) {
+// versionReadFields is what a save needs from the latest version, nil when a
+// change of metadata needs nothing.
+func versionReadFields(current, merged *model.Article, rawBody []byte) []string {
+	switch {
+	case len(rawBody) == 0 && merged.Subject != current.Subject:
+		return versionCarryFields
+	case len(rawBody) != 0 || (current.IsDraft() && !merged.IsDraft()):
+		return versionCompareFields
+	default:
+		return nil
+	}
+}
+
+// needsIndex reports whether a save leaves a published article with content
+// the index has not seen yet.
+func needsIndex(current, merged *model.Article, latest, next *model.ArticleVersion) bool {
+	switch {
+	case merged.IsDraft():
+		return false // a draft is indexed once it is published
+	case next != nil:
+		return true // new content
+	default:
+		return current.IsDraft() && latest != nil // a draft published as it is
+	}
+}
+
+// latestVersion returns the newest version of an article, nil without versions.
+func latestVersion(
+	ctx context.Context, tx store.UnitOfWork, session auth.Auther, articleID int64, fields ...string,
+) (*model.ArticleVersion, error) {
 	// The version store lists the newest version first.
-	latest, _, err := tx.ArticleVersionStore().List(ctx, readOptions{
-		auth: session, fields: []string{"id", "body_rich_text", "body_markdown", "body_plain"},
-	}, articleID)
-	if err != nil || len(latest) == 0 {
-		return model.ArticleVersion{}, false, err
+	versions, _, err := tx.ArticleVersionStore().List(ctx, readOptions{auth: session, fields: fields}, articleID)
+	if err != nil || len(versions) == 0 {
+		return nil, err
 	}
 
-	return model.ArticleVersion{
+	return versions[0], nil
+}
+
+// changedContent builds the version a save holds, nil when the subject and the
+// document stay as the latest version has them. A save without a body keeps
+// the latest one.
+func changedContent(
+	articleID int64, latest *model.ArticleVersion, subject string, rawBody []byte, body bodyconv.Result,
+) *model.ArticleVersion {
+	next := &model.ArticleVersion{
 		ArticleID:    articleID,
 		Subject:      subject,
-		BodyRichText: latest[0].BodyRichText,
-		BodyMarkdown: latest[0].BodyMarkdown,
-		BodyPlain:    latest[0].BodyPlain,
-	}, true, nil
+		BodyRichText: rawBody,
+		BodyMarkdown: body.Markdown,
+		BodyPlain:    body.Plain,
+	}
+
+	if latest == nil {
+		if len(rawBody) == 0 {
+			return nil
+		}
+
+		return next
+	}
+
+	if len(rawBody) == 0 {
+		next.BodyRichText = latest.BodyRichText
+		next.BodyMarkdown = latest.BodyMarkdown
+		next.BodyPlain = latest.BodyPlain
+	}
+
+	if subject == latest.Subject && sameDocument(next.BodyRichText, latest.BodyRichText) {
+		return nil
+	}
+
+	return next
+}
+
+// sameDocument compares two editor documents by value: jsonb keeps its own key
+// order.
+func sameDocument(a, b []byte) bool {
+	if bytes.Equal(a, b) {
+		return true
+	}
+
+	var left, right any
+	if json.Unmarshal(a, &left) != nil || json.Unmarshal(b, &right) != nil {
+		return false
+	}
+
+	return reflect.DeepEqual(left, right)
+}
+
+// saveVersion rewrites the version of a draft and appends one otherwise.
+func saveVersion(
+	ctx context.Context, tx store.UnitOfWork, opts options.Updator, current *model.Article, latest, next *model.ArticleVersion,
+) (*model.ArticleVersion, error) {
+	if current.IsDraft() && latest != nil {
+		next.ID = latest.ID
+
+		return tx.ArticleVersionStore().Rewrite(ctx, opts, next)
+	}
+
+	return tx.ArticleVersionStore().Create(ctx, opts, next)
 }
 
 func (s *ArticleService) Delete(
@@ -628,7 +726,7 @@ func (s *ArticleService) GetVersion(
 
 // RestoreVersion appends a new version carrying the content of a past one and
 // aligns the article subject with it. The version guard uses the stored value:
-// the contract carries no client version here.
+// the contract carries no client version here. A draft has nothing to restore.
 func (s *ArticleService) RestoreVersion(
 	ctx context.Context, opts options.Updator, articleID int64, number int32, notes string,
 ) (*model.ArticleVersion, error) {
@@ -642,6 +740,10 @@ func (s *ArticleService) RestoreVersion(
 		})
 		if err != nil {
 			return err
+		}
+
+		if current.IsDraft() {
+			return errRestoreDraft
 		}
 
 		source, err := tx.ArticleVersionStore().Locate(ctx, readOptions{
@@ -700,15 +802,12 @@ func (s *ArticleService) Reindex(
 			return errReindexNotFailed
 		}
 
-		// The version store lists the newest version first.
-		versions, _, err := tx.ArticleVersionStore().List(ctx, readOptions{
-			auth: session, fields: []string{"id"},
-		}, current.ID)
+		latest, err := latestVersion(ctx, tx, session, current.ID, "id")
 		if err != nil {
 			return err
 		}
 
-		if len(versions) == 0 {
+		if latest == nil {
 			return errReindexNoVersion
 		}
 
@@ -720,7 +819,7 @@ func (s *ArticleService) Reindex(
 			return err
 		}
 
-		return requestReindex(ctx, tx, session, current.ID, versions[0].ID, current.SpaceID)
+		return requestReindex(ctx, tx, session, current.ID, latest.ID, current.SpaceID)
 	})
 	if err != nil {
 		return nil, err
