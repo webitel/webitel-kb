@@ -104,11 +104,13 @@ type Space struct {
 	ChunkingStrategy string `protobuf:"bytes,10,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
 	// Article used as the space home page; 0 if unset.
 	HomeArticleId int64 `protobuf:"varint,11,opt,name=home_article_id,json=homeArticleId,proto3" json:"home_article_id,omitempty"`
-	// Teams the space is bound to as default operator visibility;
+	// Teams the space is bound to as default agent visibility;
 	// empty when no binding is configured.
 	Teams []*Lookup `protobuf:"bytes,13,rep,name=teams,proto3" json:"teams,omitempty"`
 	// Lifecycle state.
 	State SpaceState `protobuf:"varint,14,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
+	// Number of articles whose indexing failed.
+	FailedIndexCount int32 `protobuf:"varint,15,opt,name=failed_index_count,json=failedIndexCount,proto3" json:"failed_index_count,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -249,6 +251,13 @@ func (x *Space) GetState() SpaceState {
 	return SpaceState_SPACE_STATE_UNSPECIFIED
 }
 
+func (x *Space) GetFailedIndexCount() int32 {
+	if x != nil {
+		return x.FailedIndexCount
+	}
+	return 0
+}
+
 func (x *Space) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -297,7 +306,7 @@ type InputSpace struct {
 	RerankEnabled bool `protobuf:"varint,6,opt,name=rerank_enabled,json=rerankEnabled,proto3" json:"rerank_enabled,omitempty"`
 	// Chunking strategy identifier.
 	ChunkingStrategy string `protobuf:"bytes,7,opt,name=chunking_strategy,json=chunkingStrategy,proto3" json:"chunking_strategy,omitempty"`
-	// Team ids the space is bound to as default operator visibility;
+	// Team ids the space is bound to as default agent visibility;
 	// the set replaces the current binding, empty removes it.
 	TeamIds []int64 `protobuf:"varint,10,rep,packed,name=team_ids,json=teamIds,proto3" json:"team_ids,omitempty"`
 	// Lifecycle state; unspecified keeps the current one, active on create.
@@ -424,7 +433,7 @@ type ListSpacesRequest struct {
 	// Optional language filter, at most 50 tags; matches the base language of
 	// any of them.
 	Languages []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
-	// Operator team; its binding limits the spaces listed.
+	// Agent team; its binding limits the spaces listed.
 	TeamId        int64 `protobuf:"varint,8,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -778,7 +787,7 @@ var File_space_proto protoreflect.FileDescriptor
 const file_space_proto_rawDesc = "" +
 	"\n" +
 	"\vspace.proto\x12\n" +
-	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xbe\x05\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xec\x05\n" +
 	"\x05Space\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -794,7 +803,8 @@ const file_space_proto_rawDesc = "" +
 	" \x01(\tR\x10chunkingStrategy\x12&\n" +
 	"\x0fhome_article_id\x18\v \x01(\x03R\rhomeArticleId\x12%\n" +
 	"\x05teams\x18\r \x03(\v2\x0f.general.LookupR\x05teams\x12,\n" +
-	"\x05state\x18\x0e \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\x12\x1d\n" +
+	"\x05state\x18\x0e \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\x12,\n" +
+	"\x12failed_index_count\x18\x0f \x01(\x05R\x10failedIndexCount\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +

@@ -57,7 +57,43 @@ func (s *SpaceService) List(
 
 	filter.IDs = ids
 
-	return s.uow.SpaceStore().List(ctx, opts, filter)
+	items, next, err := s.uow.SpaceStore().List(ctx, opts, filter)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := s.withFailedIndexCounts(ctx, opts, items); err != nil {
+		return nil, false, err
+	}
+
+	return items, next, nil
+}
+
+// failedIndexCountField is the space field counting its failed articles.
+const failedIndexCountField = "failed_index_count"
+
+// withFailedIndexCounts sets the failed article count of the spaces when it
+// is asked for, with one query for all of them.
+func (s *SpaceService) withFailedIndexCounts(ctx context.Context, opts options.Searcher, items []*model.Space) error {
+	if len(items) == 0 || !requested(opts.GetFields(), failedIndexCountField) {
+		return nil
+	}
+
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+
+	counts, err := s.uow.ArticleStore().FailedIndexCounts(ctx, opts, ids)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		item.FailedIndexCount = counts[item.ID]
+	}
+
+	return nil
 }
 
 // baseLanguages maps tags to their distinct base languages and refuses an
@@ -82,7 +118,16 @@ func baseLanguages(tags []string) ([]string, error) {
 }
 
 func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*model.Space, error) {
-	return s.uow.SpaceStore().Locate(ctx, opts)
+	item, err := s.uow.SpaceStore().Locate(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.withFailedIndexCounts(ctx, opts, []*model.Space{item}); err != nil {
+		return nil, err
+	}
+
+	return item, nil
 }
 
 // Create validates the retrieval configuration and writes the space together

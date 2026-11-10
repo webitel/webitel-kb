@@ -51,6 +51,9 @@ type fakeArticleStore struct {
 	listFields        []string
 	suggestSize       int
 	suggestPrefix     string
+	failedCounts      map[int64]int32
+	failedCountsErr   error
+	failedCountsIDs   [][]int64
 
 	createCalls, updateCalls, deleteCalls, moveCalls, subtreeCalls int
 	lockedLocates, plainLocates                                    int
@@ -189,6 +192,12 @@ func (f *fakeArticleStore) Subtree(context.Context, options.Searcher, int64) ([]
 	f.step("subtree")
 
 	return f.subtree, nil
+}
+
+func (f *fakeArticleStore) FailedIndexCounts(_ context.Context, _ options.Searcher, spaceIDs []int64) (map[int64]int32, error) {
+	f.failedCountsIDs = append(f.failedCountsIDs, spaceIDs)
+
+	return f.failedCounts, f.failedCountsErr
 }
 
 func (f *fakeArticleStore) SuggestTags(_ context.Context, _ options.Searcher, _ int64, prefix string, size int) ([]string, error) {

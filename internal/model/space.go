@@ -38,11 +38,13 @@ type Space struct {
 	State int32
 	// Teams the space is bound to as default operator visibility; empty when no
 	// binding is configured.
-	Teams     []Lookup
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	CreatedBy *Lookup
-	UpdatedBy *Lookup
+	Teams []Lookup
+	// FailedIndexCount is the number of articles whose indexing failed.
+	FailedIndexCount int32
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	CreatedBy        *Lookup
+	UpdatedBy        *Lookup
 }
 
 // SearchModelID is the model the space searches and is indexed with; 0 when

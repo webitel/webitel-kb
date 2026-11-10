@@ -122,6 +122,9 @@ type ArticleStore interface {
 	// SuggestTags returns the distinct tags of a space matching a prefix.
 	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
 
+	// FailedIndexCounts returns the number of articles whose indexing failed per space.
+	FailedIndexCounts(ctx context.Context, opts options.Searcher, spaceIDs []int64) (map[int64]int32, error)
+
 	// LockSpaceTree locks the row of a domain's space until the transaction
 	// ends, so moves and subtree deletes in it run one at a time: concurrent
 	// moves cannot weave a cycle their snapshots would not see.
