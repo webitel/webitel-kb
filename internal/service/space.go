@@ -109,6 +109,8 @@ func (s *SpaceService) Create(
 		in.State = model.SpaceStateActive
 	}
 
+	in.ChunkingStrategy = model.SupportedChunkingStrategy(in.ChunkingStrategy)
+
 	session := opts.GetAuthOpts()
 
 	var created *model.Space
@@ -172,6 +174,7 @@ func (s *SpaceService) Update(
 		}
 
 		merged := current.Merge(in, mask)
+		merged.ChunkingStrategy = model.SupportedChunkingStrategy(merged.ChunkingStrategy)
 
 		if err := requireName(merged); err != nil {
 			return err

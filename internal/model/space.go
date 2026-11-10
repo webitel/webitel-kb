@@ -1,12 +1,31 @@
 package model
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Space lifecycle state codes.
 const (
 	SpaceStateActive   int32 = 1
 	SpaceStateInactive int32 = 2
 )
+
+// DefaultChunkingStrategy is the strategy of a space that names none.
+const DefaultChunkingStrategy = "recursive_markdown"
+
+// chunkingStrategies are the strategies the indexer splits articles with.
+var chunkingStrategies = []string{DefaultChunkingStrategy}
+
+// SupportedChunkingStrategy returns the strategy when the indexer supports it,
+// the default otherwise.
+func SupportedChunkingStrategy(name string) string {
+	if slices.Contains(chunkingStrategies, name) {
+		return name
+	}
+
+	return DefaultChunkingStrategy
+}
 
 // Space is a knowledge-base space: the top-level container that fixes the
 // language and retrieval configuration of its articles.
