@@ -391,8 +391,9 @@ func TestListArticlesFullPath(t *testing.T) {
 	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
 
 	resp, err := server.ListArticles(articleContext(), &kb.ListArticlesRequest{
-		SpaceId: 3, Q: "vpn", Tags: []string{"vpn"},
-		State: kb.ArticleState_ACTIVE, Type: kb.ArticleType_FAQ,
+		Q: "vpn", Tags: []string{"vpn"}, Type: kb.ArticleType_FAQ,
+		SpaceIds: []int64{3, 4}, States: []kb.ArticleState{kb.ArticleState_DRAFT, kb.ArticleState_ACTIVE},
+		Languages: []string{"uk-UA"},
 	})
 	if err != nil {
 		t.Fatalf("ListArticles: %v", err)
@@ -403,7 +404,9 @@ func TestListArticlesFullPath(t *testing.T) {
 	}
 
 	// Every filter of the request reaches the store.
-	if articles.filter.SpaceID != 3 || articles.filter.State != model.ArticleStateActive ||
+	if !slices.Equal(articles.filter.SpaceIDs, []int64{3, 4}) ||
+		!slices.Equal(articles.filter.States, []int32{model.ArticleStateDraft, model.ArticleStateActive}) ||
+		!slices.Equal(articles.filter.Languages, []string{"uk"}) ||
 		articles.filter.Type != model.ArticleTypeFAQ || len(articles.filter.Tags) != 1 {
 		t.Fatalf("filter = %+v", articles.filter)
 	}
@@ -430,7 +433,7 @@ func TestListArticlesTagMatch(t *testing.T) {
 			server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
 
 			if _, err := server.ListArticles(articleContext(), &kb.ListArticlesRequest{
-				SpaceId: 3, Tags: []string{"net", "vpn"}, TagMatch: tt.match,
+				SpaceIds: []int64{3}, Tags: []string{"net", "vpn"}, TagMatch: tt.match,
 			}); err != nil {
 				t.Fatalf("ListArticles: %v", err)
 			}
@@ -447,7 +450,7 @@ func TestNarrowProjectionStillRendersTheEtag(t *testing.T) {
 	server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
 
 	resp, err := server.ListArticles(articleContext(), &kb.ListArticlesRequest{
-		SpaceId: 3, Fields: []string{"subject"},
+		SpaceIds: []int64{3}, Fields: []string{"subject"},
 	})
 	if err != nil {
 		t.Fatalf("ListArticles: %v", err)
@@ -465,7 +468,7 @@ func TestNarrowProjectionStillRendersTheEtag(t *testing.T) {
 func TestListArticlesWithoutSession(t *testing.T) {
 	server, _, _ := newArticleServers(&articleUoWFake{articles: &articleStoreFake{}})
 
-	_, err := server.ListArticles(context.Background(), &kb.ListArticlesRequest{SpaceId: 3})
+	_, err := server.ListArticles(context.Background(), &kb.ListArticlesRequest{SpaceIds: []int64{3}})
 	if errors.Code(err) != codes.Unauthenticated {
 		t.Fatalf("err = %v, want Unauthenticated", err)
 	}

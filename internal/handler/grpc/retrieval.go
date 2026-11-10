@@ -65,7 +65,7 @@ func (s *RetrievalServer) Menu(ctx context.Context, req *kb.MenuRequest) (*kb.Me
 		return nil, err
 	}
 
-	items, err := s.service.Menu(ctx, opts, req.GetSpaceId(), req.GetParentId(), req.GetDepthLimit())
+	items, err := s.service.Menu(ctx, opts, req.GetSpaceId(), req.GetParentId(), req.GetDepthLimit(), req.GetSize())
 	if err != nil {
 		return nil, err
 	}

@@ -51,21 +51,21 @@ func TestArticleFilters(t *testing.T) {
 		numArgs int
 	}{
 		{
-			name: "space type state",
+			name: "spaces type states",
 			build: func() *ArticleQuery {
 				return NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).
-					WithSpace(7).WithType(1).WithState(2)
+					WithSpaces([]int64{7, 8}).WithType(1).WithStates([]int32{1, 2})
 			},
-			want:    []string{"m.space_id=$1", "m.type=$2", "m.state=$3"},
+			want:    []string{"m.space_id=ANY($1)", "m.type=$2", "m.state=ANY($3)"},
 			numArgs: 3,
 		},
 		{
-			name: "zero values disable criteria",
+			name: "zero values and empty lists disable criteria",
 			build: func() *ArticleQuery {
 				return NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).
-					WithSpace(0).WithType(0).WithState(0)
+					WithSpaces(nil).WithType(0).WithStates(nil).WithLanguages(nil)
 			},
-			absent:  []string{"m.space_id", "m.type=", "m.state="},
+			absent:  []string{"m.space_id", "m.type=", "m.state", "s.language", "JOIN kb.space"},
 			numArgs: 0,
 		},
 		{
@@ -74,6 +74,14 @@ func TestArticleFilters(t *testing.T) {
 				return NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithSearch("50%_a")
 			},
 			want:    []string{"m.subject ILIKE $1"},
+			numArgs: 1,
+		},
+		{
+			name: "languages join the space and match the base",
+			build: func() *ArticleQuery {
+				return NewArticleQuery(ArticleFrom).WithFields([]string{"id"}).WithLanguages([]string{"uk", "en"})
+			},
+			want:    []string{"JOIN kb.space s ON s.id=m.space_id", "split_part(s.language,'-',1)=ANY($1)"},
 			numArgs: 1,
 		},
 		{

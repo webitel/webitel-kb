@@ -93,6 +93,16 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 	return out, nil
 }
 
+// articleStateCodes maps the requested states to their codes.
+func articleStateCodes(states []kb.ArticleState) []int32 {
+	codes := make([]int32, 0, len(states))
+	for _, state := range states {
+		codes = append(codes, int32(state))
+	}
+
+	return codes
+}
+
 func articleListToProto(items []*model.Article, next bool) (*kb.ArticleList, error) {
 	articles := make([]*kb.Article, 0, len(items))
 

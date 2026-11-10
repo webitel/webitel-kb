@@ -189,10 +189,28 @@ func (q *ArticleQuery) WithTags(tags []string, matchAll bool) *ArticleQuery {
 	return q
 }
 
-// WithSpace keeps the articles of the given space; 0 means any.
-func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
-	if spaceID > 0 {
-		q.builder = q.builder.Where("m.space_id = ?", spaceID)
+// WithSpaces keeps articles of the given spaces; empty means any.
+func (q *ArticleQuery) WithSpaces(spaceIDs []int64) *ArticleQuery {
+	q.builder = whereSpaces(q.builder, spaceIDs)
+
+	return q
+}
+
+// WithStates keeps articles in any of the given state codes; empty means any.
+func (q *ArticleQuery) WithStates(codes []int32) *ArticleQuery {
+	if len(codes) > 0 {
+		q.builder = q.builder.Where("m.state = ANY(?)", codes)
+	}
+
+	return q
+}
+
+// WithLanguages keeps articles of spaces whose language has any of the given
+// bases; empty means any.
+func (q *ArticleQuery) WithLanguages(bases []string) *ArticleQuery {
+	if len(bases) > 0 {
+		q.EnsureJoins(articleJoinSpace)
+		q.builder = q.builder.Where("split_part(s.language, '-', 1) = ANY(?)", bases)
 	}
 
 	return q
@@ -202,15 +220,6 @@ func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
 func (q *ArticleQuery) WithType(code int32) *ArticleQuery {
 	if code > 0 {
 		q.builder = q.builder.Where("m.type = ?", code)
-	}
-
-	return q
-}
-
-// WithState keeps articles in the given state code; 0 means any.
-func (q *ArticleQuery) WithState(code int32) *ArticleQuery {
-	if code > 0 {
-		q.builder = q.builder.Where("m.state = ?", code)
 	}
 
 	return q

@@ -106,9 +106,13 @@ func (a Article) Merge(in *Article, mask []string) *Article {
 
 // ArticleFilter narrows article listings; zero values disable a criterion.
 type ArticleFilter struct {
-	SpaceID int64
-	Type    int32
-	State   int32
+	// SpaceIDs keeps the articles of those spaces; empty means any.
+	SpaceIDs []int64
+	Type     int32
+	// States keeps the articles in any of those states; empty means any.
+	States []int32
+	// Languages keeps the articles of spaces with any of these base languages.
+	Languages []string
 	// ParentID selects by parent: nil any, zero top-level, otherwise the
 	// children of that article.
 	ParentID *int64

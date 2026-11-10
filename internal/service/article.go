@@ -162,9 +162,18 @@ func withoutBodies(opts options.Searcher, bodies, fallback []string) options.Sea
 	return listOptions{Searcher: opts, fields: fields}
 }
 
+// List narrows the language filter to base languages, so one tag finds the
+// articles of every region of it.
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
 ) ([]*model.Article, bool, error) {
+	bases, err := baseLanguages(filter.Languages)
+	if err != nil {
+		return nil, false, err
+	}
+
+	filter.Languages = bases
+
 	return s.uow.ArticleStore().List(ctx, withoutBodies(opts, articleBodyFields, nil), filter)
 }
 
