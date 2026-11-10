@@ -66,6 +66,10 @@ func (f *articleStoreFake) Locate(_ context.Context, opts options.Searcher) (*mo
 	return f.items[0], nil
 }
 
+func (f *articleStoreFake) Reachable(_ context.Context, _ options.Searcher, ids []int64) ([]int64, error) {
+	return ids, nil
+}
+
 func (f *articleStoreFake) LocateForUpdate(context.Context, options.Searcher) (*model.Article, error) {
 	return f.written, nil
 }
@@ -186,7 +190,19 @@ func (f *articleUoWFake) WithinTransaction(
 }
 
 func (f *articleUoWFake) EmbeddingModelStore() store.EmbeddingModelStore { return nil }
-func (f *articleUoWFake) SpaceStore() store.SpaceStore                   { return nil }
+func (f *articleUoWFake) SpaceStore() store.SpaceStore                   { return spaceFoundFake{} }
+
+// spaceFoundFake finds every space it is asked for.
+type spaceFoundFake struct{ store.SpaceStore }
+
+func (spaceFoundFake) Locate(_ context.Context, opts options.Searcher) (*model.Space, error) {
+	return &model.Space{ID: opts.GetIDs()[0]}, nil
+}
+
+// TeamSpaces binds every team to space 9 only.
+func (spaceFoundFake) TeamSpaces(context.Context, int64, int64) ([]int64, bool, error) {
+	return []int64{9}, true, nil
+}
 func (f *articleUoWFake) ArticleStore() store.ArticleStore               { return f.articles }
 func (f *articleUoWFake) ArticleVersionStore() store.ArticleVersionStore { return f.versions }
 func (f *articleUoWFake) OutboxStore() store.OutboxStore                 { return &f.outbox }
@@ -640,6 +656,32 @@ func TestGetTreeMapsRecursively(t *testing.T) {
 	}
 }
 
+func TestGetTreePassesTheTeam(t *testing.T) {
+	tests := []struct {
+		name      string
+		teamID    int64
+		wantNodes int
+	}{
+		{name: "no team", wantNodes: 1},
+		{name: "a team bound elsewhere", teamID: 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, _, _ := newArticleServers(&articleUoWFake{articles: &articleStoreFake{}})
+
+			resp, err := server.GetTree(articleContext(), &kb.GetTreeRequest{SpaceId: 3, TeamId: tt.teamID})
+			if err != nil {
+				t.Fatalf("GetTree: %v", err)
+			}
+
+			if len(resp.GetNodes()) != tt.wantNodes {
+				t.Errorf("nodes = %d, want %d", len(resp.GetNodes()), tt.wantNodes)
+			}
+		})
+	}
+}
+
 func TestSuggestTagsFullPath(t *testing.T) {
 	articles := &articleStoreFake{}
 	_, _, tags := newArticleServers(&articleUoWFake{articles: articles})
@@ -660,7 +702,8 @@ func TestSuggestTagsFullPath(t *testing.T) {
 
 func TestListVersionsDefaultsToTheDisplayLimit(t *testing.T) {
 	versions := &articleVersionStoreFake{items: []*model.ArticleVersion{{ID: 40, VersionNumber: 1}}}
-	_, server, _ := newArticleServers(&articleUoWFake{articles: &articleStoreFake{}, versions: versions})
+	articles := &articleStoreFake{items: []*model.Article{{ID: 7}}}
+	_, server, _ := newArticleServers(&articleUoWFake{articles: articles, versions: versions})
 
 	resp, err := server.ListVersions(articleContext(), &kb.ListVersionsRequest{ArticleId: 7})
 	if err != nil {

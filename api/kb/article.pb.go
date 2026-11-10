@@ -373,7 +373,9 @@ type ListArticlesRequest struct {
 	// Set of fields to return.
 	Fields []string `protobuf:"bytes,9,rep,name=fields,proto3" json:"fields,omitempty"`
 	// How the tag filter combines the tags.
-	TagMatch      TagMatch `protobuf:"varint,10,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
+	TagMatch TagMatch `protobuf:"varint,10,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
+	// Operator team; its binding limits the spaces listed.
+	TeamId        int64 `protobuf:"varint,11,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -476,6 +478,13 @@ func (x *ListArticlesRequest) GetTagMatch() TagMatch {
 		return x.TagMatch
 	}
 	return TagMatch_TAG_MATCH_UNSPECIFIED
+}
+
+func (x *ListArticlesRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
 }
 
 // ArticleList is a page of articles.
@@ -952,7 +961,9 @@ func (x *ListAncestorsRequest) GetId() int64 {
 type GetTreeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Space id.
-	SpaceId       int64 `protobuf:"varint,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	SpaceId int64 `protobuf:"varint,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	// Operator team; a space outside its binding returns no nodes.
+	TeamId        int64 `protobuf:"varint,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -990,6 +1001,13 @@ func (*GetTreeRequest) Descriptor() ([]byte, []int) {
 func (x *GetTreeRequest) GetSpaceId() int64 {
 	if x != nil {
 		return x.SpaceId
+	}
+	return 0
+}
+
+func (x *GetTreeRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
 	}
 	return 0
 }
@@ -1081,7 +1099,7 @@ const file_article_proto_rawDesc = "" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x128\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12=\n" +
 	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12\x12\n" +
-	"\x04home\x18\b \x01(\bR\x04home\"\xd4\x02\n" +
+	"\x04home\x18\b \x01(\bR\x04home\"\xf6\x02\n" +
 	"\x13ListArticlesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
@@ -1093,7 +1111,8 @@ const file_article_proto_rawDesc = "" +
 	"\x04sort\x18\b \x01(\tR\x04sort\x12\x16\n" +
 	"\x06fields\x18\t \x03(\tR\x06fields\x12;\n" +
 	"\ttag_match\x18\n" +
-	" \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\"L\n" +
+	" \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12 \n" +
+	"\ateam_id\x18\v \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"L\n" +
 	"\vArticleList\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.webitel.kb.ArticleR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"B\n" +
@@ -1119,17 +1138,18 @@ const file_article_proto_rawDesc = "" +
 	"\x13ListChildrenRequest\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"/\n" +
 	"\x14ListAncestorsRequest\x12\x17\n" +
-	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"4\n" +
+	"\x02id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x02id\"V\n" +
 	"\x0eGetTreeRequest\x12\"\n" +
-	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\"=\n" +
+	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\x12 \n" +
+	"\ateam_id\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"=\n" +
 	"\x0fGetTreeResponse\x12*\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x14.webitel.kb.TreeNodeR\x05nodes2\x9d\t\n" +
 	"\bArticles\x12e\n" +
 	"\fListArticles\x12\x1f.webitel.kb.ListArticlesRequest\x1a\x17.webitel.kb.ArticleList\"\x1b\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/kb/articles\x12j\n" +
 	"\rLocateArticle\x12 .webitel.kb.LocateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/kb/articles/{etag}\x12j\n" +
-	"\rCreateArticle\x12 .webitel.kb.CreateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18:\x05input\"\x0f/v1/kb/articles\x12\x92\x01\n" +
+	"\rCreateArticle\x12 .webitel.kb.CreateArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x00\x82\xd3\xe4\x93\x02\x18:\x05input\"\x0f/v1/kb/articles\x12\x92\x01\n" +
 	"\rUpdateArticle\x12 .webitel.kb.UpdateArticleRequest\x1a\x13.webitel.kb.Article\"J\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02@:\x05inputZ\x1f:\x05input2\x16/v1/kb/articles/{etag}\x1a\x16/v1/kb/articles/{etag}\x12j\n" +
-	"\rDeleteArticle\x12 .webitel.kb.DeleteArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02\x18*\x16/v1/kb/articles/{etag}\x12n\n" +
+	"\rDeleteArticle\x12 .webitel.kb.DeleteArticleRequest\x1a\x13.webitel.kb.Article\"\"\x90\xb5\x18\x03\x82\xd3\xe4\x93\x02\x18*\x16/v1/kb/articles/{etag}\x12n\n" +
 	"\vMoveArticle\x12\x1e.webitel.kb.MoveArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/kb/articles/{etag}/move\x12t\n" +
 	"\x0eReindexArticle\x12!.webitel.kb.ReindexArticleRequest\x1a\x13.webitel.kb.Article\"*\x90\xb5\x18\x02\x82\xd3\xe4\x93\x02 \"\x1e/v1/kb/articles/{etag}/reindex\x12s\n" +
 	"\fListChildren\x12\x1f.webitel.kb.ListChildrenRequest\x1a\x17.webitel.kb.ArticleList\")\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/kb/articles/{id}/children\x12v\n" +

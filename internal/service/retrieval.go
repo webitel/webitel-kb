@@ -61,13 +61,20 @@ func (s *RetrievalService) Search(
 		return nil, false, nil
 	}
 
+	spaceIDs, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, filter.SpaceIDs)
+	if err != nil || !reach {
+		return nil, false, err
+	}
+
+	filter.SpaceIDs = spaceIDs
+
 	var (
 		items []*model.ArticleSummary
 		next  bool
 	)
 
 	// The trigram threshold is local to the transaction the query runs in.
-	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
+	err = s.uow.WithinTransaction(ctx, func(ctx context.Context, uow store.UnitOfWork) error {
 		var err error
 
 		items, next, err = uow.RetrievalStore().Search(ctx, opts, filter)

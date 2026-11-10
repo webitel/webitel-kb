@@ -25,8 +25,8 @@ const defaultArticleSort = "+subject"
 // caller's space enforces the domain scope in the same statement and gives
 // the subject vector its configuration.
 const createRootArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
-	SELECT s.id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
+	(space_id, domain_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, s.domain_id, NULL, 1, $3::smallint, $4, $5::text[], $6::smallint, $7::bigint, $7::bigint,
 	       setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')
 	FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2
 	RETURNING *`
@@ -34,8 +34,8 @@ const createRootArticleSQL = `INSERT INTO kb.article
 // createChildArticleSQL inserts a child article, deriving depth from a live
 // parent of the same space; the depth constraint backstops the maximum.
 const createChildArticleSQL = `INSERT INTO kb.article
-	(space_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
-	SELECT s.id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
+	(space_id, domain_id, parent_id, depth, type, subject, tags, state, created_by, updated_by, search_tsv)
+	SELECT s.id, s.domain_id, p.id, p.depth + 1, $4::smallint, $5, $6::text[], $7::smallint, $8::bigint, $8::bigint,
 	       setweight(to_tsvector(s.text_search_config::regconfig, $5::text), 'A')
 	FROM kb.space s
 	JOIN kb.article p ON p.space_id = s.id AND p.id = $3 AND p.deleted_at IS NULL
@@ -137,7 +137,7 @@ const ancestorsCTE = `WITH RECURSIVE anc AS (
 	SELECT p.* FROM kb.article a
 	JOIN kb.article p ON p.id = a.parent_id
 	JOIN kb.space s ON s.id = a.space_id
-	WHERE a.id = $1 AND s.domain_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL
+	WHERE a.id = ? AND s.domain_id = ? AND a.deleted_at IS NULL AND p.deleted_at IS NULL
 	UNION ALL
 	SELECT g.* FROM kb.article g JOIN anc ON anc.parent_id = g.id
 	WHERE g.deleted_at IS NULL
@@ -153,15 +153,19 @@ const subtreeSQL = `WITH RECURSIVE subtree AS (
 )
 SELECT id, depth FROM subtree`
 
-// treeSQL reads the visible hierarchy of a space flat, without the home page;
+// treeQuery reads the visible hierarchy of a space flat, without the home page;
 // the nesting is built in the application; the limit reads one row past the
 // ceiling to spot an oversized space.
-const treeSQL = `SELECT m.id, COALESCE(m.parent_id, 0), m.subject, m.type, m.depth, m.state
-	FROM kb.article m JOIN kb.space s ON s.id = m.space_id
-	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL
-	  AND m.id IS DISTINCT FROM s.home_article_id
-	ORDER BY m.parent_id NULLS FIRST, m.subject, m.id
-	LIMIT $3`
+func treeQuery(domainID, spaceID int64, plan queryobject.AccessPlan) squirrel.SelectBuilder {
+	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
+		Select("m.id", "COALESCE(m.parent_id, 0)", "m.subject", "m.type", "m.depth", "m.state").
+		From("kb.article m JOIN kb.space s ON s.id = m.space_id").
+		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL"+
+			" AND m.id IS DISTINCT FROM s.home_article_id", domainID, spaceID).
+		Where(plan.ArticlePredicate()).
+		OrderBy("m.parent_id NULLS FIRST", "m.subject", "m.id").
+		Suffix("LIMIT ?", maxTreeNodes+1)
+}
 
 // maxTreeNodes bounds a whole-space tree the contract cannot paginate.
 const maxTreeNodes = 10000
@@ -173,12 +177,16 @@ var errTreeTooLarge = errors.New(
 	errors.WithID("kb.article.tree_too_large"),
 )
 
-// suggestTagsSQL lists the distinct tags of a space matching a prefix.
-const suggestTagsSQL = `SELECT DISTINCT t FROM kb.article m
-	JOIN kb.space s ON s.id = m.space_id
-	CROSS JOIN LATERAL unnest(m.tags) AS t
-	WHERE s.domain_id = $1 AND m.space_id = $2 AND m.deleted_at IS NULL AND t ILIKE $3
-	ORDER BY t LIMIT $4`
+// suggestTagsQuery lists the distinct tags of a space matching a prefix.
+func suggestTagsQuery(domainID, spaceID int64, pattern string, size int, plan queryobject.AccessPlan) squirrel.SelectBuilder {
+	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
+		Select("t").Distinct().
+		From("kb.article m JOIN kb.space s ON s.id = m.space_id CROSS JOIN LATERAL unnest(m.tags) AS t").
+		Where("s.domain_id = ? AND m.space_id = ? AND m.deleted_at IS NULL AND t ILIKE ?", domainID, spaceID, pattern).
+		Where(plan.ArticlePredicate()).
+		OrderBy("t").
+		Suffix("LIMIT ?", size)
+}
 
 // defaultSuggestSize bounds a suggestion listing the caller left unbounded.
 const defaultSuggestSize = 20
@@ -319,9 +327,11 @@ func (s *articleStore) List(
 	sql, args, err := queryobject.NewArticleQuery(queryobject.ArticleFrom).
 		WithVisible().
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(readPlan(opts)).
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
 		WithSpace(filter.SpaceID).
+		WithSpaces(filter.SpaceIDs).
 		WithType(filter.Type).
 		WithState(filter.State).
 		WithParent(filter.ParentID).
@@ -379,6 +389,7 @@ func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher)
 	query := queryobject.NewArticleQuery(queryobject.ArticleFrom).
 		WithVisible().
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(queryobject.PlanArticleAccess(opts.GetAuthOpts(), opts.GetAccess())).
 		WithIDs(opts.GetIDs()).
 		WithFields(opts.GetFields())
 
@@ -394,7 +405,7 @@ func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher)
 
 	item, err := collectRow(rows, mapArticle)
 	if err != nil {
-		return nil, ParseError(err)
+		return nil, changeMiss(ctx, opts, err, errArticleAccessDenied, s.locateArticle)
 	}
 
 	return item, nil
@@ -559,7 +570,9 @@ func (s *articleStore) resolveMoveMiss(
 func (s *articleStore) Ancestors(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.Article, error) {
-	readSQL, readArgs, err := queryobject.NewArticleQuery("anc m").
+	sql, args, err := queryobject.NewArticleQuery("anc m").
+		WithPrefix(ancestorsCTE, articleID, opts.GetAuthOpts().GetDomainID()).
+		WithAccess(readPlan(opts)).
 		WithFields(opts.GetFields()).
 		WithSort("+depth").
 		ToSQL()
@@ -567,11 +580,7 @@ func (s *articleStore) Ancestors(
 		return nil, ParseError(err)
 	}
 
-	if len(readArgs) != 0 {
-		return nil, errCTEReadArgs
-	}
-
-	rows, err := s.db.Query(ctx, ancestorsCTE+readSQL, articleID, opts.GetAuthOpts().GetDomainID())
+	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, ParseError(err)
 	}
@@ -587,7 +596,14 @@ func (s *articleStore) Ancestors(
 func (s *articleStore) Tree(
 	ctx context.Context, opts options.Searcher, spaceID int64,
 ) ([]*model.TreeNode, error) {
-	rows, err := s.db.Query(ctx, treeSQL, opts.GetAuthOpts().GetDomainID(), spaceID, maxTreeNodes+1)
+	sql, args, err := treeQuery(
+		opts.GetAuthOpts().GetDomainID(), spaceID, readPlan(opts),
+	).ToSql()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, ParseError(err)
 	}
@@ -625,6 +641,40 @@ func (s *articleStore) Subtree(
 	return nodes, nil
 }
 
+func (s *articleStore) Reachable(ctx context.Context, opts options.Searcher, ids []int64) ([]int64, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	sql, args, err := queryobject.NewArticleQuery(queryobject.ArticleFrom).
+		WithVisible().
+		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(queryobject.PlanArticleAccess(opts.GetAuthOpts(), opts.GetAccess())).
+		WithIDs(ids).
+		WithFields([]string{"id"}).
+		ToSQL()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	items, err := collectRows(rows, mapArticle)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	reached := make([]int64, 0, len(items))
+	for _, item := range items {
+		reached = append(reached, item.ID)
+	}
+
+	return reached, nil
+}
+
 func (s *articleStore) SuggestTags(
 	ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int,
 ) ([]string, error) {
@@ -632,9 +682,15 @@ func (s *articleStore) SuggestTags(
 		size = defaultSuggestSize
 	}
 
-	rows, err := s.db.Query(ctx, suggestTagsSQL,
+	sql, args, err := suggestTagsQuery(
 		opts.GetAuthOpts().GetDomainID(), spaceID, queryobject.EscapeLike(prefix)+"%", size,
-	)
+		readPlan(opts),
+	).ToSql()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, ParseError(err)
 	}

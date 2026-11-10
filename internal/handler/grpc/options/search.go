@@ -159,10 +159,11 @@ func WithID(id int64) SearchOption {
 	return WithIDs([]int64{id})
 }
 
-func (s *SearchOptions) GetAuthOpts() auth.Auther { return s.auth }
-func (s *SearchOptions) GetFields() []string      { return s.fields }
-func (s *SearchOptions) GetSearch() string        { return s.search }
-func (s *SearchOptions) GetPage() int             { return s.page }
-func (s *SearchOptions) GetSize() int             { return s.size }
-func (s *SearchOptions) GetSort() string          { return s.sort }
-func (s *SearchOptions) GetIDs() []int64          { return s.ids }
+func (s *SearchOptions) GetAuthOpts() auth.Auther   { return s.auth }
+func (s *SearchOptions) GetFields() []string        { return s.fields }
+func (s *SearchOptions) GetSearch() string          { return s.search }
+func (s *SearchOptions) GetPage() int               { return s.page }
+func (s *SearchOptions) GetSize() int               { return s.size }
+func (s *SearchOptions) GetSort() string            { return s.sort }
+func (s *SearchOptions) GetIDs() []int64            { return s.ids }
+func (s *SearchOptions) GetAccess() auth.AccessMode { return auth.Read }

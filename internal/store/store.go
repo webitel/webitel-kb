@@ -116,6 +116,9 @@ type ArticleStore interface {
 	// a caller can validate a move before attempting it.
 	Subtree(ctx context.Context, opts options.Searcher, articleID int64) ([]model.SubtreeNode, error)
 
+	// Reachable returns those of ids the caller may reach in the mode opts ask for.
+	Reachable(ctx context.Context, opts options.Searcher, ids []int64) ([]int64, error)
+
 	// SuggestTags returns the distinct tags of a space matching a prefix.
 	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
 

@@ -15,6 +15,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/internal/model"
+	queryobject "github.com/webitel/webitel-kb/internal/store/query_object"
 )
 
 func TestArticleListRendersScopedQuery(t *testing.T) {
@@ -78,7 +79,7 @@ func TestArticleCreateRootRendersCTE(t *testing.T) {
 
 	for _, want := range []string{
 		"WITH m AS (INSERT INTO kb.article",
-		"SELECT s.id, NULL, 1,",
+		"SELECT s.id, s.domain_id, NULL, 1,",
 		"updated_by, search_tsv)",
 		"setweight(to_tsvector(s.text_search_config::regconfig, $4::text), 'A')",
 		"FROM kb.space s WHERE s.id = $1 AND s.domain_id = $2",
@@ -465,7 +466,7 @@ func TestArticleAncestorsWalkUp(t *testing.T) {
 		"FROM anc m",
 		"ORDER BY m.depth ASC",
 	} {
-		if !strings.Contains(f.gotSQL, want) {
+		if !strings.Contains(f.gotSQL, queryobject.CompactSQL(want)) {
 			t.Errorf("SQL %q does not contain %q", f.gotSQL, want)
 		}
 	}
