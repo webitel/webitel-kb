@@ -66,6 +66,15 @@ func (f *articleStoreFake) Locate(_ context.Context, opts options.Searcher) (*mo
 	return f.items[0], nil
 }
 
+func (f *articleStoreFake) LocateIn(ctx context.Context, opts options.Searcher, spaceIDs []int64) (*model.Article, error) {
+	item, err := f.Locate(ctx, opts)
+	if err != nil || slices.Contains(spaceIDs, item.SpaceID) {
+		return item, err
+	}
+
+	return nil, errors.NotFound("entity does not exist or access is denied")
+}
+
 func (f *articleStoreFake) Reachable(_ context.Context, _ options.Searcher, ids []int64) ([]int64, error) {
 	return ids, nil
 }
@@ -685,6 +694,31 @@ func TestGetTreePassesTheTeam(t *testing.T) {
 
 			if len(resp.GetNodes()) != tt.wantNodes {
 				t.Errorf("nodes = %d, want %d", len(resp.GetNodes()), tt.wantNodes)
+			}
+		})
+	}
+}
+
+func TestLocateArticlePassesTheTeam(t *testing.T) {
+	tests := []struct {
+		name     string
+		teamID   int64
+		spaceID  int64
+		wantCode codes.Code
+	}{
+		{name: "no team finds the article", spaceID: 3},
+		{name: "a team finds an article of its bound space", teamID: 7, spaceID: 9},
+		{name: "a team bound elsewhere does not find it", teamID: 7, spaceID: 3, wantCode: codes.NotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			articles := &articleStoreFake{items: []*model.Article{{ID: 1, SpaceID: tt.spaceID}}}
+			server, _, _ := newArticleServers(&articleUoWFake{articles: articles})
+
+			_, err := server.LocateArticle(articleContext(), &kb.LocateArticleRequest{Etag: "1", TeamId: tt.teamID})
+			if errors.Code(err) != tt.wantCode {
+				t.Errorf("code = %v, want %v (err: %v)", errors.Code(err), tt.wantCode, err)
 			}
 		})
 	}

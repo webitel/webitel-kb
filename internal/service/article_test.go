@@ -55,6 +55,9 @@ type fakeArticleStore struct {
 	createCalls, updateCalls, deleteCalls, moveCalls, subtreeCalls int
 	lockedLocates, plainLocates                                    int
 
+	// locatedIn records the spaces LocateIn was limited to.
+	locatedIn []int64
+
 	// callOrder records the flow steps a test wants to assert on.
 	callOrder []string
 	// accesses records the mode of every locate.
@@ -84,6 +87,12 @@ func (f *fakeArticleStore) List(_ context.Context, opts options.Searcher, filter
 	f.listFields = opts.GetFields()
 
 	return f.list, f.listNext, nil
+}
+
+func (f *fakeArticleStore) LocateIn(ctx context.Context, opts options.Searcher, spaceIDs []int64) (*model.Article, error) {
+	f.locatedIn = spaceIDs
+
+	return f.Locate(ctx, opts)
 }
 
 func (f *fakeArticleStore) Locate(_ context.Context, opts options.Searcher) (*model.Article, error) {

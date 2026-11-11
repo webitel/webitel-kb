@@ -101,6 +101,10 @@ func TestInputRules(t *testing.T) {
 
 		{name: "resolve at the limit", msg: &kb.ResolveRequest{Ids: make([]int64, 5000)}},
 		{name: "resolve over the limit", msg: &kb.ResolveRequest{Ids: make([]int64, 5001)}, wantField: "ids", wantRule: "repeated.max_items"},
+		{name: "resolve with a negative team", msg: &kb.ResolveRequest{Ids: []int64{1}, TeamId: -1}, wantField: "team_id", wantRule: "int64.gte"},
+		{name: "resolve with a team", msg: &kb.ResolveRequest{Ids: []int64{1}, TeamId: 4}},
+		{name: "article locate with a negative team", msg: &kb.LocateArticleRequest{Etag: "1", TeamId: -1}, wantField: "team_id", wantRule: "int64.gte"},
+		{name: "article locate with a team", msg: &kb.LocateArticleRequest{Etag: "1", TeamId: 4}},
 		{name: "search unknown tag match", msg: &kb.SearchRequest{TagMatch: 7}, wantField: "tag_match", wantRule: "enum.defined_only"},
 		{name: "semantic blank query without spaces", msg: &kb.SemanticSearchRequest{Query: "  "}},
 		{name: "semantic query without spaces", msg: &kb.SemanticSearchRequest{Query: "vpn"}, wantRule: "kb.retrieval.space_required"},

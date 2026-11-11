@@ -184,8 +184,19 @@ func (s *ArticleService) List(
 	return s.uow.ArticleStore().List(ctx, withoutBodies(opts, articleBodyFields, nil), filter)
 }
 
-func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher) (*model.Article, error) {
-	return s.uow.ArticleStore().Locate(ctx, opts)
+// Locate reads an article; a team whose binding leaves its space out does not
+// find it.
+func (s *ArticleService) Locate(ctx context.Context, opts options.Searcher, teamID int64) (*model.Article, error) {
+	bound, _, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, teamID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(bound) == 0 {
+		return s.uow.ArticleStore().Locate(ctx, opts)
+	}
+
+	return s.uow.ArticleStore().LocateIn(ctx, opts, bound)
 }
 
 // Create inserts an article and, when a body came along, its first version in

@@ -88,13 +88,19 @@ func (s *RetrievalService) Search(
 	return items, next, nil
 }
 
-// Resolve returns the summaries of the requested articles, in order.
+// Resolve returns the summaries of the requested articles, in order; a team
+// leaves out the articles outside its space binding.
 func (s *RetrievalService) Resolve(
-	ctx context.Context, opts options.Searcher, spaceIDs []int64,
+	ctx context.Context, opts options.Searcher, spaceIDs []int64, teamID int64,
 ) ([]*model.ArticleSummary, error) {
 	ids := opts.GetIDs()
 	if len(ids) == 0 {
 		return nil, nil
+	}
+
+	spaceIDs, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, teamID, spaceIDs)
+	if err != nil || !reach {
+		return nil, err
 	}
 
 	return s.uow.RetrievalStore().Resolve(ctx, opts, ids, spaceIDs)

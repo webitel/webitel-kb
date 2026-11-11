@@ -164,27 +164,44 @@ func TestRetrievalSearchPassesTheCriteria(t *testing.T) {
 
 func TestRetrievalResolve(t *testing.T) {
 	tests := []struct {
-		name      string
-		ids       []int64
-		wantCalls int
-		wantCode  codes.Code
+		name       string
+		ids        []int64
+		spaceIDs   []int64
+		teamID     int64
+		bound      []int64
+		unknown    bool
+		wantSpaces []int64
+		wantCalls  int
+		wantCode   codes.Code
 	}{
-		{name: "nothing asked is nothing read", ids: nil, wantCalls: 0},
-		{name: "ids reach the store", ids: []int64{3, 1}, wantCalls: 1},
+		{name: "nothing asked is nothing read", spaceIDs: []int64{7}},
+		{name: "ids reach the store", ids: []int64{3, 1}, spaceIDs: []int64{7}, wantSpaces: []int64{7}, wantCalls: 1},
+		{name: "a team without a binding narrows nothing", ids: []int64{3}, spaceIDs: []int64{7}, teamID: 4, bound: []int64{}, wantSpaces: []int64{7}, wantCalls: 1},
+		{name: "a team reads its bound spaces", ids: []int64{3}, teamID: 4, bound: []int64{7, 8}, wantSpaces: []int64{7, 8}, wantCalls: 1},
+		{name: "asked spaces meet the binding", ids: []int64{3}, spaceIDs: []int64{7, 9}, teamID: 4, bound: []int64{7, 8}, wantSpaces: []int64{7}, wantCalls: 1},
+		{name: "asked spaces outside the binding read nothing", ids: []int64{3}, spaceIDs: []int64{9}, teamID: 4, bound: []int64{7}},
+		{name: "an unknown team is refused", ids: []int64{3}, teamID: 4, unknown: true, wantCode: codes.InvalidArgument},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, fake := retrievalServiceWithFake()
+			svc, uow, _ := semanticServiceWithFakes()
+			fake := uow.retrieval
+			fake.items = []*model.ArticleSummary{{ID: 3}}
+			uow.spaces.teamSpaces, uow.spaces.teamUnknown = tt.bound, tt.unknown
 
 			items, err := svc.Resolve(
 				context.Background(),
 				&readOpts{auth: fakeAuther{domainID: 5}, ids: tt.ids, size: options.UnlimitedSize, page: 1},
-				[]int64{7},
+				tt.spaceIDs, tt.teamID,
 			)
 
 			if got := errors.Code(err); got != tt.wantCode {
 				t.Fatalf("error = %v, want code %v", err, tt.wantCode)
+			}
+
+			if tt.wantCode == codes.InvalidArgument && errors.ID(err) != "kb.space.team_unknown" {
+				t.Errorf("id = %q", errors.ID(err))
 			}
 
 			if fake.calls != tt.wantCalls {
@@ -199,8 +216,8 @@ func TestRetrievalResolve(t *testing.T) {
 				return
 			}
 
-			if !reflect.DeepEqual(fake.ids, tt.ids) || !reflect.DeepEqual(fake.spaces, []int64{7}) {
-				t.Fatalf("ids = %v, spaces = %v", fake.ids, fake.spaces)
+			if !reflect.DeepEqual(fake.ids, tt.ids) || !reflect.DeepEqual(fake.spaces, tt.wantSpaces) {
+				t.Fatalf("ids = %v, spaces = %v, want %v and %v", fake.ids, fake.spaces, tt.ids, tt.wantSpaces)
 			}
 		})
 	}

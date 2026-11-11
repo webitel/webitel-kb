@@ -61,7 +61,7 @@ func (s *ArticlesServer) LocateArticle(ctx context.Context, req *kb.LocateArticl
 		return nil, err
 	}
 
-	item, err := s.service.Locate(ctx, opts)
+	item, err := s.service.Locate(ctx, opts, req.GetTeamId())
 	if err != nil {
 		return nil, err
 	}

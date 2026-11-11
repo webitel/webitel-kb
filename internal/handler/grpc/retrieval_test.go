@@ -80,14 +80,15 @@ func (f *retrievalStoreFake) Menu(
 type retrievalUoWFake struct {
 	store.UnitOfWork
 
-	retrieval *retrievalStoreFake
-	spaces    []*model.SpaceEmbedding
+	retrieval  *retrievalStoreFake
+	spaces     []*model.SpaceEmbedding
+	teamSpaces []int64
 }
 
 func (f *retrievalUoWFake) RetrievalStore() store.RetrievalStore   { return f.retrieval }
 func (f *retrievalUoWFake) AttachmentStore() store.AttachmentStore { return nil }
 func (f *retrievalUoWFake) SpaceStore() store.SpaceStore {
-	return fakeSpaces{&fakeUow{embeddings: f.spaces}}
+	return fakeSpaces{&fakeUow{embeddings: f.spaces, teamSpaces: f.teamSpaces}}
 }
 
 func (f *retrievalUoWFake) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -219,6 +220,39 @@ func TestRetrievalResolveReadsTheWholeBatch(t *testing.T) {
 
 	if len(res.GetItems()) != 2 || res.GetItems()[0].GetId() != 3 {
 		t.Fatalf("items = %+v, want the asked order", res.GetItems())
+	}
+}
+
+func TestResolvePassesTheTeam(t *testing.T) {
+	tests := []struct {
+		name       string
+		teamID     int64
+		spaceIDs   []int64
+		wantSpaces []int64
+		wantItems  int
+	}{
+		{name: "no team keeps the asked spaces", spaceIDs: []int64{7}, wantSpaces: []int64{7}, wantItems: 1},
+		{name: "a team reads its bound spaces", teamID: 4, wantSpaces: []int64{9}, wantItems: 1},
+		{name: "asked spaces outside the binding read nothing", teamID: 4, spaceIDs: []int64{7}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &retrievalStoreFake{items: []*model.ArticleSummary{{ID: 3}}}
+			server := NewRetrievalServer(service.NewRetrievalService(
+				&retrievalUoWFake{retrieval: fake, teamSpaces: []int64{9}},
+				sealer{}, embedding.NewRegistry(), slog.New(slog.DiscardHandler),
+			))
+
+			res, err := server.Resolve(retrievalContext(), &kb.ResolveRequest{Ids: []int64{3}, SpaceIds: tt.spaceIDs, TeamId: tt.teamID})
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+
+			if !reflect.DeepEqual(fake.spaces, tt.wantSpaces) || len(res.GetItems()) != tt.wantItems {
+				t.Errorf("spaces = %v items = %d, want %v and %d", fake.spaces, len(res.GetItems()), tt.wantSpaces, tt.wantItems)
+			}
+		})
 	}
 }
 
