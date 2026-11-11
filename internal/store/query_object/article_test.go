@@ -136,15 +136,18 @@ func TestArticleUserJoinsRenderOncePerAlias(t *testing.T) {
 
 func TestArticleDefaultsCoverReadModel(t *testing.T) {
 	q := NewArticleQuery(ArticleFrom)
+	onRequest := []string{"published", "latest", "version_count"}
 
 	for field := range q.FieldsMetadata() {
-		if field != "published" && field != "latest" && !slices.Contains(q.DefaultFields(), field) {
+		if !slices.Contains(onRequest, field) && !slices.Contains(q.DefaultFields(), field) {
 			t.Fatalf("defaults leave out %q", field)
 		}
 	}
 
-	if slices.Contains(q.DefaultFields(), "published") || slices.Contains(q.DefaultFields(), "latest") {
-		t.Fatal("defaults read a version body")
+	for _, field := range onRequest {
+		if slices.Contains(q.DefaultFields(), field) {
+			t.Fatalf("defaults read %q, which is only on request", field)
+		}
 	}
 
 	sql, _ := mustSQLArgs(t, q)
