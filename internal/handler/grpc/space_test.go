@@ -297,7 +297,7 @@ func newSpacesFixture() (*SpacesServer, *fakeUow, context.Context) {
 	uow := &fakeUow{
 		space:    &model.Space{ID: 7, Name: "docs", Language: "uk", EmbeddingModelID: 3},
 		embModel: &model.EmbeddingModel{ID: 3, Type: model.ModelTypeEmbedding, ValidatedAt: time.Now()},
-		articles: &articleStoreFake{failedCounts: map[int64]int32{7: 2}},
+		articles: &articleStoreFake{failedCounts: map[int64]int64{7: 2}},
 	}
 
 	server := NewSpacesServer(service.NewSpaceService(uow, &filesFake{}, slog.New(slog.DiscardHandler)))
@@ -354,6 +354,7 @@ func TestSpacesServerListMapsPage(t *testing.T) {
 
 	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{
 		Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE, Languages: []string{"uk-UA", "en"},
+		Fields: []string{"id", "failed_index_count"},
 	})
 	if err != nil {
 		t.Fatalf("ListSpaces: %v", err)

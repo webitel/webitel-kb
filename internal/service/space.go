@@ -62,8 +62,10 @@ func (s *SpaceService) List(
 		return nil, false, err
 	}
 
-	if err := s.withFailedIndexCounts(ctx, opts, items); err != nil {
-		return nil, false, err
+	if len(items) > 0 && slices.Contains(opts.GetFields(), failedIndexCountField) {
+		if err := withFailedIndexCounts(ctx, s.uow.ArticleStore(), opts, items); err != nil {
+			return nil, false, err
+		}
 	}
 
 	return items, next, nil
@@ -72,19 +74,17 @@ func (s *SpaceService) List(
 // failedIndexCountField is the space field counting its failed articles.
 const failedIndexCountField = "failed_index_count"
 
-// withFailedIndexCounts sets the failed article count of the spaces when it
-// is asked for, with one query for all of them.
-func (s *SpaceService) withFailedIndexCounts(ctx context.Context, opts options.Searcher, items []*model.Space) error {
-	if len(items) == 0 || !requested(opts.GetFields(), failedIndexCountField) {
-		return nil
-	}
-
+// withFailedIndexCounts sets the failed article count of the spaces with one
+// query for all of them.
+func withFailedIndexCounts(
+	ctx context.Context, articles store.ArticleStore, opts options.Searcher, items []*model.Space,
+) error {
 	ids := make([]int64, 0, len(items))
 	for _, item := range items {
 		ids = append(ids, item.ID)
 	}
 
-	counts, err := s.uow.ArticleStore().FailedIndexCounts(ctx, opts, ids)
+	counts, err := articles.FailedIndexCounts(ctx, opts, ids)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (s *SpaceService) Locate(ctx context.Context, opts options.Searcher) (*mode
 		return nil, err
 	}
 
-	if err := s.withFailedIndexCounts(ctx, opts, []*model.Space{item}); err != nil {
+	if err := withFailedIndexCounts(ctx, s.uow.ArticleStore(), opts, []*model.Space{item}); err != nil {
 		return nil, err
 	}
 
@@ -288,11 +288,14 @@ func (s *SpaceService) Update(
 			}
 		}
 
-		updated, err = tx.SpaceStore().Locate(ctx, readOptions{
-			auth: session, ids: []int64{space.ID}, fields: opts.GetFields(),
-		})
+		read := readOptions{auth: session, ids: []int64{space.ID}, fields: opts.GetFields()}
 
-		return err
+		updated, err = tx.SpaceStore().Locate(ctx, read)
+		if err != nil {
+			return err
+		}
+
+		return withFailedIndexCounts(ctx, tx.ArticleStore(), read, []*model.Space{updated})
 	})
 	if err != nil {
 		return nil, err

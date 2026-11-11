@@ -110,7 +110,7 @@ type Space struct {
 	// Lifecycle state.
 	State SpaceState `protobuf:"varint,14,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
 	// Number of articles whose indexing failed.
-	FailedIndexCount int32 `protobuf:"varint,15,opt,name=failed_index_count,json=failedIndexCount,proto3" json:"failed_index_count,omitempty"`
+	FailedIndexCount int64 `protobuf:"varint,15,opt,name=failed_index_count,json=failedIndexCount,proto3" json:"failed_index_count,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// UpdatedAt timestamp (epoch ms).
@@ -251,7 +251,7 @@ func (x *Space) GetState() SpaceState {
 	return SpaceState_SPACE_STATE_UNSPECIFIED
 }
 
-func (x *Space) GetFailedIndexCount() int32 {
+func (x *Space) GetFailedIndexCount() int64 {
 	if x != nil {
 		return x.FailedIndexCount
 	}
@@ -804,7 +804,7 @@ const file_space_proto_rawDesc = "" +
 	"\x0fhome_article_id\x18\v \x01(\x03R\rhomeArticleId\x12%\n" +
 	"\x05teams\x18\r \x03(\v2\x0f.general.LookupR\x05teams\x12,\n" +
 	"\x05state\x18\x0e \x01(\x0e2\x16.webitel.kb.SpaceStateR\x05state\x12,\n" +
-	"\x12failed_index_count\x18\x0f \x01(\x05R\x10failedIndexCount\x12\x1d\n" +
+	"\x12failed_index_count\x18\x0f \x01(\x03R\x10failedIndexCount\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +

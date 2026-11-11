@@ -598,38 +598,49 @@ func TestSpaceListNarrowsTheLanguages(t *testing.T) {
 func TestSpaceFailedIndexCount(t *testing.T) {
 	storeErr := errors.Internal("db down")
 
+	asked := []string{"name", "failed_index_count"}
+	page := func() []*model.Space { return []*model.Space{{ID: 7}, {ID: 8}, {ID: 9}} }
+
 	tests := []struct {
 		name     string
-		locate   bool
+		op       string
 		fields   []string
 		list     []*model.Space
 		storeErr error
 		wantIDs  [][]int64
-		want     map[int64]int32
+		want     map[int64]int64
 		wantErr  error
 	}{
 		{
-			name: "locate counts by default", locate: true,
-			wantIDs: [][]int64{{7}}, want: map[int64]int32{7: 2},
+			name: "locate always counts", op: "locate",
+			wantIDs: [][]int64{{7}}, want: map[int64]int64{7: 2},
 		},
 		{
-			name: "list counts the page in one query", list: []*model.Space{{ID: 7}, {ID: 8}, {ID: 9}},
-			wantIDs: [][]int64{{7, 8, 9}}, want: map[int64]int32{7: 2, 8: 0, 9: 5},
+			name: "update counts the updated space", op: "update",
+			wantIDs: [][]int64{{7}}, want: map[int64]int64{7: 2},
 		},
 		{
-			name: "asked among the fields", fields: []string{"name", "failed_index_count"}, list: []*model.Space{{ID: 7}},
-			wantIDs: [][]int64{{7}}, want: map[int64]int32{7: 2},
-		},
-		{
-			name: "not asked", fields: []string{"name"}, list: []*model.Space{{ID: 7}},
-			want: map[int64]int32{7: 0},
-		},
-		{
-			name: "empty page asks nothing",
-		},
-		{
-			name: "store error", list: []*model.Space{{ID: 7}}, storeErr: storeErr,
+			name: "update store error", op: "update", storeErr: storeErr,
 			wantIDs: [][]int64{{7}}, wantErr: storeErr,
+		},
+		{
+			name: "list without fields counts nothing", op: "list", list: page(),
+			want: map[int64]int64{7: 0, 8: 0, 9: 0},
+		},
+		{
+			name: "list not asked", op: "list", fields: []string{"name"}, list: page(),
+			want: map[int64]int64{7: 0, 8: 0, 9: 0},
+		},
+		{
+			name: "list asked counts the page in one query", op: "list", fields: asked, list: page(),
+			wantIDs: [][]int64{{7, 8, 9}}, want: map[int64]int64{7: 2, 8: 0, 9: 5},
+		},
+		{
+			name: "empty page asks nothing", op: "list", fields: asked,
+		},
+		{
+			name: "list store error", op: "list", fields: asked, list: page(), storeErr: storeErr,
+			wantIDs: [][]int64{{7, 8, 9}}, wantErr: storeErr,
 		},
 	}
 
@@ -637,22 +648,25 @@ func TestSpaceFailedIndexCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow := newSpaceFixture()
 			uow.spaces.list = tt.list
-			uow.articles.failedCounts = map[int64]int32{7: 2, 9: 5}
+			uow.articles.failedCounts = map[int64]int64{7: 2, 9: 5}
 			uow.articles.failedCountsErr = tt.storeErr
 
 			opts := readOptions{auth: fakeAuther{domainID: 5}, ids: []int64{7}, fields: tt.fields}
 
 			var (
 				items []*model.Space
+				item  *model.Space
 				err   error
 			)
 
-			if tt.locate {
-				var item *model.Space
-
+			switch tt.op {
+			case "locate":
 				item, err = svc.Locate(context.Background(), opts)
 				items = []*model.Space{item}
-			} else {
+			case "update":
+				item, err = svc.Update(context.Background(), updaterOpts(), &model.Space{Name: "docs", EmbeddingModelID: 3}, nil)
+				items = []*model.Space{item}
+			default:
 				items, _, err = svc.List(context.Background(), opts, model.SpaceFilter{})
 			}
 
@@ -668,7 +682,7 @@ func TestSpaceFailedIndexCount(t *testing.T) {
 				return
 			}
 
-			got := make(map[int64]int32, len(items))
+			got := make(map[int64]int64, len(items))
 			for _, item := range items {
 				got[item.ID] = item.FailedIndexCount
 			}

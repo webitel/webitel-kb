@@ -43,7 +43,7 @@ type articleStoreFake struct {
 		size    int
 	}
 
-	failedCounts map[int64]int32
+	failedCounts map[int64]int64
 }
 
 func (f *articleStoreFake) List(
@@ -123,7 +123,7 @@ func (f *articleStoreFake) SuggestTags(
 	return []string{"vpn"}, nil
 }
 
-func (f *articleStoreFake) FailedIndexCounts(context.Context, options.Searcher, []int64) (map[int64]int32, error) {
+func (f *articleStoreFake) FailedIndexCounts(context.Context, options.Searcher, []int64) (map[int64]int64, error) {
 	return f.failedCounts, nil
 }
 

@@ -40,7 +40,7 @@ type Space struct {
 	// binding is configured.
 	Teams []Lookup
 	// FailedIndexCount is the number of articles whose indexing failed.
-	FailedIndexCount int32
+	FailedIndexCount int64
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	CreatedBy        *Lookup

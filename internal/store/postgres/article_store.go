@@ -717,7 +717,7 @@ func (s *articleStore) SuggestTags(
 
 func (s *articleStore) FailedIndexCounts(
 	ctx context.Context, opts options.Searcher, spaceIDs []int64,
-) (map[int64]int32, error) {
+) (map[int64]int64, error) {
 	sql, args, err := failedIndexCountsQuery(
 		opts.GetAuthOpts().GetDomainID(), spaceIDs, readPlan(opts),
 	).ToSql()
@@ -732,7 +732,7 @@ func (s *articleStore) FailedIndexCounts(
 
 	type spaceCount struct {
 		SpaceID int64
-		Count   int32
+		Count   int64
 	}
 
 	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[spaceCount])
@@ -740,7 +740,7 @@ func (s *articleStore) FailedIndexCounts(
 		return nil, ParseError(err)
 	}
 
-	counts := make(map[int64]int32, len(items))
+	counts := make(map[int64]int64, len(items))
 	for _, item := range items {
 		counts[item.SpaceID] = item.Count
 	}
