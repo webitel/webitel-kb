@@ -117,6 +117,11 @@ var errRestoreDraft = errors.InvalidArgument(
 	errors.WithID("kb.article.restore_draft"),
 )
 
+var errRestoreNotesRequired = errors.InvalidArgument(
+	"restore notes are required",
+	errors.WithID("kb.article.restore_notes_required"),
+)
+
 var errReindexNotFailed = errors.InvalidArgument(
 	"only an article that failed indexing can be reindexed",
 	errors.WithID("kb.article.reindex_not_failed"),
@@ -775,9 +780,14 @@ func (s *ArticleService) GetVersion(
 // RestoreVersion appends a new version carrying the content of a past one and
 // aligns the article subject with it. The version guard uses the stored value:
 // the contract carries no client version here. A draft has nothing to restore.
+// The notes are required: a blank one is refused before anything is read.
 func (s *ArticleService) RestoreVersion(
 	ctx context.Context, opts options.Updator, articleID int64, number int32, notes string,
 ) (*model.ArticleVersion, error) {
+	if strings.TrimSpace(notes) == "" {
+		return nil, errRestoreNotesRequired
+	}
+
 	session := opts.GetAuthOpts()
 
 	var restored *model.ArticleVersion
