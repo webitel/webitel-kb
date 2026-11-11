@@ -39,12 +39,14 @@ CREATE TABLE kb.space (
     created_by                bigint NULL,
     updated_at                timestamptz NOT NULL DEFAULT now(),
     updated_by                bigint NULL,
-    deleted_at                timestamptz NULL
+    deleted_at                timestamptz NULL,
+    UNIQUE (domain_id, id)
 );
 
 CREATE TABLE kb.article (
     id                   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    space_id             bigint NOT NULL REFERENCES kb.space (id) ON DELETE RESTRICT,
+    domain_id            bigint NOT NULL,  -- domain of the space, keys the access rules
+    space_id             bigint NOT NULL,
     parent_id            bigint NULL REFERENCES kb.article (id) ON DELETE CASCADE,  -- null = top level
     depth                smallint NOT NULL CHECK (depth BETWEEN 1 AND 5),
     type                 smallint NOT NULL DEFAULT 1,  -- 1=article, 2=faq
@@ -58,7 +60,9 @@ CREATE TABLE kb.article (
     created_by           bigint NULL,
     updated_at           timestamptz NOT NULL DEFAULT now(),
     updated_by           bigint NULL,
-    deleted_at           timestamptz NULL
+    deleted_at           timestamptz NULL,
+    FOREIGN KEY (domain_id, space_id) REFERENCES kb.space (domain_id, id) ON DELETE RESTRICT,
+    UNIQUE (domain_id, id)
 );
 CREATE INDEX article_tags_gin_idx ON kb.article USING gin (tags);
 CREATE INDEX article_space_parent_idx ON kb.article (space_id, parent_id);

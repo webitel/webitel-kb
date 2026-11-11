@@ -169,13 +169,14 @@ type fakeSearchOpts struct {
 	size   int
 }
 
-func (o *fakeSearchOpts) GetAuthOpts() auth.Auther { return o.auth }
-func (o *fakeSearchOpts) GetFields() []string      { return o.fields }
-func (o *fakeSearchOpts) GetSearch() string        { return o.search }
-func (o *fakeSearchOpts) GetPage() int             { return o.page }
-func (o *fakeSearchOpts) GetSize() int             { return o.size }
-func (o *fakeSearchOpts) GetSort() string          { return o.sort }
-func (o *fakeSearchOpts) GetIDs() []int64          { return o.ids }
+func (o *fakeSearchOpts) GetAuthOpts() auth.Auther   { return o.auth }
+func (o *fakeSearchOpts) GetFields() []string        { return o.fields }
+func (o *fakeSearchOpts) GetSearch() string          { return o.search }
+func (o *fakeSearchOpts) GetPage() int               { return o.page }
+func (o *fakeSearchOpts) GetSize() int               { return o.size }
+func (o *fakeSearchOpts) GetSort() string            { return o.sort }
+func (o *fakeSearchOpts) GetIDs() []int64            { return o.ids }
+func (o *fakeSearchOpts) GetAccess() auth.AccessMode { return auth.Read }
 
 // fakeWriteOpts implements options.Creator, Updator and Deleter.
 type fakeWriteOpts struct {

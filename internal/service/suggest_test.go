@@ -45,6 +45,7 @@ func TestSuggestGuards(t *testing.T) {
 		name        string
 		query       model.SuggestQuery
 		unknownTeam bool
+		bound       []int64
 		wantCode    codes.Code
 		wantID      string
 	}{
@@ -52,7 +53,11 @@ func TestSuggestGuards(t *testing.T) {
 		{
 			name:  "an unknown team is refused, not answered with the whole domain",
 			query: model.SuggestQuery{Message: "vpn", TeamID: 7}, unknownTeam: true,
-			wantCode: codes.InvalidArgument, wantID: "kb.retrieval.team_unknown",
+			wantCode: codes.InvalidArgument, wantID: "kb.space.team_unknown",
+		},
+		{
+			name:  "spaces outside the binding suggest nothing",
+			query: model.SuggestQuery{Message: "vpn", SpaceIDs: []int64{2}, TeamID: 7}, bound: []int64{9},
 		},
 	}
 
@@ -60,6 +65,7 @@ func TestSuggestGuards(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow, _ := suggestFixture()
 			uow.spaces.teamUnknown = tt.unknownTeam
+			uow.spaces.teamSpaces = tt.bound
 
 			got, err := svc.Suggest(context.Background(), semanticOpts(), tt.query)
 			if errors.Code(err) != tt.wantCode || errors.ID(err) != tt.wantID {
@@ -83,10 +89,18 @@ func TestSuggestPicksTheSpaces(t *testing.T) {
 		wantFilter []int64
 	}{
 		{
-			name:       "the asked spaces win",
-			query:      model.SuggestQuery{Message: "vpn", SpaceIDs: []int64{2, 1}, TeamID: 7},
+			name:       "the asked spaces alone without a team",
+			query:      model.SuggestQuery{Message: "vpn", SpaceIDs: []int64{2, 1}},
 			bound:      []int64{9},
 			wantIDs:    []int64{2, 1},
+			wantFilter: []int64{1, 2},
+		},
+		{
+			name:       "the asked spaces meet the binding",
+			query:      model.SuggestQuery{Message: "vpn", SpaceIDs: []int64{2, 1}, TeamID: 7},
+			bound:      []int64{1, 9},
+			wantAsked:  7,
+			wantIDs:    []int64{1},
 			wantFilter: []int64{1, 2},
 		},
 		{
@@ -102,7 +116,7 @@ func TestSuggestPicksTheSpaces(t *testing.T) {
 			query:      model.SuggestQuery{Message: "vpn", TeamID: 7},
 			bound:      []int64{},
 			wantAsked:  7,
-			wantIDs:    []int64{},
+			wantIDs:    nil,
 			wantFilter: []int64{1, 2},
 		},
 	}

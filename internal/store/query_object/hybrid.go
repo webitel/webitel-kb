@@ -94,6 +94,19 @@ func (h *HybridHits) WithScope(domainID int64) *HybridHits {
 	return h
 }
 
+// WithAccess keeps the articles the plan lets the caller reach on every side.
+func (h *HybridHits) WithAccess(plan AccessPlan) *HybridHits {
+	predicate := plan.ArticlePredicate()
+
+	h.lex = h.lex.Where(predicate)
+
+	for i := range h.vec {
+		h.vec[i].builder = h.vec[i].builder.Where(predicate)
+	}
+
+	return h
+}
+
 // ToSQL renders the whole fused statement.
 func (h *HybridHits) ToSQL() (string, []any, error) {
 	queries, args, err := textQueries(h.term, h.configs).ToSql()

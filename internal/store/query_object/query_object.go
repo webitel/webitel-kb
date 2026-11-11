@@ -151,6 +151,13 @@ func (q *baseQueryObject[T]) WithPaging(size, page int) T {
 	return q.entity
 }
 
+// WithPrefix puts a clause, such as a CTE the query reads from, in front of the SELECT.
+func (q *baseQueryObject[T]) WithPrefix(clause string, args ...any) T {
+	q.builder = q.builder.PrefixExpr(squirrel.Expr(clause, args...))
+
+	return q.entity
+}
+
 // ToSQL renders the query. Fields default to the entity's DefaultFields when
 // none were selected.
 func (q *baseQueryObject[T]) ToSQL() (string, []any, error) {

@@ -103,13 +103,14 @@ type readOpts struct {
 	page   int
 }
 
-func (o *readOpts) GetAuthOpts() auth.Auther { return o.auth }
-func (o *readOpts) GetFields() []string      { return nil }
-func (o *readOpts) GetSearch() string        { return o.search }
-func (o *readOpts) GetPage() int             { return o.page }
-func (o *readOpts) GetSize() int             { return o.size }
-func (o *readOpts) GetSort() string          { return "" }
-func (o *readOpts) GetIDs() []int64          { return o.ids }
+func (o *readOpts) GetAuthOpts() auth.Auther   { return o.auth }
+func (o *readOpts) GetFields() []string        { return nil }
+func (o *readOpts) GetSearch() string          { return o.search }
+func (o *readOpts) GetPage() int               { return o.page }
+func (o *readOpts) GetSize() int               { return o.size }
+func (o *readOpts) GetSort() string            { return "" }
+func (o *readOpts) GetIDs() []int64            { return o.ids }
+func (o *readOpts) GetAccess() auth.AccessMode { return auth.Read }
 
 func retrievalServiceWithFake() (*RetrievalService, *retrievalStoreFake) {
 	svc, uow, _ := semanticServiceWithFakes()

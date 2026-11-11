@@ -10,6 +10,7 @@ import (
 	"github.com/webitel/webitel-go-kit/pkg/errors"
 
 	"github.com/webitel/webitel-kb/infra/storage"
+	"github.com/webitel/webitel-kb/internal/auth"
 	"github.com/webitel/webitel-kb/internal/model"
 	"github.com/webitel/webitel-kb/internal/model/options"
 	"github.com/webitel/webitel-kb/internal/store"
@@ -35,6 +36,10 @@ func NewAttachmentService(uow store.UnitOfWork, files storage.Files, log *slog.L
 func (s *AttachmentService) List(
 	ctx context.Context, opts options.Searcher, articleID int64,
 ) ([]*model.Attachment, bool, error) {
+	if err := requireArticle(ctx, s.uow, opts.GetAuthOpts(), articleID, auth.Read); err != nil {
+		return nil, false, err
+	}
+
 	items, next, err := s.uow.AttachmentStore().List(ctx, opts, articleID)
 	if err != nil {
 		return nil, false, err
@@ -69,6 +74,10 @@ func (s *AttachmentService) List(
 func (s *AttachmentService) Attach(
 	ctx context.Context, opts options.Creator, articleID, fileID int64,
 ) (*model.Attachment, error) {
+	if err := requireArticle(ctx, s.uow, opts.GetAuthOpts(), articleID, auth.Edit); err != nil {
+		return nil, err
+	}
+
 	file, err := s.files.Describe(ctx, opts.GetAuthOpts().GetDomainID(), fileID)
 	if err != nil {
 		// Storage refuses a file of another channel.
@@ -105,6 +114,10 @@ func (s *AttachmentService) Attach(
 func (s *AttachmentService) Delete(
 	ctx context.Context, opts options.Deleter, articleID int64,
 ) (*model.Attachment, error) {
+	if err := requireArticle(ctx, s.uow, opts.GetAuthOpts(), articleID, auth.Edit); err != nil {
+		return nil, err
+	}
+
 	files := s.uow.AttachmentStore()
 
 	deleted, err := files.Delete(ctx, opts, articleID)

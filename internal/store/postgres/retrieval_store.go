@@ -90,6 +90,7 @@ func (s *retrievalStore) Search(
 
 	hits, hitArgs, err := queryobject.NewSearchHits(term).
 		WithScope(opts.GetAuthOpts().GetDomainID(), filter).
+		WithAccess(readPlan(opts)).
 		WithPaging(opts.GetSize(), opts.GetPage()).
 		ToSQL()
 	if err != nil {
@@ -152,6 +153,7 @@ func (s *retrievalStore) SemanticSearch(
 
 	sql, args, err := queryobject.NewHybridHits(q).
 		WithScope(opts.GetAuthOpts().GetDomainID()).
+		WithAccess(readPlan(opts)).
 		ToSQL()
 	if err != nil {
 		return nil, ParseError(err)
@@ -181,6 +183,7 @@ func (s *retrievalStore) Resolve(
 	sql, args, err := queryobject.NewSummaryQuery(queryobject.SummaryFrom).
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithRetrievable().
+		WithAccess(readPlan(opts)).
 		WithIDs(ids).
 		WithSpaces(spaceIDs).
 		WithExcerpt().
@@ -209,6 +212,7 @@ func (s *retrievalStore) Menu(
 
 	sql, args, err := queryobject.NewSummaryQuery(menuFrom).
 		WithPrefix(walk, args...).
+		WithAccess(readPlan(opts)).
 		WithExcerpt().
 		WithFAQBody().
 		WithOrder("menu.level", "m.subject", "m.id").

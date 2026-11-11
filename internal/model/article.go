@@ -106,6 +106,8 @@ func (a Article) Merge(in *Article, mask []string) *Article {
 
 // ArticleFilter narrows article listings; zero values disable a criterion.
 type ArticleFilter struct {
+	// TeamID is the team whose space binding narrows the spaces.
+	TeamID int64
 	// SpaceIDs keeps the articles of those spaces; empty means any.
 	SpaceIDs []int64
 	Type     int32

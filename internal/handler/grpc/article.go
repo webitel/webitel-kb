@@ -36,6 +36,7 @@ func (s *ArticlesServer) ListArticles(ctx context.Context, req *kb.ListArticlesR
 
 	items, next, err := s.service.List(ctx, opts, model.ArticleFilter{
 		SpaceIDs:     req.GetSpaceIds(),
+		TeamID:       req.GetTeamId(),
 		Type:         int32(req.GetType()),
 		States:       articleStateCodes(req.GetStates()),
 		Languages:    req.GetLanguages(),
@@ -215,7 +216,7 @@ func (s *ArticlesServer) GetTree(ctx context.Context, req *kb.GetTreeRequest) (*
 		return nil, err
 	}
 
-	nodes, err := s.service.Tree(ctx, opts, req.GetSpaceId())
+	nodes, err := s.service.Tree(ctx, opts, req.GetSpaceId(), req.GetTeamId())
 	if err != nil {
 		return nil, err
 	}
