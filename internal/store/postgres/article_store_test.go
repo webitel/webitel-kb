@@ -703,9 +703,10 @@ func TestArticleScanMapsPublished(t *testing.T) {
 		"id", "ver", "published_id", "published_number", "published_subject",
 		"published_rich_text", "published_markdown", "published_plain",
 		"latest_id", "latest_number", "latest_subject", "latest_rich_text", "latest_markdown", "latest_plain",
+		"version_count",
 	}
 
-	latest := []any{ptrTo(int64(12)), int32(4), "VPN 2", []byte(`{"type":"doc"}`), "# VPN 2", "VPN 2"}
+	latest := []any{ptrTo(int64(12)), int32(4), "VPN 2", []byte(`{"type":"doc"}`), "# VPN 2", "VPN 2", int64(4)}
 	wantLatest := &model.ArticleVersion{
 		ID: 12, ArticleID: 1, VersionNumber: 4, Subject: "VPN 2",
 		BodyRichText: []byte(`{"type":"doc"}`), BodyMarkdown: "# VPN 2", BodyPlain: "VPN 2",
@@ -749,6 +750,10 @@ func TestArticleScanMapsPublished(t *testing.T) {
 
 			if !reflect.DeepEqual(got.Latest, wantLatest) {
 				t.Fatalf("latest = %+v, want %+v", got.Latest, wantLatest)
+			}
+
+			if got.VersionCount != 4 {
+				t.Fatalf("version count = %d, want 4", got.VersionCount)
 			}
 		})
 	}

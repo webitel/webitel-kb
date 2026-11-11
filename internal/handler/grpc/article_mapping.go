@@ -69,6 +69,7 @@ func articleToProto(in *model.Article) (*kb.Article, error) {
 		CreatedBy:          lookupToProto(in.CreatedBy),
 		UpdatedBy:          lookupToProto(in.UpdatedBy),
 		Home:               in.Home,
+		VersionCount:       in.VersionCount,
 		Etag:               tag,
 	}
 

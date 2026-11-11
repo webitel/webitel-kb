@@ -89,11 +89,18 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 				aliasedExpr:  versionColumns("lv", "latest"),
 				requiresJoin: articleJoinLatest,
 			},
+			"version_count": {
+				sqlExpr:     versionCount,
+				aliasedExpr: versionCount + " AS version_count",
+			},
 		}
 	}
 
 	return q.meta
 }
+
+// versionCount counts the saved versions of the article.
+const versionCount = "(SELECT count(*) FROM kb.article_version v WHERE v.article_id = m.id)"
 
 // versionColumns selects a joined version under a prefix.
 func versionColumns(alias, prefix string) string {
