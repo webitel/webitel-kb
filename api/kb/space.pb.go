@@ -109,7 +109,7 @@ type Space struct {
 	Teams []*Lookup `protobuf:"bytes,13,rep,name=teams,proto3" json:"teams,omitempty"`
 	// Lifecycle state.
 	State SpaceState `protobuf:"varint,14,opt,name=state,proto3,enum=webitel.kb.SpaceState" json:"state,omitempty"`
-	// Number of articles whose indexing failed.
+	// Number of articles whose indexing failed, only when requested in fields.
 	FailedIndexCount int64 `protobuf:"varint,15,opt,name=failed_index_count,json=failedIndexCount,proto3" json:"failed_index_count,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
