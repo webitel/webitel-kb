@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,7 +73,16 @@ func TestInputRules(t *testing.T) {
 		{name: "article known codes", msg: article(&kb.InputArticle{Type: kb.ArticleType_FAQ, State: kb.ArticleState_DRAFT})},
 		{name: "article negative parent", msg: article(&kb.InputArticle{ParentId: -1}), wantField: "input.parent_id", wantRule: "int64.gte"},
 		{name: "article list unknown type", msg: &kb.ListArticlesRequest{Type: 5}, wantField: "type", wantRule: "enum.defined_only"},
-		{name: "article list unknown state", msg: &kb.ListArticlesRequest{State: 5}, wantField: "state", wantRule: "enum.defined_only"},
+		{name: "article list states", msg: &kb.ListArticlesRequest{States: []kb.ArticleState{kb.ArticleState_DRAFT, kb.ArticleState_ACTIVE, kb.ArticleState_INACTIVE}}},
+		{name: "article list unknown state", msg: &kb.ListArticlesRequest{States: []kb.ArticleState{kb.ArticleState_ACTIVE, 5}}, wantField: "states[1]", wantRule: "enum.defined_only"},
+		{name: "article list unspecified state", msg: &kb.ListArticlesRequest{States: []kb.ArticleState{kb.ArticleState_ARTICLE_STATE_UNSPECIFIED}}, wantField: "states[0]", wantRule: "enum.not_in"},
+		{name: "article list repeated state", msg: &kb.ListArticlesRequest{States: []kb.ArticleState{kb.ArticleState_ACTIVE, kb.ArticleState_ACTIVE}}, wantField: "states", wantRule: "repeated.unique"},
+		{name: "article list spaces", msg: &kb.ListArticlesRequest{SpaceIds: []int64{1, 2}}},
+		{name: "article list zero space", msg: &kb.ListArticlesRequest{SpaceIds: []int64{1, 0}}, wantField: "space_ids[1]", wantRule: "int64.gt"},
+		{name: "article list with 100 spaces", msg: &kb.ListArticlesRequest{SpaceIds: slices.Repeat([]int64{1}, 100)}},
+		{name: "article list with too many spaces", msg: &kb.ListArticlesRequest{SpaceIds: slices.Repeat([]int64{1}, 101)}, wantField: "space_ids", wantRule: "repeated.max_items"},
+		{name: "article list with 50 languages", msg: &kb.ListArticlesRequest{Languages: make([]string, 50)}},
+		{name: "article list with too many languages", msg: &kb.ListArticlesRequest{Languages: make([]string, 51)}, wantField: "languages", wantRule: "repeated.max_items"},
 		{name: "article list unknown tag match", msg: &kb.ListArticlesRequest{TagMatch: 5}, wantField: "tag_match", wantRule: "enum.defined_only"},
 		{name: "article move to negative parent", msg: &kb.MoveArticleRequest{Etag: "x", NewParentId: -1}, wantField: "new_parent_id", wantRule: "int64.gte"},
 		{name: "article move to top level", msg: &kb.MoveArticleRequest{Etag: "x"}},
@@ -116,6 +126,9 @@ func TestInputRules(t *testing.T) {
 		{name: "suggest message with spaces", msg: &kb.SuggestRequest{CustomerMessage: "vpn", SpaceIds: []int64{1}}},
 		{name: "menu without space", msg: &kb.MenuRequest{DepthLimit: 9}, wantField: "space_id", wantRule: "int64.gt"},
 		{name: "menu with lenient depth", msg: &kb.MenuRequest{SpaceId: 1, DepthLimit: 9}},
+		{name: "menu with default size", msg: &kb.MenuRequest{SpaceId: 1}},
+		{name: "menu with size over the cap", msg: &kb.MenuRequest{SpaceId: 1, Size: 500}},
+		{name: "menu negative size", msg: &kb.MenuRequest{SpaceId: 1, Size: -1}, wantField: "size", wantRule: "int32.gte"},
 		{name: "tags without space", msg: &kb.SuggestTagsRequest{Size: 6000}, wantField: "space_id", wantRule: "int64.gt"},
 
 		{name: "attach without file", msg: &kb.AttachFileRequest{ArticleEtag: "7"}, wantField: "file_id", wantRule: "int64.gt"},

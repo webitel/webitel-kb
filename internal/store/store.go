@@ -125,6 +125,9 @@ type ArticleStore interface {
 	// SuggestTags returns the distinct tags of a space matching a prefix.
 	SuggestTags(ctx context.Context, opts options.Searcher, spaceID int64, prefix string, size int) ([]string, error)
 
+	// FailedIndexCounts returns the number of articles whose indexing failed per space.
+	FailedIndexCounts(ctx context.Context, opts options.Searcher, spaceIDs []int64) (map[int64]int64, error)
+
 	// LockSpaceTree locks the row of a domain's space until the transaction
 	// ends, so moves and subtree deletes in it run one at a time: concurrent
 	// moves cannot weave a cycle their snapshots would not see.
@@ -145,7 +148,7 @@ type RetrievalStore interface {
 	Resolve(ctx context.Context, opts options.Searcher, ids, spaceIDs []int64) ([]*model.ArticleSummary, error)
 
 	// Menu returns the articles below a parent, down to depthLimit levels.
-	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32) ([]*model.ArticleSummary, error)
+	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32, limit uint64) ([]*model.ArticleSummary, error)
 
 	// SemanticSearch returns the fused ranking of chunks; runs inside a transaction.
 	SemanticSearch(ctx context.Context, opts options.Searcher, q model.HybridQuery) ([]*model.ChunkHit, error)

@@ -32,6 +32,7 @@ type retrievalStoreFake struct {
 		spaceID  int64
 		parentID int64
 		depth    int32
+		limit    uint64
 	}
 
 	items []*model.ArticleSummary
@@ -69,9 +70,9 @@ func (f *retrievalStoreFake) Resolve(
 }
 
 func (f *retrievalStoreFake) Menu(
-	_ context.Context, _ options.Searcher, spaceID, parentID int64, depthLimit int32,
+	_ context.Context, _ options.Searcher, spaceID, parentID int64, depthLimit int32, limit uint64,
 ) ([]*model.ArticleSummary, error) {
-	f.menu.spaceID, f.menu.parentID, f.menu.depth = spaceID, parentID, depthLimit
+	f.menu.spaceID, f.menu.parentID, f.menu.depth, f.menu.limit = spaceID, parentID, depthLimit, limit
 
 	return f.items, nil
 }
@@ -283,11 +284,11 @@ func TestRetrievalEmptyAnswersAreEmptyLists(t *testing.T) {
 func TestRetrievalMenuMapsTheRequest(t *testing.T) {
 	server, fake := retrievalServerWithFake()
 
-	if _, err := server.Menu(retrievalContext(), &kb.MenuRequest{SpaceId: 7, ParentId: 3, DepthLimit: 2}); err != nil {
+	if _, err := server.Menu(retrievalContext(), &kb.MenuRequest{SpaceId: 7, ParentId: 3, DepthLimit: 2, Size: 5}); err != nil {
 		t.Fatalf("Menu: %v", err)
 	}
 
-	if fake.menu.spaceID != 7 || fake.menu.parentID != 3 || fake.menu.depth != 2 {
+	if fake.menu.spaceID != 7 || fake.menu.parentID != 3 || fake.menu.depth != 2 || fake.menu.limit != 5 {
 		t.Fatalf("menu = %+v", fake.menu)
 	}
 }

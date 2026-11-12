@@ -47,16 +47,17 @@ func (q *ArticleQuery) FieldsMetadata() map[string]fieldMetadata {
 			"id":        {sqlExpr: "m.id", aliasedExpr: "m.id AS id", sortable: true},
 			"domain_id": {sqlExpr: "s.domain_id", aliasedExpr: "s.domain_id AS domain_id", requiresJoin: articleJoinSpace},
 			"space": {
-				sqlExpr:      "s.name",
+				sqlExpr:      "(s.name, s.id)",
 				aliasedExpr:  "s.id AS space_id, s.name AS space_name",
 				requiresJoin: articleJoinSpace,
+				sortable:     true,
 			},
 			"parent_id":            {sqlExpr: "m.parent_id", aliasedExpr: "m.parent_id AS parent_id"},
 			"depth":                {sqlExpr: "m.depth", aliasedExpr: "m.depth AS depth", sortable: true},
-			"type":                 {sqlExpr: "m.type", aliasedExpr: "m.type AS type"},
+			"type":                 {sqlExpr: "m.type", aliasedExpr: "m.type AS type", sortable: true},
 			"subject":              {sqlExpr: "m.subject", aliasedExpr: "m.subject AS subject", sortable: true},
 			"tags":                 {sqlExpr: "m.tags", aliasedExpr: "m.tags AS tags"},
-			"state":                {sqlExpr: "m.state", aliasedExpr: "m.state AS state"},
+			"state":                {sqlExpr: "m.state", aliasedExpr: "m.state AS state", sortable: true},
 			"index_state":          {sqlExpr: "m.index_state", aliasedExpr: "m.index_state AS index_state"},
 			"published_version_id": {sqlExpr: "m.published_version_id", aliasedExpr: "m.published_version_id AS published_version_id"},
 			"ver":                  {sqlExpr: "m.ver", aliasedExpr: "m.ver AS ver"},
@@ -203,10 +204,21 @@ func (q *ArticleQuery) WithTags(tags []string, matchAll bool) *ArticleQuery {
 	return q
 }
 
-// WithSpace keeps the articles of the given space; 0 means any.
-func (q *ArticleQuery) WithSpace(spaceID int64) *ArticleQuery {
-	if spaceID > 0 {
-		q.builder = q.builder.Where("m.space_id = ?", spaceID)
+// WithStates keeps articles in any of the given state codes; empty means any.
+func (q *ArticleQuery) WithStates(codes []int32) *ArticleQuery {
+	if len(codes) > 0 {
+		q.builder = q.builder.Where("m.state = ANY(?)", codes)
+	}
+
+	return q
+}
+
+// WithLanguages keeps articles of spaces whose language has any of the given
+// bases; empty means any.
+func (q *ArticleQuery) WithLanguages(bases []string) *ArticleQuery {
+	if len(bases) > 0 {
+		q.EnsureJoins(articleJoinSpace)
+		q.builder = q.builder.Where("split_part(s.language, '-', 1) = ANY(?)", bases)
 	}
 
 	return q
@@ -223,15 +235,6 @@ func (q *ArticleQuery) WithSpaces(spaceIDs []int64) *ArticleQuery {
 func (q *ArticleQuery) WithType(code int32) *ArticleQuery {
 	if code > 0 {
 		q.builder = q.builder.Where("m.type = ?", code)
-	}
-
-	return q
-}
-
-// WithState keeps articles in the given state code; 0 means any.
-func (q *ArticleQuery) WithState(code int32) *ArticleQuery {
-	if code > 0 {
-		q.builder = q.builder.Where("m.state = ?", code)
 	}
 
 	return q

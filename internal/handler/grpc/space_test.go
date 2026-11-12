@@ -36,7 +36,7 @@ func TestSpaceToProto(t *testing.T) {
 				EmbeddingModelID: 3, RerankerModelID: 4, VectorSearchEnabled: true,
 				ChunkingStrategy: "recursive_markdown", HomeArticleID: 11, State: model.SpaceStateInactive,
 				Teams:     []model.Lookup{{ID: 2, Name: "Sales"}},
-				CreatedAt: now, UpdatedAt: now,
+				CreatedAt: now, UpdatedAt: now, FailedIndexCount: 3,
 				CreatedBy: &model.Lookup{ID: 9, Name: "Admin"},
 			},
 			want: func(t *testing.T, got *kb.Space) {
@@ -49,6 +49,10 @@ func TestSpaceToProto(t *testing.T) {
 
 				if got.GetCreatedAt() != now.UnixMilli() {
 					t.Fatalf("created_at = %d, want epoch ms", got.GetCreatedAt())
+				}
+
+				if got.GetFailedIndexCount() != 3 {
+					t.Fatalf("failed_index_count = %d, want 3", got.GetFailedIndexCount())
 				}
 
 				if len(got.GetTeams()) != 1 || got.GetTeams()[0].GetName() != "Sales" {
@@ -144,6 +148,7 @@ type fakeUow struct {
 	embedding     *model.SpaceEmbedding
 	embeddings    []*model.SpaceEmbedding
 	teamSpaces    []int64
+	articles      *articleStoreFake
 }
 
 func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context, store.UnitOfWork) error) error {
@@ -152,7 +157,7 @@ func (u *fakeUow) WithinTransaction(ctx context.Context, fn func(context.Context
 
 func (u *fakeUow) EmbeddingModelStore() store.EmbeddingModelStore { return fakeModels{u} }
 func (u *fakeUow) SpaceStore() store.SpaceStore                   { return fakeSpaces{u} }
-func (u *fakeUow) ArticleStore() store.ArticleStore               { return nil }
+func (u *fakeUow) ArticleStore() store.ArticleStore               { return u.articles }
 func (u *fakeUow) ArticleVersionStore() store.ArticleVersionStore { return nil }
 func (u *fakeUow) OutboxStore() store.OutboxStore                 { return nil }
 func (u *fakeUow) RetrievalStore() store.RetrievalStore           { return nil }
@@ -293,6 +298,7 @@ func newSpacesFixture() (*SpacesServer, *fakeUow, context.Context) {
 	uow := &fakeUow{
 		space:    &model.Space{ID: 7, Name: "docs", Language: "uk", EmbeddingModelID: 3},
 		embModel: &model.EmbeddingModel{ID: 3, Type: model.ModelTypeEmbedding, ValidatedAt: time.Now()},
+		articles: &articleStoreFake{failedCounts: map[int64]int64{7: 2}},
 	}
 
 	server := NewSpacesServer(service.NewSpaceService(uow, &filesFake{}, slog.New(slog.DiscardHandler)))
@@ -349,6 +355,7 @@ func TestSpacesServerListMapsPage(t *testing.T) {
 
 	page, err := server.ListSpaces(ctx, &kb.ListSpacesRequest{
 		Size: 1, Page: 1, State: kb.SpaceState_SPACE_STATE_ACTIVE, Languages: []string{"uk-UA", "en"},
+		Fields: []string{"id", "failed_index_count"},
 	})
 	if err != nil {
 		t.Fatalf("ListSpaces: %v", err)
@@ -364,5 +371,9 @@ func TestSpacesServerListMapsPage(t *testing.T) {
 
 	if len(page.GetItems()) != 1 || page.GetItems()[0].GetId() != 7 || !page.GetNext() {
 		t.Fatalf("page = %+v", page)
+	}
+
+	if got := page.GetItems()[0].GetFailedIndexCount(); got != 2 {
+		t.Fatalf("failed_index_count = %d, want 2", got)
 	}
 }

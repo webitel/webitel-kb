@@ -23,7 +23,10 @@ func TestArticleListRendersScopedQuery(t *testing.T) {
 	s := &articleStore{db: f}
 
 	opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, search: "vpn", size: 10, page: 2}
-	filter := model.ArticleFilter{SpaceID: 7, Type: model.ArticleTypeFAQ, State: model.ArticleStateActive}
+	filter := model.ArticleFilter{
+		SpaceIDs: []int64{7}, Type: model.ArticleTypeFAQ, States: []int32{model.ArticleStateActive},
+		Languages: []string{"uk"},
+	}
 
 	if _, _, err := s.List(context.Background(), opts, filter); err != nil {
 		t.Fatalf("List: %v", err)
@@ -34,9 +37,10 @@ func TestArticleListRendersScopedQuery(t *testing.T) {
 		"m.deleted_at IS NULL",
 		"s.domain_id=$1",
 		"m.subject ILIKE $2",
-		"m.space_id=$3",
-		"m.type=$4",
-		"m.state=$5",
+		"m.space_id=ANY($3)",
+		"split_part(s.language,'-',1)=ANY($4)",
+		"m.type=$5",
+		"m.state=ANY($6)",
 		"ORDER BY m.subject ASC,m.id ASC",
 		"LIMIT 11",
 		"OFFSET 10",

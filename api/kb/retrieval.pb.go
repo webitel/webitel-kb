@@ -625,7 +625,9 @@ type MenuRequest struct {
 	// Parent article id; 0 for top level.
 	ParentId int64 `protobuf:"varint,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// Maximum hierarchy depth to return.
-	DepthLimit    int32 `protobuf:"varint,3,opt,name=depth_limit,json=depthLimit,proto3" json:"depth_limit,omitempty"`
+	DepthLimit int32 `protobuf:"varint,3,opt,name=depth_limit,json=depthLimit,proto3" json:"depth_limit,omitempty"`
+	// Maximum number of items, at most 100; 0 returns up to 100.
+	Size          int32 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -677,6 +679,13 @@ func (x *MenuRequest) GetParentId() int64 {
 func (x *MenuRequest) GetDepthLimit() int32 {
 	if x != nil {
 		return x.DepthLimit
+	}
+	return 0
+}
+
+func (x *MenuRequest) GetSize() int32 {
+	if x != nil {
+		return x.Size
 	}
 	return 0
 }
@@ -769,12 +778,13 @@ const file_retrieval_proto_rawDesc = "" +
 	"\x1bkb.retrieval.space_required\x12(a team or at least one space is required\x1aRthis.customer_message.trim() == '' || size(this.space_ids) > 0 || this.team_id > 0\"t\n" +
 	"\x0fSuggestResponse\x126\n" +
 	"\barticles\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\barticles\x12)\n" +
-	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\"o\n" +
+	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\"\x8c\x01\n" +
 	"\vMenuRequest\x12\"\n" +
 	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12\x1f\n" +
 	"\vdepth_limit\x18\x03 \x01(\x05R\n" +
-	"depthLimit\"@\n" +
+	"depthLimit\x12\x1b\n" +
+	"\x04size\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x04size\"@\n" +
 	"\fMenuResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items*K\n" +
 	"\bTagMatch\x12\x19\n" +

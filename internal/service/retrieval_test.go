@@ -26,6 +26,7 @@ type retrievalStoreFake struct {
 		spaceID  int64
 		parentID int64
 		depth    int32
+		limit    uint64
 	}
 
 	items []*model.ArticleSummary
@@ -66,10 +67,10 @@ func (f *retrievalStoreFake) Resolve(
 }
 
 func (f *retrievalStoreFake) Menu(
-	_ context.Context, _ options.Searcher, spaceID, parentID int64, depthLimit int32,
+	_ context.Context, _ options.Searcher, spaceID, parentID int64, depthLimit int32, limit uint64,
 ) ([]*model.ArticleSummary, error) {
 	f.calls++
-	f.menu.spaceID, f.menu.parentID, f.menu.depth = spaceID, parentID, depthLimit
+	f.menu.spaceID, f.menu.parentID, f.menu.depth, f.menu.limit = spaceID, parentID, depthLimit, limit
 
 	return f.items, nil
 }
@@ -223,6 +224,38 @@ func TestRetrievalResolve(t *testing.T) {
 	}
 }
 
+func TestRetrievalMenuSize(t *testing.T) {
+	tests := []struct {
+		name  string
+		asked int32
+		want  uint64
+	}{
+		{name: "unset is the whole bound", asked: 0, want: maxMenuItems},
+		{name: "negative is the whole bound", asked: -1, want: maxMenuItems},
+		{name: "asked size is kept", asked: 5, want: 5},
+		{name: "the bound itself is kept", asked: maxMenuItems, want: maxMenuItems},
+		{name: "no menu outgrows the bound", asked: maxMenuItems + 1, want: maxMenuItems},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, fake := retrievalServiceWithFake()
+
+			if _, err := svc.Menu(
+				context.Background(),
+				&readOpts{auth: fakeAuther{domainID: 5}},
+				7, 3, 1, tt.asked,
+			); err != nil {
+				t.Fatalf("Menu: %v", err)
+			}
+
+			if fake.menu.limit != tt.want {
+				t.Fatalf("limit = %d, want %d", fake.menu.limit, tt.want)
+			}
+		})
+	}
+}
+
 func TestRetrievalMenuDepth(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -242,7 +275,7 @@ func TestRetrievalMenuDepth(t *testing.T) {
 			if _, err := svc.Menu(
 				context.Background(),
 				&readOpts{auth: fakeAuther{domainID: 5}},
-				7, 3, tt.asked,
+				7, 3, tt.asked, 0,
 			); err != nil {
 				t.Fatalf("Menu: %v", err)
 			}
