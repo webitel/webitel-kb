@@ -138,7 +138,6 @@ func citationsToProto(items []*model.Citation) []*kb.Citation {
 			ArticleId: item.ArticleID,
 			Title:     item.Title,
 			Snippet:   item.Snippet,
-			Url:       item.URL,
 		})
 	}
 
