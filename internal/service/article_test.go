@@ -1617,7 +1617,7 @@ func TestRestoreVersionRefusesADraft(t *testing.T) {
 	svc, uow := newArticleFixture()
 	uow.articles.current.State = model.ArticleStateDraft
 
-	_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, "")
+	_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, restoreNotes)
 
 	if errors.ID(err) != "kb.article.restore_draft" {
 		t.Fatalf("error = %v, want kb.article.restore_draft", err)
@@ -1632,7 +1632,7 @@ func TestRestoreVersionMissingSource(t *testing.T) {
 	svc, uow := newArticleFixture()
 	uow.versions.locateErr = errors.NotFound("entity does not exist or access is denied")
 
-	_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 99, "")
+	_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 99, restoreNotes)
 
 	if errors.Code(err) != codes.NotFound {
 		t.Fatalf("error = %v, want NotFound", err)

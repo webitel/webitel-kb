@@ -86,7 +86,12 @@ func TestInputRules(t *testing.T) {
 		{name: "version without number", msg: &kb.GetVersionRequest{ArticleId: 1}, wantField: "version_number", wantRule: "int32.gt"},
 		{name: "restore note at the limit", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: strings.Repeat("я", 50)}},
 		{name: "restore note over the limit", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: strings.Repeat("я", 51)}, wantField: "notes", wantRule: "string.max_len"},
-		{name: "restore without article", msg: &kb.RestoreVersionRequest{VersionNumber: 1}, wantField: "article_id", wantRule: "int64.gt"},
+		{name: "restore without note", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1}, wantField: "notes", wantRule: "kb.article.restore_notes_required"},
+		{name: "restore note of spaces only", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: "   "}, wantField: "notes", wantRule: "kb.article.restore_notes_required"},
+		{name: "restore note of tabs and line breaks", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: "\t\n "}, wantField: "notes", wantRule: "kb.article.restore_notes_required"},
+		{name: "restore note with surrounding spaces", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: " n "}},
+		{name: "restore note of one character", msg: &kb.RestoreVersionRequest{ArticleId: 1, VersionNumber: 1, Notes: "я"}},
+		{name: "restore without article", msg: &kb.RestoreVersionRequest{VersionNumber: 1, Notes: "n"}, wantField: "article_id", wantRule: "int64.gt"},
 
 		{name: "model create without input", msg: &kb.CreateModelRequest{}, wantField: "input", wantRule: "required"},
 		{name: "model create without type", msg: &kb.CreateModelRequest{Input: &kb.InputEmbeddingModel{Name: "m"}}, wantField: "input", wantRule: "kb.model.type_required"},
