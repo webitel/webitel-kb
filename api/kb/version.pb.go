@@ -360,7 +360,7 @@ type RestoreVersionRequest struct {
 	ArticleId int64 `protobuf:"varint,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
 	// Version number to restore.
 	VersionNumber int32 `protobuf:"varint,2,opt,name=version_number,json=versionNumber,proto3" json:"version_number,omitempty"`
-	// Notes for the new version, 1 to 50 characters.
+	// Notes for the new version, at most 50 characters, not blank.
 	Notes         string `protobuf:"bytes,3,opt,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -452,12 +452,13 @@ const file_version_proto_rawDesc = "" +
 	"\x11GetVersionRequest\x12&\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\tarticleId\x12.\n" +
-	"\x0eversion_number\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\rversionNumber\"\x90\x01\n" +
+	"\x0eversion_number\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\rversionNumber\"\xdb\x01\n" +
 	"\x15RestoreVersionRequest\x12&\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\tarticleId\x12.\n" +
-	"\x0eversion_number\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\rversionNumber\x12\x1f\n" +
-	"\x05notes\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x182R\x05notes2\xcf\x03\n" +
+	"\x0eversion_number\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\rversionNumber\x12j\n" +
+	"\x05notes\x18\x03 \x01(\tBT\xbaHQ\xba\x01J\n" +
+	"!kb.article.restore_notes_required\x12\x12notes are required\x1a\x11this.trim() != ''r\x02\x182R\x05notes2\xcf\x03\n" +
 	"\bVersions\x12\x82\x01\n" +
 	"\fListVersions\x12\x1f.webitel.kb.ListVersionsRequest\x1a\x1e.webitel.kb.ArticleVersionList\"1\x90\xb5\x18\x01\x82\xd3\xe4\x93\x02'\x12%/v1/kb/articles/{article_id}/versions\x12\x8b\x01\n" +
 	"\n" +

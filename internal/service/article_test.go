@@ -1628,37 +1628,6 @@ func TestRestoreVersionRefusesADraft(t *testing.T) {
 	}
 }
 
-func TestRestoreVersionRequiresNotes(t *testing.T) {
-	tests := []struct {
-		name  string
-		notes string
-	}{
-		{name: "empty", notes: ""},
-		{name: "spaces only", notes: "   "},
-		{name: "tabs and line breaks", notes: "\t\n "},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc, uow := newArticleFixture()
-
-			_, err := svc.RestoreVersion(context.Background(), updaterOpts(), 7, 1, tt.notes)
-
-			if errors.ID(err) != "kb.article.restore_notes_required" {
-				t.Fatalf("error = %v, want kb.article.restore_notes_required", err)
-			}
-
-			if errors.Code(err) != codes.InvalidArgument {
-				t.Fatalf("code = %v, want InvalidArgument", errors.Code(err))
-			}
-
-			if uow.transactions != 0 || uow.versions.createCalls != 0 || uow.articles.updateCalls != 0 {
-				t.Fatal("a restore without notes must touch nothing")
-			}
-		})
-	}
-}
-
 func TestRestoreVersionMissingSource(t *testing.T) {
 	svc, uow := newArticleFixture()
 	uow.versions.locateErr = errors.NotFound("entity does not exist or access is denied")
