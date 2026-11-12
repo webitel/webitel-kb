@@ -1,12 +1,24 @@
 package model
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Space lifecycle state codes.
 const (
 	SpaceStateActive   int32 = 1
 	SpaceStateInactive int32 = 2
 )
+
+// chunkingStrategies are the strategies the indexer splits articles with.
+var chunkingStrategies = []string{"recursive_markdown"}
+
+// ChunkingStrategySupported reports whether the indexer splits articles with
+// the strategy.
+func ChunkingStrategySupported(name string) bool {
+	return slices.Contains(chunkingStrategies, name)
+}
 
 // Space is a knowledge-base space: the top-level container that fixes the
 // language and retrieval configuration of its articles.
