@@ -397,7 +397,9 @@ func (s *articleStore) LocateForUpdate(ctx context.Context, opts options.Searche
 	return s.locateArticle(ctx, opts)
 }
 
-func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher) (*model.Article, error) {
+// LocateIn is Locate limited to the given spaces; an article elsewhere is not
+// found.
+func (s *articleStore) LocateIn(ctx context.Context, opts options.Searcher, spaceIDs []int64) (*model.Article, error) {
 	if len(opts.GetIDs()) != 1 {
 		return nil, errLocateSingleID
 	}
@@ -407,6 +409,7 @@ func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher)
 		WithDomainScope(opts.GetAuthOpts().GetDomainID()).
 		WithAccess(queryobject.PlanArticleAccess(opts.GetAuthOpts(), opts.GetAccess())).
 		WithIDs(opts.GetIDs()).
+		WithSpaces(spaceIDs).
 		WithFields(opts.GetFields())
 
 	sql, args, err := query.ToSQL()
@@ -425,6 +428,10 @@ func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher)
 	}
 
 	return item, nil
+}
+
+func (s *articleStore) locateArticle(ctx context.Context, opts options.Searcher) (*model.Article, error) {
+	return s.LocateIn(ctx, opts, nil)
 }
 
 func (s *articleStore) Create(ctx context.Context, opts options.Creator, in *model.Article) (*model.Article, error) {

@@ -567,7 +567,9 @@ type LocateArticleRequest struct {
 	// Concurrency token / locator.
 	Etag string `protobuf:"bytes,1,opt,name=etag,proto3" json:"etag,omitempty"`
 	// Set of fields to return.
-	Fields        []string `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
+	Fields []string `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
+	// Agent team; an article outside its binding is not found.
+	TeamId        int64 `protobuf:"varint,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -614,6 +616,13 @@ func (x *LocateArticleRequest) GetFields() []string {
 		return x.Fields
 	}
 	return nil
+}
+
+func (x *LocateArticleRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
 }
 
 // CreateArticleRequest wraps the article to create.
@@ -1136,10 +1145,11 @@ const file_article_proto_rawDesc = "" +
 	"\tlanguages\x18\f \x03(\tB\b\xbaH\x05\x92\x01\x02\x102R\tlanguages\"L\n" +
 	"\vArticleList\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.webitel.kb.ArticleR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"B\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"d\n" +
 	"\x14LocateArticleRequest\x12\x12\n" +
 	"\x04etag\x18\x01 \x01(\tR\x04etag\x12\x16\n" +
-	"\x06fields\x18\x02 \x03(\tR\x06fields\"\x94\x01\n" +
+	"\x06fields\x18\x02 \x03(\tR\x06fields\x12 \n" +
+	"\ateam_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"\x94\x01\n" +
 	"\x14CreateArticleRequest\x12|\n" +
 	"\x05input\x18\x01 \x01(\v2\x18.webitel.kb.InputArticleBL\xbaHI\xba\x01C\n" +
 	"\x19kb.article.space_required\x12\x13a space is required\x1a\x11this.space_id > 0\xc8\x01\x01R\x05input\"\x82\x01\n" +

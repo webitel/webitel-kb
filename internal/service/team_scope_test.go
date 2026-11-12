@@ -88,3 +88,38 @@ func TestTreeKeepsToTheTeamBinding(t *testing.T) {
 		})
 	}
 }
+
+func TestLocateKeepsToTheTeamBinding(t *testing.T) {
+	tests := []struct {
+		name        string
+		teamID      int64
+		bound       []int64
+		unknown     bool
+		wantIn      []int64
+		wantLocates int
+		wantCode    codes.Code
+	}{
+		{name: "no team locates anywhere", wantLocates: 1},
+		{name: "a team without a binding locates anywhere", teamID: 7, bound: []int64{}, wantLocates: 1},
+		{name: "a team locates within its binding", teamID: 7, bound: []int64{3, 4}, wantIn: []int64{3, 4}, wantLocates: 1},
+		{name: "an unknown team is refused", teamID: 7, unknown: true, wantCode: codes.InvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newArticleFixture()
+			uow.articles.located = &model.Article{ID: 1, SpaceID: 3}
+			uow.spaces.teamSpaces, uow.spaces.teamUnknown = tt.bound, tt.unknown
+
+			_, err := svc.Locate(context.Background(), readOptions{auth: fakeAuther{domainID: 5}, ids: []int64{1}}, tt.teamID)
+			if errors.Code(err) != tt.wantCode {
+				t.Fatalf("code = %v, want %v (err: %v)", errors.Code(err), tt.wantCode, err)
+			}
+
+			if !slices.Equal(uow.articles.locatedIn, tt.wantIn) || uow.articles.plainLocates != tt.wantLocates {
+				t.Errorf("located in %v (%d locates), want %v (%d)",
+					uow.articles.locatedIn, uow.articles.plainLocates, tt.wantIn, tt.wantLocates)
+			}
+		})
+	}
+}

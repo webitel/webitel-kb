@@ -239,7 +239,9 @@ type ResolveRequest struct {
 	// Article ids to resolve, at most 5000.
 	Ids []int64 `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
 	// Spaces the ids are expected in (RBAC scope).
-	SpaceIds      []int64 `protobuf:"varint,2,rep,packed,name=space_ids,json=spaceIds,proto3" json:"space_ids,omitempty"`
+	SpaceIds []int64 `protobuf:"varint,2,rep,packed,name=space_ids,json=spaceIds,proto3" json:"space_ids,omitempty"`
+	// Agent team; articles outside its binding are left out.
+	TeamId        int64 `protobuf:"varint,3,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -286,6 +288,13 @@ func (x *ResolveRequest) GetSpaceIds() []int64 {
 		return x.SpaceIds
 	}
 	return nil
+}
+
+func (x *ResolveRequest) GetTeamId() int64 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
 }
 
 // ResolveResponse returns the resolved article summaries.
@@ -743,10 +752,11 @@ const file_retrieval_proto_rawDesc = "" +
 	"\ateam_id\x18\a \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"V\n" +
 	"\x0eSearchResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\x12\x12\n" +
-	"\x04next\x18\x02 \x01(\bR\x04next\"J\n" +
+	"\x04next\x18\x02 \x01(\bR\x04next\"l\n" +
 	"\x0eResolveRequest\x12\x1b\n" +
 	"\x03ids\x18\x01 \x03(\x03B\t\xbaH\x06\x92\x01\x03\x10\x88'R\x03ids\x12\x1b\n" +
-	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\"C\n" +
+	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12 \n" +
+	"\ateam_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"C\n" +
 	"\x0fResolveResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xd6\x02\n" +
 	"\x15SemanticSearchRequest\x12\x14\n" +

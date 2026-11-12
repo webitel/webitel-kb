@@ -147,6 +147,7 @@ type fakeUow struct {
 	embModel      *model.EmbeddingModel
 	embedding     *model.SpaceEmbedding
 	embeddings    []*model.SpaceEmbedding
+	teamSpaces    []int64
 	articles      *articleStoreFake
 }
 
@@ -231,7 +232,7 @@ func (f fakeSpaces) ResolveRerankers(context.Context, int64, []int64) ([]*model.
 }
 
 func (f fakeSpaces) TeamSpaces(context.Context, int64, int64) ([]int64, bool, error) {
-	return nil, true, nil
+	return f.u.teamSpaces, true, nil
 }
 
 type fakeModels struct{ u *fakeUow }

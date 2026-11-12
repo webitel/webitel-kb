@@ -52,7 +52,7 @@ func (s *RetrievalServer) Resolve(ctx context.Context, req *kb.ResolveRequest) (
 		return nil, err
 	}
 
-	items, err := s.service.Resolve(ctx, opts, req.GetSpaceIds())
+	items, err := s.service.Resolve(ctx, opts, req.GetSpaceIds(), req.GetTeamId())
 	if err != nil {
 		return nil, err
 	}

@@ -78,6 +78,9 @@ type ArticleStore interface {
 	// Locate returns the single article the options identify by id.
 	Locate(ctx context.Context, opts options.Searcher) (*model.Article, error)
 
+	// LocateIn is Locate limited to the given spaces.
+	LocateIn(ctx context.Context, opts options.Searcher, spaceIDs []int64) (*model.Article, error)
+
 	// Create inserts an article into its space, deriving depth from the parent.
 	// Unset type and state take their default code.
 	Create(ctx context.Context, opts options.Creator, in *model.Article) (*model.Article, error)
