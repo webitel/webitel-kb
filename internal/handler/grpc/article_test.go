@@ -42,6 +42,8 @@ type articleStoreFake struct {
 		prefix  string
 		size    int
 	}
+
+	failedCounts map[int64]int64
 }
 
 func (f *articleStoreFake) List(
@@ -119,6 +121,10 @@ func (f *articleStoreFake) SuggestTags(
 	f.suggested.spaceID, f.suggested.prefix, f.suggested.size = spaceID, prefix, size
 
 	return []string{"vpn"}, nil
+}
+
+func (f *articleStoreFake) FailedIndexCounts(context.Context, options.Searcher, []int64) (map[int64]int64, error) {
+	return f.failedCounts, nil
 }
 
 func (f *articleStoreFake) LockSpaceTree(context.Context, int64, int64) error { return nil }

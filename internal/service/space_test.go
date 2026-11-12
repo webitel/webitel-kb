@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -123,13 +124,14 @@ type fakeSpaceStore struct {
 
 	listCalls  int
 	listFilter model.SpaceFilter
+	list       []*model.Space
 }
 
 func (f *fakeSpaceStore) List(_ context.Context, _ options.Searcher, filter model.SpaceFilter) ([]*model.Space, bool, error) {
 	f.listCalls++
 	f.listFilter = filter
 
-	return nil, false, nil
+	return f.list, false, nil
 }
 
 func (f *fakeSpaceStore) Locate(_ context.Context, opts options.Searcher) (*model.Space, error) {
@@ -588,6 +590,105 @@ func TestSpaceListNarrowsTheLanguages(t *testing.T) {
 
 			if got := uow.spaces.listFilter.Languages; !slices.Equal(got, tt.want) {
 				t.Fatalf("store languages = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpaceFailedIndexCount(t *testing.T) {
+	storeErr := errors.Internal("db down")
+
+	asked := []string{"name", "failed_index_count"}
+	page := func() []*model.Space { return []*model.Space{{ID: 7}, {ID: 8}, {ID: 9}} }
+
+	tests := []struct {
+		name     string
+		op       string
+		fields   []string
+		list     []*model.Space
+		storeErr error
+		wantIDs  [][]int64
+		want     map[int64]int64
+		wantErr  error
+	}{
+		{
+			name: "locate always counts", op: "locate",
+			wantIDs: [][]int64{{7}}, want: map[int64]int64{7: 2},
+		},
+		{
+			name: "update counts the updated space", op: "update",
+			wantIDs: [][]int64{{7}}, want: map[int64]int64{7: 2},
+		},
+		{
+			name: "update store error", op: "update", storeErr: storeErr,
+			wantIDs: [][]int64{{7}}, wantErr: storeErr,
+		},
+		{
+			name: "list without fields counts nothing", op: "list", list: page(),
+			want: map[int64]int64{7: 0, 8: 0, 9: 0},
+		},
+		{
+			name: "list not asked", op: "list", fields: []string{"name"}, list: page(),
+			want: map[int64]int64{7: 0, 8: 0, 9: 0},
+		},
+		{
+			name: "list asked counts the page in one query", op: "list", fields: asked, list: page(),
+			wantIDs: [][]int64{{7, 8, 9}}, want: map[int64]int64{7: 2, 8: 0, 9: 5},
+		},
+		{
+			name: "empty page asks nothing", op: "list", fields: asked,
+		},
+		{
+			name: "list store error", op: "list", fields: asked, list: page(), storeErr: storeErr,
+			wantIDs: [][]int64{{7, 8, 9}}, wantErr: storeErr,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.list = tt.list
+			uow.articles.failedCounts = map[int64]int64{7: 2, 9: 5}
+			uow.articles.failedCountsErr = tt.storeErr
+
+			opts := readOptions{auth: fakeAuther{domainID: 5}, ids: []int64{7}, fields: tt.fields}
+
+			var (
+				items []*model.Space
+				item  *model.Space
+				err   error
+			)
+
+			switch tt.op {
+			case "locate":
+				item, err = svc.Locate(context.Background(), opts)
+				items = []*model.Space{item}
+			case "update":
+				item, err = svc.Update(context.Background(), updaterOpts(), &model.Space{Name: "docs", EmbeddingModelID: 3}, nil)
+				items = []*model.Space{item}
+			default:
+				items, _, err = svc.List(context.Background(), opts, model.SpaceFilter{})
+			}
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+
+			if !reflect.DeepEqual(uow.articles.failedCountsIDs, tt.wantIDs) {
+				t.Fatalf("counted spaces = %v, want %v", uow.articles.failedCountsIDs, tt.wantIDs)
+			}
+
+			if tt.wantErr != nil {
+				return
+			}
+
+			got := make(map[int64]int64, len(items))
+			for _, item := range items {
+				got[item.ID] = item.FailedIndexCount
+			}
+
+			if len(tt.want) > 0 && !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("counts = %v, want %v", got, tt.want)
 			}
 		})
 	}

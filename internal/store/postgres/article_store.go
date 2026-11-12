@@ -188,6 +188,18 @@ func suggestTagsQuery(domainID, spaceID int64, pattern string, size int, plan qu
 		Suffix("LIMIT ?", size)
 }
 
+// failedIndexCountsQuery counts the visible articles whose indexing failed per space.
+func failedIndexCountsQuery(domainID int64, spaceIDs []int64, plan queryobject.AccessPlan) squirrel.SelectBuilder {
+	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).
+		Select("m.space_id", "count(*)").
+		From("kb.article m JOIN kb.space s ON s.id = m.space_id").
+		Where("s.domain_id = ? AND m.space_id = ANY(?) AND m.deleted_at IS NULL"+
+			" AND m.index_state = ? AND m.state <> ?",
+			domainID, spaceIDs, model.IndexStateFailed, model.ArticleStateDraft).
+		Where(plan.ArticlePredicate()).
+		GroupBy("m.space_id")
+}
+
 // defaultSuggestSize bounds a suggestion listing the caller left unbounded.
 const defaultSuggestSize = 20
 
@@ -705,6 +717,39 @@ func (s *articleStore) SuggestTags(
 	}
 
 	return tags, nil
+}
+
+func (s *articleStore) FailedIndexCounts(
+	ctx context.Context, opts options.Searcher, spaceIDs []int64,
+) (map[int64]int64, error) {
+	sql, args, err := failedIndexCountsQuery(
+		opts.GetAuthOpts().GetDomainID(), spaceIDs, readPlan(opts),
+	).ToSql()
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	rows, err := s.db.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	type spaceCount struct {
+		SpaceID int64
+		Count   int64
+	}
+
+	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[spaceCount])
+	if err != nil {
+		return nil, ParseError(err)
+	}
+
+	counts := make(map[int64]int64, len(items))
+	for _, item := range items {
+		counts[item.SpaceID] = item.Count
+	}
+
+	return counts, nil
 }
 
 func (s *articleStore) LockSpaceTree(ctx context.Context, spaceID, domainID int64) error {

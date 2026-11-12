@@ -150,6 +150,7 @@ func spaceToProto(m *model.Space) *kb.Space {
 		HomeArticleId:          m.HomeArticleID,
 		State:                  kb.SpaceState(m.State),
 		Teams:                  lookupsToProto(m.Teams),
+		FailedIndexCount:       m.FailedIndexCount,
 		CreatedAt:              unixMilli(m.CreatedAt),
 		UpdatedAt:              unixMilli(m.UpdatedAt),
 		CreatedBy:              lookupToProto(m.CreatedBy),
