@@ -334,10 +334,10 @@ func (s *articleStore) List(
 		WithAccess(readPlan(opts)).
 		WithSearch(opts.GetSearch()).
 		WithIDs(opts.GetIDs()).
-		WithSpace(filter.SpaceID).
 		WithSpaces(filter.SpaceIDs).
+		WithLanguages(filter.Languages).
 		WithType(filter.Type).
-		WithState(filter.State).
+		WithStates(filter.States).
 		WithParent(filter.ParentID).
 		WithTags(filter.Tags, filter.TagsMatchAll).
 		WithFields(opts.GetFields()).

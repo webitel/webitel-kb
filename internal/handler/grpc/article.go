@@ -35,10 +35,11 @@ func (s *ArticlesServer) ListArticles(ctx context.Context, req *kb.ListArticlesR
 	}
 
 	items, next, err := s.service.List(ctx, opts, model.ArticleFilter{
-		SpaceID:      req.GetSpaceId(),
+		SpaceIDs:     req.GetSpaceIds(),
 		TeamID:       req.GetTeamId(),
 		Type:         int32(req.GetType()),
-		State:        int32(req.GetState()),
+		States:       articleStateCodes(req.GetStates()),
+		Languages:    req.GetLanguages(),
 		Tags:         req.GetTags(),
 		TagsMatchAll: req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
 	})

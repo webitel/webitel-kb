@@ -25,6 +25,9 @@ import (
 // defaultMenuDepth is the level a menu returns when the caller asks for none.
 const defaultMenuDepth int32 = 1
 
+// maxMenuItems bounds a menu the contract cannot paginate.
+const maxMenuItems = 100
+
 // Semantic search limits.
 const (
 	// defaultTopK is how many chunks a caller gets without asking.
@@ -102,9 +105,18 @@ func (s *RetrievalService) Resolve(
 
 // Menu returns the articles below a parent.
 func (s *RetrievalService) Menu(
-	ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32,
+	ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit, size int32,
 ) ([]*model.ArticleSummary, error) {
-	return s.uow.RetrievalStore().Menu(ctx, opts, spaceID, parentID, menuDepth(depthLimit))
+	return s.uow.RetrievalStore().Menu(ctx, opts, spaceID, parentID, menuDepth(depthLimit), menuSize(size))
+}
+
+// menuSize resolves the requested number of items.
+func menuSize(size int32) uint64 {
+	if size <= 0 || size > maxMenuItems {
+		return maxMenuItems
+	}
+
+	return uint64(size)
 }
 
 // menuDepth resolves the requested depth.

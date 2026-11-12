@@ -142,7 +142,7 @@ type RetrievalStore interface {
 	Resolve(ctx context.Context, opts options.Searcher, ids, spaceIDs []int64) ([]*model.ArticleSummary, error)
 
 	// Menu returns the articles below a parent, down to depthLimit levels.
-	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32) ([]*model.ArticleSummary, error)
+	Menu(ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32, limit uint64) ([]*model.ArticleSummary, error)
 
 	// SemanticSearch returns the fused ranking of chunks; runs inside a transaction.
 	SemanticSearch(ctx context.Context, opts options.Searcher, q model.HybridQuery) ([]*model.ChunkHit, error)

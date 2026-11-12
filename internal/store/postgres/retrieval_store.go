@@ -29,9 +29,6 @@ const menuWalkCTE = `WITH RECURSIVE menu AS (
 	WHERE parent.level < ? AND c.deleted_at IS NULL AND c.state = ?
 )`
 
-// maxMenuItems bounds a menu the contract cannot paginate.
-const maxMenuItems = 100
-
 // queryRescore is how many vector candidates diskann re-checks exactly.
 const queryRescore = 200
 
@@ -209,7 +206,7 @@ func (s *retrievalStore) Resolve(
 }
 
 func (s *retrievalStore) Menu(
-	ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32,
+	ctx context.Context, opts options.Searcher, spaceID, parentID int64, depthLimit int32, limit uint64,
 ) ([]*model.ArticleSummary, error) {
 	walk, args := menuWalk(opts.GetAuthOpts().GetDomainID(), spaceID, parentID, depthLimit)
 
@@ -219,7 +216,7 @@ func (s *retrievalStore) Menu(
 		WithExcerpt().
 		WithFAQBody().
 		WithOrder("menu.level", "m.subject", "m.id").
-		WithLimit(maxMenuItems).
+		WithLimit(limit).
 		ToSQL()
 	if err != nil {
 		return nil, ParseError(err)

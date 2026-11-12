@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -131,7 +130,7 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 
 			opts := &fakeSearchOpts{auth: fakeAuther{domainID: 5}, size: -1, page: 1}
 
-			if _, err := s.Menu(context.Background(), opts, 7, tt.parentID, 2); err != nil {
+			if _, err := s.Menu(context.Background(), opts, 7, tt.parentID, 2, 25); err != nil {
 				t.Fatalf("Menu: %v", err)
 			}
 
@@ -142,7 +141,7 @@ func TestRetrievalMenuWalksTheRequestedDepth(t *testing.T) {
 				"UNION ALL",
 				"FROM menu JOIN kb.article m ON m.id=menu.id",
 				"ORDER BY menu.level,m.subject,m.id",
-				fmt.Sprintf("LIMIT %d", maxMenuItems),
+				"LIMIT 25",
 				"CASE WHEN m.type=",
 			}, tt.want...)
 

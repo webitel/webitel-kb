@@ -162,15 +162,17 @@ func withoutBodies(opts options.Searcher, bodies, fallback []string) options.Sea
 	return listOptions{Searcher: opts, fields: fields}
 }
 
+// List narrows the spaces to the team binding and the language filter to
+// base languages, so one tag finds the articles of every region of it.
 func (s *ArticleService) List(
 	ctx context.Context, opts options.Searcher, filter model.ArticleFilter,
 ) ([]*model.Article, bool, error) {
-	asked := filter.SpaceIDs
-	if filter.SpaceID > 0 {
-		asked = []int64{filter.SpaceID}
+	bases, err := baseLanguages(filter.Languages)
+	if err != nil {
+		return nil, false, err
 	}
 
-	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, asked)
+	ids, reach, err := teamSpaces(ctx, s.uow.SpaceStore(), opts, filter.TeamID, filter.SpaceIDs)
 	if err != nil {
 		return nil, false, err
 	}
@@ -180,6 +182,7 @@ func (s *ArticleService) List(
 	}
 
 	filter.SpaceIDs = ids
+	filter.Languages = bases
 
 	return s.uow.ArticleStore().List(ctx, withoutBodies(opts, articleBodyFields, nil), filter)
 }

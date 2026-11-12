@@ -369,12 +369,12 @@ type ListArticlesRequest struct {
 	Page int32 `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	// Optional subject search.
 	Q string `protobuf:"bytes,3,opt,name=q,proto3" json:"q,omitempty"`
-	// Space to list within.
-	SpaceId int64 `protobuf:"varint,4,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	// Optional space filter, any of at most 100 spaces.
+	SpaceIds []int64 `protobuf:"varint,4,rep,packed,name=space_ids,json=spaceIds,proto3" json:"space_ids,omitempty"`
 	// Optional tag filter.
 	Tags []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
-	// Optional state filter.
-	State ArticleState `protobuf:"varint,6,opt,name=state,proto3,enum=webitel.kb.ArticleState" json:"state,omitempty"`
+	// Optional state filter, any of the states.
+	States []ArticleState `protobuf:"varint,6,rep,packed,name=states,proto3,enum=webitel.kb.ArticleState" json:"states,omitempty"`
 	// Optional type filter.
 	Type ArticleType `protobuf:"varint,7,opt,name=type,proto3,enum=webitel.kb.ArticleType" json:"type,omitempty"`
 	// Sorting criteria (e.g. field:asc).
@@ -383,8 +383,11 @@ type ListArticlesRequest struct {
 	Fields []string `protobuf:"bytes,9,rep,name=fields,proto3" json:"fields,omitempty"`
 	// How the tag filter combines the tags.
 	TagMatch TagMatch `protobuf:"varint,10,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
-	// Operator team; its binding limits the spaces listed.
-	TeamId        int64 `protobuf:"varint,11,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// Agent team; its binding limits the spaces listed.
+	TeamId int64 `protobuf:"varint,11,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// Optional space language filter, at most 50 tags; matches the base
+	// language of any of them.
+	Languages     []string `protobuf:"bytes,12,rep,name=languages,proto3" json:"languages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -440,11 +443,11 @@ func (x *ListArticlesRequest) GetQ() string {
 	return ""
 }
 
-func (x *ListArticlesRequest) GetSpaceId() int64 {
+func (x *ListArticlesRequest) GetSpaceIds() []int64 {
 	if x != nil {
-		return x.SpaceId
+		return x.SpaceIds
 	}
-	return 0
+	return nil
 }
 
 func (x *ListArticlesRequest) GetTags() []string {
@@ -454,11 +457,11 @@ func (x *ListArticlesRequest) GetTags() []string {
 	return nil
 }
 
-func (x *ListArticlesRequest) GetState() ArticleState {
+func (x *ListArticlesRequest) GetStates() []ArticleState {
 	if x != nil {
-		return x.State
+		return x.States
 	}
-	return ArticleState_ARTICLE_STATE_UNSPECIFIED
+	return nil
 }
 
 func (x *ListArticlesRequest) GetType() ArticleType {
@@ -494,6 +497,13 @@ func (x *ListArticlesRequest) GetTeamId() int64 {
 		return x.TeamId
 	}
 	return 0
+}
+
+func (x *ListArticlesRequest) GetLanguages() []string {
+	if x != nil {
+		return x.Languages
+	}
+	return nil
 }
 
 // ArticleList is a page of articles.
@@ -971,7 +981,7 @@ type GetTreeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Space id.
 	SpaceId int64 `protobuf:"varint,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
-	// Operator team; a space outside its binding returns no nodes.
+	// Agent team; a space outside its binding returns no nodes.
 	TeamId        int64 `protobuf:"varint,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1109,20 +1119,21 @@ const file_article_proto_rawDesc = "" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x128\n" +
 	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x12=\n" +
 	"\x0ebody_rich_text\x18\a \x01(\v2\x17.google.protobuf.StructR\fbodyRichText\x12\x12\n" +
-	"\x04home\x18\b \x01(\bR\x04home\"\xf6\x02\n" +
+	"\x04home\x18\b \x01(\bR\x04home\"\xbb\x03\n" +
 	"\x13ListArticlesRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
-	"\x01q\x18\x03 \x01(\tR\x01q\x12\x19\n" +
-	"\bspace_id\x18\x04 \x01(\x03R\aspaceId\x12\x12\n" +
-	"\x04tags\x18\x05 \x03(\tR\x04tags\x128\n" +
-	"\x05state\x18\x06 \x01(\x0e2\x18.webitel.kb.ArticleStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\x125\n" +
+	"\x01q\x18\x03 \x01(\tR\x01q\x12+\n" +
+	"\tspace_ids\x18\x04 \x03(\x03B\x0e\xbaH\v\x92\x01\b\x10d\"\x04\"\x02 \x00R\bspaceIds\x12\x12\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\x12C\n" +
+	"\x06states\x18\x06 \x03(\x0e2\x18.webitel.kb.ArticleStateB\x11\xbaH\x0e\x92\x01\v\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x125\n" +
 	"\x04type\x18\a \x01(\x0e2\x17.webitel.kb.ArticleTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04type\x12\x12\n" +
 	"\x04sort\x18\b \x01(\tR\x04sort\x12\x16\n" +
 	"\x06fields\x18\t \x03(\tR\x06fields\x12;\n" +
 	"\ttag_match\x18\n" +
 	" \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12 \n" +
-	"\ateam_id\x18\v \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"L\n" +
+	"\ateam_id\x18\v \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\x12&\n" +
+	"\tlanguages\x18\f \x03(\tB\b\xbaH\x05\x92\x01\x02\x102R\tlanguages\"L\n" +
 	"\vArticleList\x12)\n" +
 	"\x05items\x18\x01 \x03(\v2\x13.webitel.kb.ArticleR\x05items\x12\x12\n" +
 	"\x04next\x18\x02 \x01(\bR\x04next\"B\n" +
@@ -1218,7 +1229,7 @@ var file_article_proto_depIdxs = []int32{
 	15, // 8: webitel.kb.InputArticle.type:type_name -> webitel.kb.ArticleType
 	16, // 9: webitel.kb.InputArticle.state:type_name -> webitel.kb.ArticleState
 	19, // 10: webitel.kb.InputArticle.body_rich_text:type_name -> google.protobuf.Struct
-	16, // 11: webitel.kb.ListArticlesRequest.state:type_name -> webitel.kb.ArticleState
+	16, // 11: webitel.kb.ListArticlesRequest.states:type_name -> webitel.kb.ArticleState
 	15, // 12: webitel.kb.ListArticlesRequest.type:type_name -> webitel.kb.ArticleType
 	20, // 13: webitel.kb.ListArticlesRequest.tag_match:type_name -> webitel.kb.TagMatch
 	0,  // 14: webitel.kb.ArticleList.items:type_name -> webitel.kb.Article
