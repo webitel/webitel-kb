@@ -779,6 +779,104 @@ func TestSpaceUpdateAppliesMask(t *testing.T) {
 	}
 }
 
+func TestSpaceCreateChunkingStrategy(t *testing.T) {
+	tests := []struct {
+		name     string
+		strategy string
+		wantID   string
+	}{
+		{name: "supported is kept", strategy: "recursive_markdown"},
+		{name: "empty takes the default", strategy: ""},
+		{name: "unknown refused", strategy: "semantic", wantID: "kb.space.chunking_strategy_unsupported"},
+		{name: "other case refused", strategy: "Recursive_Markdown", wantID: "kb.space.chunking_strategy_unsupported"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+
+			_, err := svc.Create(context.Background(), creatorOpts(), &model.Space{
+				Name: "docs", Language: "uk", ChunkingStrategy: tt.strategy,
+			}, nil)
+			if tt.wantID != "" {
+				if errors.Code(err) != codes.InvalidArgument || errors.ID(err) != tt.wantID || uow.spaces.createCalls != 0 {
+					t.Fatalf("err = %v, creates = %d; want %s and no write", err, uow.spaces.createCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			if got := uow.spaces.createIn.ChunkingStrategy; got != tt.strategy {
+				t.Fatalf("written strategy %q, want %q", got, tt.strategy)
+			}
+		})
+	}
+}
+
+func TestSpaceUpdateChunkingStrategy(t *testing.T) {
+	tests := []struct {
+		name   string
+		stored string
+		in     string
+		mask   []string
+		want   string
+		wantID string
+	}{
+		{
+			name: "masked unknown refused", stored: "recursive_markdown", in: "semantic",
+			mask: []string{"chunking_strategy"}, wantID: "kb.space.chunking_strategy_unsupported",
+		},
+		{
+			name: "full update with unknown refused", stored: "recursive_markdown", in: "semantic",
+			wantID: "kb.space.chunking_strategy_unsupported",
+		},
+		{
+			name: "unmasked stored unknown kept", stored: "semantic", in: "other",
+			mask: []string{"name"}, want: "semantic",
+		},
+		{
+			name: "masked empty takes the default", stored: "semantic", in: "",
+			mask: []string{"chunking_strategy"}, want: "",
+		},
+		{
+			name: "masked supported replaces stored unknown", stored: "semantic", in: "recursive_markdown",
+			mask: []string{"chunking_strategy"}, want: "recursive_markdown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow := newSpaceFixture()
+			uow.spaces.current = &model.Space{ID: 7, Name: "docs", Language: "uk", ChunkingStrategy: tt.stored}
+			opts := updaterOpts()
+			opts.mask = tt.mask
+
+			_, err := svc.Update(context.Background(), opts, &model.Space{
+				Name: "docs", ChunkingStrategy: tt.in,
+			}, nil)
+			if tt.wantID != "" {
+				if errors.Code(err) != codes.InvalidArgument || errors.ID(err) != tt.wantID || uow.spaces.updateCalls != 0 {
+					t.Fatalf("err = %v, updates = %d; want %s and no write", err, uow.spaces.updateCalls, tt.wantID)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Update: %v", err)
+			}
+
+			if got := uow.spaces.updateIn.ChunkingStrategy; got != tt.want {
+				t.Fatalf("written strategy %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSpaceCreateAbortsWhenTeamsFail(t *testing.T) {
 	// A failed team write must abort the flow before the read-back: the
 	// transaction rolls back as a whole.

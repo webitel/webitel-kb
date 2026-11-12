@@ -11,20 +11,13 @@ const (
 	SpaceStateInactive int32 = 2
 )
 
-// DefaultChunkingStrategy is the strategy of a space that names none.
-const DefaultChunkingStrategy = "recursive_markdown"
-
 // chunkingStrategies are the strategies the indexer splits articles with.
-var chunkingStrategies = []string{DefaultChunkingStrategy}
+var chunkingStrategies = []string{"recursive_markdown"}
 
-// SupportedChunkingStrategy returns the strategy when the indexer supports it,
-// the default otherwise.
-func SupportedChunkingStrategy(name string) string {
-	if slices.Contains(chunkingStrategies, name) {
-		return name
-	}
-
-	return DefaultChunkingStrategy
+// ChunkingStrategySupported reports whether the indexer splits articles with
+// the strategy.
+func ChunkingStrategySupported(name string) bool {
+	return slices.Contains(chunkingStrategies, name)
 }
 
 // Space is a knowledge-base space: the top-level container that fixes the
