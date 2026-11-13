@@ -338,8 +338,14 @@ type Chunk struct {
 	ChunkIndex int32 `protobuf:"varint,3,opt,name=chunk_index,json=chunkIndex,proto3" json:"chunk_index,omitempty"`
 	// Chunk text content.
 	Content string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
-	// Relevance score assigned by retrieval (higher is better).
-	Score         float64 `protobuf:"fixed64,5,opt,name=score,proto3" json:"score,omitempty"`
+	// Relevance in [0, 1]: the reranker score when the response is reranked,
+	// otherwise the vector similarity to the query; 0 in a space without
+	// vector search.
+	Score float64 `protobuf:"fixed64,5,opt,name=score,proto3" json:"score,omitempty"`
+	// Chunk id; every article version has chunks of its own.
+	Id int64 `protobuf:"varint,6,opt,name=id,proto3" json:"id,omitempty"`
+	// Subject of the article.
+	Subject       string `protobuf:"bytes,7,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -407,6 +413,20 @@ func (x *Chunk) GetScore() float64 {
 		return x.Score
 	}
 	return 0
+}
+
+func (x *Chunk) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Chunk) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
 }
 
 // Citation is a structured source reference returned alongside retrieval
@@ -595,7 +615,7 @@ const file_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x15 \x01(\x03R\tupdatedAt\"\x96\x01\n" +
+	"updated_at\x18\x15 \x01(\x03R\tupdatedAt\"\xc0\x01\n" +
 	"\x05Chunk\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x1d\n" +
@@ -604,7 +624,9 @@ const file_common_proto_rawDesc = "" +
 	"\vchunk_index\x18\x03 \x01(\x05R\n" +
 	"chunkIndex\x12\x18\n" +
 	"\acontent\x18\x04 \x01(\tR\acontent\x12\x14\n" +
-	"\x05score\x18\x05 \x01(\x01R\x05score\"k\n" +
+	"\x05score\x18\x05 \x01(\x01R\x05score\x12\x0e\n" +
+	"\x02id\x18\x06 \x01(\x03R\x02id\x12\x18\n" +
+	"\asubject\x18\a \x01(\tR\asubject\"k\n" +
 	"\bCitation\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x14\n" +

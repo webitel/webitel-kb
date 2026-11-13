@@ -66,7 +66,7 @@ func (s *RetrievalService) Suggest(
 		return answer, nil
 	}
 
-	hits = s.rerankHits(ctx, domainID, spaceIDs, message, hits)
+	hits, answer.Reranked = s.rerankHits(ctx, domainID, spaceIDs, message, hits)
 
 	if q.ReturnChunks {
 		answer.Chunks = hits[:min(len(hits), suggestSize)]
@@ -86,46 +86,47 @@ func (s *RetrievalService) Suggest(
 	return answer, nil
 }
 
-// rerankHits reorders the hits with the reranker of the spaces. Reranking is an
-// optional step: whatever goes wrong, the fusion order stands.
+// rerankHits reorders and scores the hits with the reranker of the spaces and
+// reports whether it did. Reranking is an optional step: whatever goes wrong,
+// the fusion order stands.
 func (s *RetrievalService) rerankHits(
 	ctx context.Context, domainID int64, spaceIDs []int64, query string, hits []*model.ChunkHit,
-) []*model.ChunkHit {
-	reranked, err := s.rerank(ctx, domainID, spaceIDs, query, hits)
+) ([]*model.ChunkHit, bool) {
+	ordered, reranked, err := s.rerank(ctx, domainID, spaceIDs, query, hits)
 	if err != nil {
-		s.log.WarnContext(ctx, "suggest is not reranked", slog.Any("error", err))
+		s.log.WarnContext(ctx, "hits are not reranked", slog.Any("error", err))
 
-		return hits
+		return hits, false
 	}
 
-	return reranked
+	return ordered, reranked
 }
 
 // rerank scores the pool with the one reranker the spaces enable; the fusion
 // order comes back untouched when no space reranks.
 func (s *RetrievalService) rerank(
 	ctx context.Context, domainID int64, spaceIDs []int64, query string, hits []*model.ChunkHit,
-) ([]*model.ChunkHit, error) {
+) ([]*model.ChunkHit, bool, error) {
 	rerankers, err := s.uow.SpaceStore().ResolveRerankers(ctx, domainID, spaceIDs)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	reranker, err := pickReranker(rerankers)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if reranker == nil {
-		return hits, nil
+		return hits, false, nil
 	}
 
 	scores, err := s.rerankWith(ctx, query, reranker, hits)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return orderByScore(hits, scores), nil
+	return orderByScore(hits, scores), true, nil
 }
 
 // rerankWith scores the hits against the query under the reranker of a space.
@@ -160,7 +161,23 @@ func (s *RetrievalService) rerankWith(
 		return nil, fmt.Errorf("reranker scored %d of %d documents", len(result.Scores), len(hits))
 	}
 
+	if !inUnitRange(result.Scores) {
+		return nil, fmt.Errorf("reranker scores are outside [0, 1]: %v", result.Scores)
+	}
+
 	return result.Scores, nil
+}
+
+// inUnitRange reports whether every score is in [0, 1], the scale a reranker
+// must answer on.
+func inUnitRange(scores []float64) bool {
+	for _, score := range scores {
+		if !(score >= 0 && score <= 1) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // pickReranker is the only reranker enabled among the spaces; nil when none
@@ -203,7 +220,7 @@ func orderByScore(hits []*model.ChunkHit, scores []float64) []*model.ChunkHit {
 
 	for i, hit := range hits {
 		scored := *hit
-		scored.Score = scores[i]
+		scored.Score, scored.Measured = scores[i], true
 		ordered = append(ordered, &scored)
 	}
 
