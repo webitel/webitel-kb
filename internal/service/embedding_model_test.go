@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -1226,6 +1227,41 @@ func TestValidateRerankerScoreCountMismatch(t *testing.T) {
 
 	if models.markCalls != 0 {
 		t.Fatal("a failed probe must not stamp the model as validated")
+	}
+}
+
+func TestValidateRerankerScale(t *testing.T) {
+	tests := []struct {
+		name   string
+		scores []float64
+	}{
+		{name: "logits", scores: []float64{4.4, -10.4}},
+		{name: "above one", scores: []float64{1.2, 0.1}},
+		{name: "not a number", scores: []float64{math.NaN(), 0.1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			located := &model.EmbeddingModel{
+				ID:       6,
+				DomainID: 1,
+				Type:     model.ModelTypeReranker,
+				Provider: embedding.ProviderBGEReranker,
+				Endpoint: "http://reranker:8080",
+			}
+			models := &fakeModelStore{located: located}
+			provider := &fakeProvider{rerankRes: embedding.RerankResult{Scores: tt.scores}}
+			svc := newModelService(models, fakeSealer{}, &fakeResolver{provider: provider})
+
+			_, err := svc.Validate(context.Background(), &stubWriteOpts{auth: stubAuther{domainID: 1}, id: 6})
+			if errors.ID(err) != "kb.model.reranker_scale" || errors.Code(err) != codes.FailedPrecondition {
+				t.Fatalf("Validate error = %v, want kb.model.reranker_scale", err)
+			}
+
+			if models.markCalls != 0 {
+				t.Fatal("a reranker off the scale must not be stamped as validated")
+			}
+		})
 	}
 }
 

@@ -1,6 +1,8 @@
 package queryobject
 
 import (
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -53,7 +55,7 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 		"h AS (SELECT id, sum(1.0 / (60 + rank)) AS score FROM (SELECT * FROM lex) branches" +
 			" GROUP BY id ORDER BY score DESC, id LIMIT 10)",
 		"FROM h JOIN kb.chunk c ON c.id = h.id JOIN kb.article m ON m.published_version_id = c.version_id",
-		"h.score::float8 AS score",
+		"NULL::float8 AS similarity",
 		"ORDER BY h.score DESC, c.id",
 	} {
 		if !strings.Contains(sql, want) {
@@ -62,7 +64,7 @@ func TestHybridHitsLexicalOnly(t *testing.T) {
 	}
 
 	if strings.Contains(sql, "vec") || strings.Contains(sql, "'simple'") || strings.Contains(sql, "m.space_id = ANY") ||
-		strings.Contains(sql, "word_similarity") {
+		strings.Contains(sql, "word_similarity") || strings.Contains(sql, "LEFT JOIN") {
 		t.Errorf("SQL renders a vector branch or a fixed configuration: %q", sql)
 	}
 
@@ -108,6 +110,12 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		"UNION ALL",
 		"(SELECT * FROM lex UNION ALL SELECT * FROM vec) branches",
 		"LIMIT 5)",
+		"COALESCE(1 - (e0.embedding_768 <=> $",
+		"::vector), 1 - (e1.embedding_1024 <=> $",
+		"::vector))::float8 AS similarity",
+		"LEFT JOIN kb.chunk_embedding e0 ON e0.chunk_id = c.id AND e0.model_id = $",
+		"LEFT JOIN kb.chunk_embedding e1 ON e1.chunk_id = c.id AND e1.model_id = $",
+		"ORDER BY h.score DESC, c.id",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Errorf("SQL %q\n does not contain %q", sql, want)
@@ -141,7 +149,51 @@ func TestHybridHitsVectorBranches(t *testing.T) {
 		}
 	}
 
-	if literals != 4 || models != 2 {
-		t.Fatalf("vector literals = %d (want 4: rank and order per branch), model ids = %d (want 2); args = %v", literals, models, args)
+	if literals != 6 || models != 4 {
+		t.Fatalf("vector literals = %d (want 6: rank, order and similarity per branch), model ids = %d (want 4); args = %v",
+			literals, models, args)
 	}
+
+	for _, tt := range []struct {
+		alias, column, literal string
+		model                  int64
+		spaces                 []int64
+	}{
+		{alias: "e0", column: "embedding_768", literal: "[0.5,0.5]", model: 9, spaces: []int64{1, 2}},
+		{alias: "e1", column: "embedding_1024", literal: "[1,0]", model: 11, spaces: []int64{3}},
+	} {
+		if got := args[placeholder(t, sql, tt.alias+"."+tt.column+" <=> $")]; got != tt.literal {
+			t.Errorf("%s similarity reads %v, want %v", tt.alias, got, tt.literal)
+		}
+
+		if got := args[placeholder(t, sql, tt.alias+".model_id = $")]; got != tt.model {
+			t.Errorf("%s joins model %v, want %v", tt.alias, got, tt.model)
+		}
+
+		if got := args[placeholder(t, sql, tt.alias+".space_id = ANY($")]; !reflect.DeepEqual(got, tt.spaces) {
+			t.Errorf("%s joins spaces %v, want %v", tt.alias, got, tt.spaces)
+		}
+	}
+}
+
+// placeholder returns the argument index of the placeholder that follows the prefix.
+func placeholder(t *testing.T, sql, prefix string) int {
+	t.Helper()
+
+	_, rest, ok := strings.Cut(sql, prefix)
+	if !ok {
+		t.Fatalf("SQL %q has no %q", sql, prefix)
+	}
+
+	end := strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' })
+	if end < 0 {
+		end = len(rest)
+	}
+
+	n, err := strconv.Atoi(rest[:end])
+	if err != nil {
+		t.Fatalf("placeholder after %q: %v", prefix, err)
+	}
+
+	return n - 1
 }

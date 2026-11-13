@@ -369,11 +369,13 @@ func TestSemanticSearchMapsTagMatch(t *testing.T) {
 func TestSemanticSearchFullPath(t *testing.T) {
 	server, fake := retrievalServerWithFake()
 	fake.hits = []*model.ChunkHit{
-		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 2, Subject: "VPN", Content: "how to connect", Score: 0.03},
+		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 2, Subject: "VPN", Content: "how to connect", Score: 0.8, Measured: true},
+		{ID: 2, ArticleID: 20, VersionID: 5, Subject: "Reset", Content: "far away", Score: 0.3, Measured: true},
 	}
 
 	resp, err := server.SemanticSearch(retrievalContext(), &kb.SemanticSearchRequest{
 		Query: "vpn", SpaceIds: []int64{3}, TopK: 5, IncludeCitations: true, Tags: []string{"net"}, TagMatch: kb.TagMatch_TAG_MATCH_ALL,
+		MinScore: 0.5, Rerank: true,
 	})
 	if err != nil {
 		t.Fatalf("SemanticSearch: %v", err)
@@ -391,8 +393,14 @@ func TestSemanticSearchFullPath(t *testing.T) {
 
 	chunks := resp.GetChunks()
 	if len(chunks) != 1 || chunks[0].GetArticleId() != 10 || chunks[0].GetVersionId() != 4 || chunks[0].GetChunkIndex() != 2 ||
-		chunks[0].GetContent() != "how to connect" || chunks[0].GetScore() != 0.03 {
+		chunks[0].GetContent() != "how to connect" || chunks[0].GetScore() != 0.8 ||
+		chunks[0].GetId() != 1 || chunks[0].GetSubject() != "VPN" {
 		t.Fatalf("chunks = %+v", chunks)
+	}
+
+	// No space of the fake reranks, so the fusion stands.
+	if resp.GetReranked() {
+		t.Fatal("reranked without a reranker")
 	}
 
 	citations := resp.GetCitations()
