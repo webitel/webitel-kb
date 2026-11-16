@@ -75,8 +75,6 @@ type Citation struct {
 	ArticleID int64
 	Title     string
 	Snippet   string
-	// URL is empty until the article route is settled.
-	URL string
 }
 
 // SuggestQuery is an operator assist request as the service takes it.

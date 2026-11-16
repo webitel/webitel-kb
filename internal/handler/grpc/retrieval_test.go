@@ -397,7 +397,7 @@ func TestSemanticSearchFullPath(t *testing.T) {
 
 	citations := resp.GetCitations()
 	if len(citations) != 1 || citations[0].GetArticleId() != 10 || citations[0].GetTitle() != "VPN" ||
-		citations[0].GetSnippet() != "how to connect" || citations[0].GetUrl() != "" {
+		citations[0].GetSnippet() != "how to connect" {
 		t.Fatalf("citations = %+v", citations)
 	}
 }

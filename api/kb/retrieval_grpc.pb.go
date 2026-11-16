@@ -31,7 +31,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Retrieval serves read-only search and lookup over the knowledge base for
-// operators (search/resolve/suggest) and bots (semantic_search/menu).
+// agents (search/resolve/suggest) and bots (semantic_search/menu).
 // All endpoints return an empty list with HTTP 200 on no match, never an error.
 type RetrievalClient interface {
 	// Search runs fast full-text search over title, tags and plaintext (no vector).
@@ -41,7 +41,7 @@ type RetrievalClient interface {
 	// SemanticSearch runs hybrid retrieval (vector + full-text, RRF) and returns
 	// chunks plus optional citations.
 	SemanticSearch(ctx context.Context, in *SemanticSearchRequest, opts ...grpc.CallOption) (*SemanticSearchResponse, error)
-	// Suggest runs hybrid retrieval with cross-encoder rerank for operator assist.
+	// Suggest runs hybrid retrieval with cross-encoder rerank for agent assist.
 	Suggest(ctx context.Context, in *SuggestRequest, opts ...grpc.CallOption) (*SuggestResponse, error)
 	// Menu lists child articles of a parent for bot menu buttons; FAQ children
 	// include their body inline.
@@ -111,7 +111,7 @@ func (c *retrievalClient) Menu(ctx context.Context, in *MenuRequest, opts ...grp
 // for forward compatibility.
 //
 // Retrieval serves read-only search and lookup over the knowledge base for
-// operators (search/resolve/suggest) and bots (semantic_search/menu).
+// agents (search/resolve/suggest) and bots (semantic_search/menu).
 // All endpoints return an empty list with HTTP 200 on no match, never an error.
 type RetrievalServer interface {
 	// Search runs fast full-text search over title, tags and plaintext (no vector).
@@ -121,7 +121,7 @@ type RetrievalServer interface {
 	// SemanticSearch runs hybrid retrieval (vector + full-text, RRF) and returns
 	// chunks plus optional citations.
 	SemanticSearch(context.Context, *SemanticSearchRequest) (*SemanticSearchResponse, error)
-	// Suggest runs hybrid retrieval with cross-encoder rerank for operator assist.
+	// Suggest runs hybrid retrieval with cross-encoder rerank for agent assist.
 	Suggest(context.Context, *SuggestRequest) (*SuggestResponse, error)
 	// Menu lists child articles of a parent for bot menu buttons; FAQ children
 	// include their body inline.
