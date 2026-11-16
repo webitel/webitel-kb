@@ -150,6 +150,10 @@ func (s *SpaceService) Create(
 		return nil, err
 	}
 
+	if err := requireChunkingStrategy(in.ChunkingStrategy); err != nil {
+		return nil, err
+	}
+
 	if in.State == 0 {
 		in.State = model.SpaceStateActive
 	}
@@ -231,6 +235,12 @@ func (s *SpaceService) Update(
 
 		if err := validateRetrievalConfig(merged); err != nil {
 			return err
+		}
+
+		if len(mask) == 0 || slices.Contains(mask, "chunking_strategy") {
+			if err := requireChunkingStrategy(merged.ChunkingStrategy); err != nil {
+				return err
+			}
 		}
 
 		embeddingToValidate := merged.EmbeddingModelID
@@ -387,6 +397,21 @@ func requireName(in *model.Space) error {
 			"name is required",
 			errors.WithID("kb.space.name_required"),
 		)
+	}
+
+	return nil
+}
+
+var errChunkingStrategyUnsupported = errors.InvalidArgument(
+	"chunking strategy is not supported",
+	errors.WithID("kb.space.chunking_strategy_unsupported"),
+)
+
+// requireChunkingStrategy refuses a strategy the indexer cannot split with;
+// an empty one takes the column default.
+func requireChunkingStrategy(name string) error {
+	if name != "" && !model.ChunkingStrategySupported(name) {
+		return errChunkingStrategyUnsupported
 	}
 
 	return nil
