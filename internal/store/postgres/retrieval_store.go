@@ -123,25 +123,30 @@ func (s *retrievalStore) Search(
 
 // chunkRecord is the scan target of a fused hit.
 type chunkRecord struct {
-	ID         int64   `db:"id"`
-	ArticleID  int64   `db:"article_id"`
-	VersionID  int64   `db:"version_id"`
-	ChunkIndex int32   `db:"chunk_index"`
-	Subject    string  `db:"subject"`
-	Content    string  `db:"content"`
-	Score      float64 `db:"score"`
+	ID         int64    `db:"id"`
+	ArticleID  int64    `db:"article_id"`
+	VersionID  int64    `db:"version_id"`
+	ChunkIndex int32    `db:"chunk_index"`
+	Subject    string   `db:"subject"`
+	Content    string   `db:"content"`
+	Similarity *float64 `db:"similarity"`
 }
 
 func mapChunk(record *chunkRecord) *model.ChunkHit {
-	return &model.ChunkHit{
+	hit := &model.ChunkHit{
 		ID:         record.ID,
 		ArticleID:  record.ArticleID,
 		VersionID:  record.VersionID,
 		ChunkIndex: record.ChunkIndex,
 		Subject:    record.Subject,
 		Content:    record.Content,
-		Score:      record.Score,
 	}
+
+	if record.Similarity != nil {
+		hit.Score, hit.Measured = max(0, *record.Similarity), true
+	}
+
+	return hit
 }
 
 func (s *retrievalStore) SemanticSearch(

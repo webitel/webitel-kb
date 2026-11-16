@@ -78,13 +78,13 @@ func TestSemanticSearchGuards(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow, _ := semanticServiceWithFakes()
 
-			hits, citations, err := svc.SemanticSearch(context.Background(), semanticOpts(), tt.query)
+			answer, err := svc.SemanticSearch(context.Background(), semanticOpts(), tt.query)
 			if errors.Code(err) != tt.wantCode {
 				t.Fatalf("error = %v, want %v", err, tt.wantCode)
 			}
 
-			if uow.retrieval.calls != tt.wantCalls || (err == nil && (hits == nil || citations == nil)) {
-				t.Fatalf("calls = %d, hits = %v, citations = %v", uow.retrieval.calls, hits, citations)
+			if uow.retrieval.calls != tt.wantCalls || (err == nil && (answer.Chunks == nil || answer.Citations == nil)) {
+				t.Fatalf("calls = %d, answer = %+v", uow.retrieval.calls, answer)
 			}
 		})
 	}
@@ -100,7 +100,7 @@ func TestSemanticSearchGroupsSpacesByModel(t *testing.T) {
 	}
 	provider.vectors = map[string][]float32{"a": {0.1}, "b": {0.2, 0.3}}
 
-	_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
+	_, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
 		Query: "vpn", SpaceIDs: []int64{1, 2, 3, 4, 99}, Tags: []string{"net"},
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func TestSemanticSearchRefusesAVectorOfAnotherSize(t *testing.T) {
 	}
 	provider.vectors = map[string][]float32{"a": {0.1, 0.2}}
 
-	_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}})
+	_, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}})
 	if errors.ID(err) != "kb.model.dimensions_mismatch" || errors.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("err = %v, want kb.model.dimensions_mismatch", err)
 	}
@@ -186,7 +186,7 @@ func TestSemanticSearchTopK(t *testing.T) {
 			svc, uow, _ := semanticServiceWithFakes()
 			uow.spaces.resolvedMany = []*model.SpaceEmbedding{{SpaceID: 1}}
 
-			_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}, TopK: tt.in})
+			_, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}, TopK: tt.in})
 			if err != nil {
 				t.Fatalf("SemanticSearch: %v", err)
 			}
@@ -230,7 +230,7 @@ func TestSemanticSearchRefusals(t *testing.T) {
 			uow.spaces.resolvedMany = tt.spaces
 			provider.err = tt.embedErr
 
-			_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}})
+			_, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: "vpn", SpaceIDs: []int64{1}})
 			if errors.Code(err) != tt.wantCode || errors.ID(err) != tt.wantID {
 				t.Fatalf("error = %v (id %q), want %v %q", err, errors.ID(err), tt.wantCode, tt.wantID)
 			}
@@ -267,15 +267,105 @@ func TestSemanticSearchCitations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hits, citations, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
+			answer, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
 				Query: "vpn", SpaceIDs: []int64{1}, IncludeCitations: tt.include,
 			})
 			if err != nil {
 				t.Fatalf("SemanticSearch: %v", err)
 			}
 
-			if len(hits) != 3 || !reflect.DeepEqual(citations, tt.want) {
-				t.Fatalf("hits = %d, citations = %+v", len(hits), citations)
+			if len(answer.Chunks) != 3 || !reflect.DeepEqual(answer.Citations, tt.want) {
+				t.Fatalf("hits = %d, citations = %+v", len(answer.Chunks), answer.Citations)
+			}
+		})
+	}
+}
+
+func TestSemanticSearchRerankAndMinScore(t *testing.T) {
+	enabled := []*model.SpaceReranker{{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank"}}
+	disabled := []*model.SpaceReranker{{SpaceID: 1}}
+
+	tests := []struct {
+		name      string
+		rerank    bool
+		minScore  float64
+		rerankers []*model.SpaceReranker
+		scores    []float64
+		rerankErr error
+		// want maps the chunk ids to their scores; wantOrder lists them in order.
+		want         map[int64]float64
+		wantOrder    []int64
+		wantReranked bool
+		wantCalls    int
+	}{
+		{
+			name: "fusion order and similarity", rerankers: enabled,
+			wantOrder: []int64{1, 2, 3}, want: map[int64]float64{1: 0.8, 2: 0.45, 3: 0},
+		},
+		{
+			name: "the minimum keeps the chunks without a measure", minScore: 0.5, rerankers: enabled,
+			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0},
+		},
+		{
+			name: "a minimum above every score", minScore: 0.9, rerankers: enabled,
+			wantOrder: []int64{3}, want: map[int64]float64{3: 0},
+		},
+		{
+			name: "the reranker orders and scores every chunk", rerank: true, minScore: 0.5, rerankers: enabled,
+			scores:    []float64{0.27, 0.88, 0.73},
+			wantOrder: []int64{2, 3}, want: map[int64]float64{2: 0.88, 3: 0.73}, wantReranked: true, wantCalls: 1,
+		},
+		{
+			name: "no space reranks", rerank: true, rerankers: disabled,
+			wantOrder: []int64{1, 2, 3}, want: map[int64]float64{1: 0.8, 2: 0.45, 3: 0},
+		},
+		{
+			name: "a failed reranker keeps the fusion", rerank: true, minScore: 0.5, rerankers: enabled,
+			rerankErr: errors.Unavailable("down"),
+			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0}, wantCalls: 1,
+		},
+		{
+			name: "a reranker answering in logits keeps the fusion", rerank: true, minScore: 0.5, rerankers: enabled,
+			scores:    []float64{-1, 2, 1},
+			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0}, wantCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, uow, provider := semanticServiceWithFakes()
+			uow.spaces.resolvedMany = []*model.SpaceEmbedding{{SpaceID: 1}}
+			uow.spaces.rerankers = tt.rerankers
+			uow.retrieval.hits = []*model.ChunkHit{
+				{ID: 1, ArticleID: 10, Subject: "VPN", Content: "connect", Score: 0.8, Measured: true},
+				{ID: 2, ArticleID: 20, Subject: "Reset", Content: "password", Score: 0.45, Measured: true},
+				{ID: 3, ArticleID: 30, Subject: "Billing", Content: "invoice"},
+			}
+			provider.scores, provider.rerankErr = tt.scores, tt.rerankErr
+
+			answer, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
+				Query: "vpn", SpaceIDs: []int64{1}, Rerank: tt.rerank, MinScore: tt.minScore, IncludeCitations: true,
+			})
+			if err != nil {
+				t.Fatalf("SemanticSearch: %v", err)
+			}
+
+			order := make([]int64, 0, len(answer.Chunks))
+			for _, hit := range answer.Chunks {
+				order = append(order, hit.ID)
+
+				if hit.Score != tt.want[hit.ID] {
+					t.Errorf("chunk %d score = %v, want %v", hit.ID, hit.Score, tt.want[hit.ID])
+				}
+			}
+
+			if !reflect.DeepEqual(order, tt.wantOrder) || answer.Reranked != tt.wantReranked || len(provider.reranks) != tt.wantCalls {
+				t.Fatalf("order = %v, reranked = %v, rerank calls = %d", order, answer.Reranked, len(provider.reranks))
+			}
+
+			// Citations come from the chunks that stayed.
+			if len(answer.Citations) != len(answer.Chunks) {
+				t.Fatalf("citations = %+v, want one per kept chunk", answer.Citations)
 			}
 		})
 	}
@@ -339,7 +429,7 @@ func TestLongQueriesReachTheModelsClipped(t *testing.T) {
 		{
 			name: "semantic search",
 			run: func(svc *RetrievalService) error {
-				_, _, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: long, SpaceIDs: []int64{1}})
+				_, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{Query: long, SpaceIDs: []int64{1}})
 
 				return err
 			},

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	stderrors "errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -173,17 +174,17 @@ func TestSuggestReranksTheHits(t *testing.T) {
 	}
 
 	want := []*model.ChunkHit{
-		{ID: 2, ArticleID: 20, VersionID: 5, ChunkIndex: 0, Subject: "Reset", Content: "password", Score: 0.9},
-		{ID: 3, ArticleID: 10, VersionID: 4, ChunkIndex: 1, Subject: "VPN", Content: "disconnect", Score: 0.4},
-		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 0, Subject: "VPN", Content: "connect", Score: 0.2},
+		{ID: 2, ArticleID: 20, VersionID: 5, ChunkIndex: 0, Subject: "Reset", Content: "password", Score: 0.9, Measured: true},
+		{ID: 3, ArticleID: 10, VersionID: 4, ChunkIndex: 1, Subject: "VPN", Content: "disconnect", Score: 0.4, Measured: true},
+		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 0, Subject: "VPN", Content: "connect", Score: 0.2, Measured: true},
 	}
-	if !reflect.DeepEqual(got.Chunks, want) || len(got.Articles) != 0 {
-		t.Fatalf("chunks = %+v, articles = %d", got.Chunks, len(got.Articles))
+	if !reflect.DeepEqual(got.Chunks, want) || len(got.Articles) != 0 || !got.Reranked {
+		t.Fatalf("chunks = %+v, articles = %d, reranked = %v", got.Chunks, len(got.Articles), got.Reranked)
 	}
 
 	// The fused hits are left as they were.
-	if uow.retrieval.hits[0].Score != 0.03 {
-		t.Fatalf("fused score = %v, want untouched", uow.retrieval.hits[0].Score)
+	if uow.retrieval.hits[0].Score != 0.03 || uow.retrieval.hits[0].Measured {
+		t.Fatalf("fused hit = %+v, want untouched", uow.retrieval.hits[0])
 	}
 }
 
@@ -242,6 +243,9 @@ func TestSuggestKeepsAnsweringWhenTheRerankFails(t *testing.T) {
 		{name: "a rejected credential", rerankErr: &embedding.APIError{StatusCode: 403}},
 		{name: "an unavailable reranker", rerankErr: &embedding.APIError{StatusCode: 502}},
 		{name: "a reranker that scores the wrong count", scores: []float64{0.1}},
+		{name: "a reranker that answers in logits", scores: []float64{-2.1, 4.4, 0.3, 0.2}},
+		{name: "a reranker that answers above one", scores: []float64{0.2, 1.5, 0.3, 0.2}},
+		{name: "a reranker that answers not a number", scores: []float64{0.2, math.NaN(), 0.3, 0.2}},
 	}
 
 	for _, tt := range tests {
@@ -265,8 +269,8 @@ func TestSuggestKeepsAnsweringWhenTheRerankFails(t *testing.T) {
 				t.Fatalf("Suggest: %v", err)
 			}
 
-			if !reflect.DeepEqual(got.Chunks, uow.retrieval.hits[:suggestSize]) {
-				t.Fatalf("chunks = %+v, want the fusion order untouched", got.Chunks)
+			if !reflect.DeepEqual(got.Chunks, uow.retrieval.hits[:suggestSize]) || got.Reranked {
+				t.Fatalf("chunks = %+v, reranked = %v, want the fusion order untouched", got.Chunks, got.Reranked)
 			}
 		})
 	}
@@ -403,13 +407,39 @@ func TestOrderByScore(t *testing.T) {
 			for i, hit := range got {
 				ids = append(ids, hit.ID)
 
-				if hit.Score != tt.scores[hit.ID-1] {
-					t.Errorf("hit %d score = %v, want %v", i, hit.Score, tt.scores[hit.ID-1])
+				if hit.Score != tt.scores[hit.ID-1] || !hit.Measured {
+					t.Errorf("hit %d = %+v, want score %v, measured", i, hit, tt.scores[hit.ID-1])
 				}
 			}
 
 			if !reflect.DeepEqual(ids, tt.want) {
 				t.Fatalf("order = %v, want %v", ids, tt.want)
+			}
+
+			if hits[0].Score != 0.03 || hits[0].Measured {
+				t.Fatalf("input hit changed: %+v", hits[0])
+			}
+		})
+	}
+}
+
+func TestInUnitRange(t *testing.T) {
+	tests := []struct {
+		name   string
+		scores []float64
+		want   bool
+	}{
+		{name: "none", want: true},
+		{name: "the bounds", scores: []float64{0, 1, 0.5}, want: true},
+		{name: "a logit below zero", scores: []float64{0.5, -0.01}},
+		{name: "a logit above one", scores: []float64{1.01}},
+		{name: "not a number", scores: []float64{math.NaN()}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := inUnitRange(tt.scores); got != tt.want {
+				t.Fatalf("inUnitRange(%v) = %v, want %v", tt.scores, got, tt.want)
 			}
 		})
 	}

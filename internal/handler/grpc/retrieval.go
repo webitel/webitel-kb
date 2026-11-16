@@ -81,19 +81,25 @@ func (s *RetrievalServer) SemanticSearch(ctx context.Context, req *kb.SemanticSe
 		return nil, err
 	}
 
-	hits, citations, err := s.service.SemanticSearch(ctx, opts, model.SemanticQuery{
+	answer, err := s.service.SemanticSearch(ctx, opts, model.SemanticQuery{
 		Query:            req.GetQuery(),
 		SpaceIDs:         req.GetSpaceIds(),
 		Tags:             req.GetTags(),
 		TagsMatchAll:     req.GetTagMatch() == kb.TagMatch_TAG_MATCH_ALL,
 		TopK:             int(req.GetTopK()),
 		IncludeCitations: req.GetIncludeCitations(),
+		Rerank:           req.GetRerank(),
+		MinScore:         req.GetMinScore(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &kb.SemanticSearchResponse{Chunks: chunksToProto(hits), Citations: citationsToProto(citations)}, nil
+	return &kb.SemanticSearchResponse{
+		Chunks:    chunksToProto(answer.Chunks),
+		Citations: citationsToProto(answer.Citations),
+		Reranked:  answer.Reranked,
+	}, nil
 }
 
 func (s *RetrievalServer) Suggest(ctx context.Context, req *kb.SuggestRequest) (*kb.SuggestResponse, error) {
@@ -113,7 +119,11 @@ func (s *RetrievalServer) Suggest(ctx context.Context, req *kb.SuggestRequest) (
 		return nil, err
 	}
 
-	return &kb.SuggestResponse{Articles: summariesToProto(answer.Articles), Chunks: chunksToProto(answer.Chunks)}, nil
+	return &kb.SuggestResponse{
+		Articles: summariesToProto(answer.Articles),
+		Chunks:   chunksToProto(answer.Chunks),
+		Reranked: answer.Reranked,
+	}, nil
 }
 
 func chunksToProto(items []*model.ChunkHit) []*kb.Chunk {
@@ -125,6 +135,8 @@ func chunksToProto(items []*model.ChunkHit) []*kb.Chunk {
 			ChunkIndex: item.ChunkIndex,
 			Content:    item.Content,
 			Score:      item.Score,
+			Id:         item.ID,
+			Subject:    item.Subject,
 		})
 	}
 

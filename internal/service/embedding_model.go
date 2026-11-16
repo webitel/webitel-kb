@@ -483,6 +483,15 @@ func probe(ctx context.Context, p embedding.Provider, m *model.EmbeddingModel, a
 				errors.WithID("kb.model.validation_failed"),
 			)
 		}
+
+		if !inUnitRange(res.Scores) {
+			return errors.New(
+				"reranker scores must be in [0, 1]",
+				errors.WithCode(codes.FailedPrecondition),
+				errors.WithID("kb.model.reranker_scale"),
+				errors.WithValue("scores", res.Scores),
+			)
+		}
 	default:
 		return errors.Internal(
 			"model has an unknown type",

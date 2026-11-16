@@ -357,7 +357,13 @@ type SemanticSearchRequest struct {
 	// Optional tag filter.
 	Tags []string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
 	// How to combine the tag filter; unspecified means any.
-	TagMatch      TagMatch `protobuf:"varint,6,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
+	TagMatch TagMatch `protobuf:"varint,6,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
+	// Whether to rerank the chunks with the reranker of the spaces; applies
+	// only to spaces with reranking enabled.
+	Rerank bool `protobuf:"varint,7,opt,name=rerank,proto3" json:"rerank,omitempty"`
+	// Minimum chunk score in [0, 1]; chunks without a relevance measure (a
+	// space without vector search, not reranked) are kept.
+	MinScore      float64 `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3" json:"min_score,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -434,13 +440,29 @@ func (x *SemanticSearchRequest) GetTagMatch() TagMatch {
 	return TagMatch_TAG_MATCH_UNSPECIFIED
 }
 
+func (x *SemanticSearchRequest) GetRerank() bool {
+	if x != nil {
+		return x.Rerank
+	}
+	return false
+}
+
+func (x *SemanticSearchRequest) GetMinScore() float64 {
+	if x != nil {
+		return x.MinScore
+	}
+	return 0
+}
+
 // SemanticSearchResponse returns ranked chunks and optional citations.
 type SemanticSearchResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Top-K ranked chunks.
 	Chunks []*Chunk `protobuf:"bytes,1,rep,name=chunks,proto3" json:"chunks,omitempty"`
 	// Structured citations (empty unless requested).
-	Citations     []*Citation `protobuf:"bytes,2,rep,name=citations,proto3" json:"citations,omitempty"`
+	Citations []*Citation `protobuf:"bytes,2,rep,name=citations,proto3" json:"citations,omitempty"`
+	// Whether the reranker ordered and scored the chunks.
+	Reranked      bool `protobuf:"varint,3,opt,name=reranked,proto3" json:"reranked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -487,6 +509,13 @@ func (x *SemanticSearchResponse) GetCitations() []*Citation {
 		return x.Citations
 	}
 	return nil
+}
+
+func (x *SemanticSearchResponse) GetReranked() bool {
+	if x != nil {
+		return x.Reranked
+	}
+	return false
 }
 
 // SuggestRequest parameters for agent assist.
@@ -568,7 +597,9 @@ type SuggestResponse struct {
 	// Suggested article summaries.
 	Articles []*ArticleSummary `protobuf:"bytes,1,rep,name=articles,proto3" json:"articles,omitempty"`
 	// Suggested chunks for draft generation.
-	Chunks        []*Chunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	Chunks []*Chunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	// Whether the reranker ordered and scored the suggestions.
+	Reranked      bool `protobuf:"varint,3,opt,name=reranked,proto3" json:"reranked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -615,6 +646,13 @@ func (x *SuggestResponse) GetChunks() []*Chunk {
 		return x.Chunks
 	}
 	return nil
+}
+
+func (x *SuggestResponse) GetReranked() bool {
+	if x != nil {
+		return x.Reranked
+	}
+	return false
 }
 
 // MenuRequest parameters for bot menus.
@@ -758,27 +796,31 @@ const file_retrieval_proto_rawDesc = "" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12 \n" +
 	"\ateam_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"C\n" +
 	"\x0fResolveResponse\x120\n" +
-	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xd6\x02\n" +
+	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xa4\x03\n" +
 	"\x15SemanticSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x13\n" +
 	"\x05top_k\x18\x03 \x01(\x05R\x04topK\x12+\n" +
 	"\x11include_citations\x18\x04 \x01(\bR\x10includeCitations\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12;\n" +
-	"\ttag_match\x18\x06 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch:w\xbaHt\x1ar\n" +
-	"\x1bkb.retrieval.space_required\x12\x1eat least one space is required\x1a3this.query.trim() == '' || size(this.space_ids) > 0\"w\n" +
+	"\ttag_match\x18\x06 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12\x16\n" +
+	"\x06rerank\x18\a \x01(\bR\x06rerank\x124\n" +
+	"\tmin_score\x18\b \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00R\bminScore:w\xbaHt\x1ar\n" +
+	"\x1bkb.retrieval.space_required\x12\x1eat least one space is required\x1a3this.query.trim() == '' || size(this.space_ids) > 0\"\x93\x01\n" +
 	"\x16SemanticSearchResponse\x12)\n" +
 	"\x06chunks\x18\x01 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\x122\n" +
-	"\tcitations\x18\x02 \x03(\v2\x14.webitel.kb.CitationR\tcitations\"\xbb\x02\n" +
+	"\tcitations\x18\x02 \x03(\v2\x14.webitel.kb.CitationR\tcitations\x12\x1a\n" +
+	"\breranked\x18\x03 \x01(\bR\breranked\"\xbb\x02\n" +
 	"\x0eSuggestRequest\x12)\n" +
 	"\x10customer_message\x18\x01 \x01(\tR\x0fcustomerMessage\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x17\n" +
 	"\ateam_id\x18\x03 \x01(\x03R\x06teamId\x12#\n" +
 	"\rreturn_chunks\x18\x04 \x01(\bR\freturnChunks:\xa2\x01\xbaH\x9e\x01\x1a\x9b\x01\n" +
-	"\x1bkb.retrieval.space_required\x12(a team or at least one space is required\x1aRthis.customer_message.trim() == '' || size(this.space_ids) > 0 || this.team_id > 0\"t\n" +
+	"\x1bkb.retrieval.space_required\x12(a team or at least one space is required\x1aRthis.customer_message.trim() == '' || size(this.space_ids) > 0 || this.team_id > 0\"\x90\x01\n" +
 	"\x0fSuggestResponse\x126\n" +
 	"\barticles\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\barticles\x12)\n" +
-	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\"\x8c\x01\n" +
+	"\x06chunks\x18\x02 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\x12\x1a\n" +
+	"\breranked\x18\x03 \x01(\bR\breranked\"\x8c\x01\n" +
 	"\vMenuRequest\x12\"\n" +
 	"\bspace_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aspaceId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\x03R\bparentId\x12\x1f\n" +

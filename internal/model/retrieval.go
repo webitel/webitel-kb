@@ -40,6 +40,10 @@ type SemanticQuery struct {
 	// TopK is how many chunks to return; 0 asks for the default.
 	TopK             int
 	IncludeCitations bool
+	// Rerank asks the reranker of the spaces to order and score the chunks.
+	Rerank bool
+	// MinScore drops the measured chunks scored below it.
+	MinScore float64
 }
 
 // ModelVector is the query embedded under one model, with the spaces that model serves.
@@ -66,8 +70,12 @@ type ChunkHit struct {
 	ChunkIndex int32
 	Subject    string
 	Content    string
-	// Score is the reciprocal rank fusion score.
+	// Score is the relevance in [0, 1]: the reranker score, or the vector
+	// similarity to the query.
 	Score float64
+	// Measured tells a scored hit from one with no relevance measure (a
+	// space without vector search, not reranked).
+	Measured bool
 }
 
 // Citation points a consumer at the article a hit came from.
@@ -92,4 +100,14 @@ type SuggestQuery struct {
 type Suggestion struct {
 	Articles []*ArticleSummary
 	Chunks   []*ChunkHit
+	// Reranked tells whether the reranker ordered and scored the suggestions.
+	Reranked bool
+}
+
+// SemanticAnswer is what a hybrid search returns.
+type SemanticAnswer struct {
+	Chunks    []*ChunkHit
+	Citations []*Citation
+	// Reranked tells whether the reranker ordered and scored the chunks.
+	Reranked bool
 }

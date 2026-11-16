@@ -26,6 +26,7 @@ const embeddingFrom = "kb.chunk_embedding e JOIN kb.chunk c ON c.id = e.chunk_id
 // vectorBranch is the ranking of one model over its spaces.
 type vectorBranch struct {
 	builder squirrel.SelectBuilder
+	modelID int64
 	spaces  []int64
 	column  string
 	literal string
@@ -62,6 +63,7 @@ func NewHybridHits(q model.HybridQuery) *HybridHits {
 				Column(column+" <=> ?::vector AS rank_key", literal).
 				From(embeddingFrom).
 				Where("e.model_id = ?", mv.ModelID),
+			modelID: mv.ModelID,
 			spaces:  mv.SpaceIDs,
 			column:  column,
 			literal: literal,
@@ -150,16 +152,40 @@ func (h *HybridHits) ToSQL() (string, []any, error) {
 		RRFK, union, h.topK,
 	)
 
-	// The sum is numeric; the scan target is a float.
-	return squirrel.Select(
+	// The fusion orders the hits; the similarity is what a hit is worth.
+	return h.withSimilarity(squirrel.Select(
 		"c.id AS id", "m.id AS article_id", "c.version_id AS version_id", "c.chunk_index AS chunk_index",
-		"m.subject AS subject", "c.content AS content", "h.score::float8 AS score",
+		"m.subject AS subject", "c.content AS content",
 	).
-		From("h JOIN kb.chunk c ON c.id = h.id JOIN kb.article m ON m.published_version_id = c.version_id").
+		From("h JOIN kb.chunk c ON c.id = h.id JOIN kb.article m ON m.published_version_id = c.version_id")).
 		PrefixExpr(squirrel.Expr(with, args...)).
 		OrderBy("h.score DESC", "c.id").
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
+}
+
+// withSimilarity selects the cosine similarity of a hit to the query under the
+// model of its space; NULL when the hit has no vector under that model.
+func (h *HybridHits) withSimilarity(builder squirrel.SelectBuilder) squirrel.SelectBuilder {
+	if len(h.vec) == 0 {
+		return builder.Column("NULL::float8 AS similarity")
+	}
+
+	terms := make([]string, 0, len(h.vec))
+	args := make([]any, 0, len(h.vec))
+
+	for i, side := range h.vec {
+		alias := fmt.Sprintf("e%d", i)
+
+		builder = builder.LeftJoin(
+			fmt.Sprintf("kb.chunk_embedding %[1]s ON %[1]s.chunk_id = c.id AND %[1]s.model_id = ? AND %[1]s.space_id = ANY(?)", alias),
+			side.modelID, side.spaces,
+		)
+		terms = append(terms, fmt.Sprintf("1 - (%s.%s <=> ?::vector)", alias, strings.TrimPrefix(side.column, "e.")))
+		args = append(args, side.literal)
+	}
+
+	return builder.Column(fmt.Sprintf("COALESCE(%s)::float8 AS similarity", strings.Join(terms, ", ")), args...)
 }
 
 // VectorLiteral renders a vector the way pgvector reads it.
