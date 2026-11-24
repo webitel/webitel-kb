@@ -339,9 +339,9 @@ type Chunk struct {
 	// Chunk text content.
 	Content string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
 	// Relevance in [0, 1]: the reranker score when the response is reranked,
-	// otherwise the vector similarity to the query; 0 in a space without
+	// otherwise the vector similarity to the query; unset in a space without
 	// vector search.
-	Score float64 `protobuf:"fixed64,5,opt,name=score,proto3" json:"score,omitempty"`
+	Score *float64 `protobuf:"fixed64,5,opt,name=score,proto3,oneof" json:"score,omitempty"`
 	// Chunk id; every article version has chunks of its own.
 	Id int64 `protobuf:"varint,6,opt,name=id,proto3" json:"id,omitempty"`
 	// Subject of the article.
@@ -409,8 +409,8 @@ func (x *Chunk) GetContent() string {
 }
 
 func (x *Chunk) GetScore() float64 {
-	if x != nil {
-		return x.Score
+	if x != nil && x.Score != nil {
+		return *x.Score
 	}
 	return 0
 }
@@ -615,7 +615,7 @@ const file_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x15 \x01(\x03R\tupdatedAt\"\xc0\x01\n" +
+	"updated_at\x18\x15 \x01(\x03R\tupdatedAt\"\xcf\x01\n" +
 	"\x05Chunk\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x1d\n" +
@@ -623,10 +623,11 @@ const file_common_proto_rawDesc = "" +
 	"version_id\x18\x02 \x01(\x03R\tversionId\x12\x1f\n" +
 	"\vchunk_index\x18\x03 \x01(\x05R\n" +
 	"chunkIndex\x12\x18\n" +
-	"\acontent\x18\x04 \x01(\tR\acontent\x12\x14\n" +
-	"\x05score\x18\x05 \x01(\x01R\x05score\x12\x0e\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x19\n" +
+	"\x05score\x18\x05 \x01(\x01H\x00R\x05score\x88\x01\x01\x12\x0e\n" +
 	"\x02id\x18\x06 \x01(\x03R\x02id\x12\x18\n" +
-	"\asubject\x18\a \x01(\tR\asubject\"k\n" +
+	"\asubject\x18\a \x01(\tR\asubjectB\b\n" +
+	"\x06_score\"k\n" +
 	"\bCitation\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\x03R\tarticleId\x12\x14\n" +
@@ -704,6 +705,7 @@ func file_common_proto_init() {
 		return
 	}
 	file_general_proto_init()
+	file_common_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

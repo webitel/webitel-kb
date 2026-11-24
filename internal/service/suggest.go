@@ -3,6 +3,7 @@ package service
 import (
 	"cmp"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -16,12 +17,15 @@ import (
 
 // Suggest limits.
 const (
-	// suggestCandidates is how many fused chunks the reranker scores.
-	suggestCandidates = 10
+	// rerankCandidates is how many fused chunks the reranker scores at least.
+	rerankCandidates = 10
 	// suggestSize is how many articles or chunks a suggest answers with.
 	suggestSize = 3
 	// rerankTimeout bounds the rerank call.
 	rerankTimeout = 5 * time.Second
+	// answerReserve is the time kept before the caller deadline to answer
+	// without rerank.
+	answerReserve = 500 * time.Millisecond
 )
 
 // Suggest picks the articles or chunks that answer a customer message.
@@ -57,7 +61,7 @@ func (s *RetrievalService) Suggest(
 	spaceIDs = spaceIDsOf(spaces)
 	message := clipQuery(q.Message)
 
-	hits, err := s.fuse(ctx, opts, message, spaces, model.SearchFilter{SpaceIDs: spaceIDs}, suggestCandidates)
+	hits, err := s.fuse(ctx, opts, message, spaces, model.SearchFilter{SpaceIDs: spaceIDs}, rerankCandidates)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +70,13 @@ func (s *RetrievalService) Suggest(
 		return answer, nil
 	}
 
-	hits, answer.Reranked = s.rerankHits(ctx, domainID, spaceIDs, message, hits)
+	hits, reranker := s.rerankHits(ctx, domainID, spaceIDs, message, hits)
+	answer.Reranked = reranker != nil
+
+	hits = aboveMinScore(hits, reranker, spaces)
+	if len(hits) == 0 {
+		return answer, nil
+	}
 
 	if q.ReturnChunks {
 		answer.Chunks = hits[:min(len(hits), suggestSize)]
@@ -87,51 +97,83 @@ func (s *RetrievalService) Suggest(
 }
 
 // rerankHits reorders and scores the hits with the reranker of the spaces and
-// reports whether it did. Reranking is an optional step: whatever goes wrong,
-// the fusion order stands.
+// returns the reranker that did; nil when none did. Reranking is an optional
+// step: whatever goes wrong, the fusion order stands.
 func (s *RetrievalService) rerankHits(
 	ctx context.Context, domainID int64, spaceIDs []int64, query string, hits []*model.ChunkHit,
-) ([]*model.ChunkHit, bool) {
-	ordered, reranked, err := s.rerank(ctx, domainID, spaceIDs, query, hits)
+) ([]*model.ChunkHit, *model.SpaceReranker) {
+	ordered, reranker, err := s.rerank(ctx, domainID, spaceIDs, query, hits)
 	if err != nil {
 		s.log.WarnContext(ctx, "hits are not reranked", slog.Any("error", err))
 
-		return hits, false
+		return hits, nil
 	}
 
-	return ordered, reranked
+	return ordered, reranker
 }
 
-// rerank scores the pool with the one reranker the spaces enable; the fusion
-// order comes back untouched when no space reranks.
+// rerank scores the whole pool with the reranker the spaces pick. The fusion
+// order comes back untouched, with no reranker, when no space reranks.
 func (s *RetrievalService) rerank(
 	ctx context.Context, domainID int64, spaceIDs []int64, query string, hits []*model.ChunkHit,
-) ([]*model.ChunkHit, bool, error) {
+) ([]*model.ChunkHit, *model.SpaceReranker, error) {
 	rerankers, err := s.uow.SpaceStore().ResolveRerankers(ctx, domainID, spaceIDs)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 
-	reranker, err := pickReranker(rerankers)
-	if err != nil {
-		return nil, false, err
-	}
-
+	reranker := pickReranker(rerankers)
 	if reranker == nil {
-		return hits, false, nil
+		return hits, nil, nil
 	}
 
-	scores, err := s.rerankWith(ctx, query, reranker, hits)
+	timeout := rerankTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = min(timeout, time.Until(deadline.Add(-answerReserve)))
+	}
+
+	if timeout <= 0 {
+		return nil, nil, errRerankBudget
+	}
+
+	scores, err := s.rerankWith(ctx, timeout, query, reranker, hits)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, fmt.Errorf("reranker %d: %w", reranker.ModelID, err)
 	}
 
-	return orderByScore(hits, scores), true, nil
+	return orderByScore(hits, scores), reranker, nil
 }
 
-// rerankWith scores the hits against the query under the reranker of a space.
+// errRerankBudget reports a rerank skipped for lack of time to answer.
+var errRerankBudget = stderrors.New("no time left to rerank")
+
+// pickReranker picks the reranker a request scores with among those the spaces
+// enable: one with a threshold first, then the earliest registered; nil when
+// none.
+func pickReranker(spaces []*model.SpaceReranker) *model.SpaceReranker {
+	var picked *model.SpaceReranker
+
+	for _, space := range spaces {
+		if space.Enabled && (picked == nil || rerankerBefore(space, picked)) {
+			picked = space
+		}
+	}
+
+	return picked
+}
+
+func rerankerBefore(a, b *model.SpaceReranker) bool {
+	if (a.MinScore == nil) != (b.MinScore == nil) {
+		return a.MinScore != nil
+	}
+
+	return a.ModelID < b.ModelID
+}
+
+// rerankWith scores the hits against the query under the reranker of a space
+// within the timeout.
 func (s *RetrievalService) rerankWith(
-	ctx context.Context, query string, space *model.SpaceReranker, hits []*model.ChunkHit,
+	ctx context.Context, timeout time.Duration, query string, space *model.SpaceReranker, hits []*model.ChunkHit,
 ) ([]float64, error) {
 	key, err := openModelCredential(ctx, s.enc, space.Provider, space.Config)
 	if err != nil {
@@ -143,7 +185,7 @@ func (s *RetrievalService) rerankWith(
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, rerankTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result, err := provider.Rerank(ctx, embedding.RerankRequest{
@@ -178,30 +220,6 @@ func inUnitRange(scores []float64) bool {
 	}
 
 	return true
-}
-
-// pickReranker is the only reranker enabled among the spaces; nil when none
-// reranks. Two models cannot both score one pool, so disagreement is an error.
-func pickReranker(spaces []*model.SpaceReranker) (*model.SpaceReranker, error) {
-	var picked *model.SpaceReranker
-
-	for _, space := range spaces {
-		if !space.Enabled {
-			continue
-		}
-
-		if picked == nil {
-			picked = space
-
-			continue
-		}
-
-		if picked.ModelID != space.ModelID {
-			return nil, fmt.Errorf("spaces disagree on the reranker: models %d and %d", picked.ModelID, space.ModelID)
-		}
-	}
-
-	return picked, nil
 }
 
 // documentsOf renders the hits the way a cross-encoder reads them.

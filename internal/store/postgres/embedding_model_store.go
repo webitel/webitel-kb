@@ -37,6 +37,7 @@ type embeddingModelRecord struct {
 	Dimensions    *int32     `db:"dimensions"`
 	Endpoint      *string    `db:"endpoint"`
 	ValidatedAt   *time.Time `db:"validated_at"`
+	MinScore      *float64   `db:"min_score"`
 	CreatedAt     time.Time  `db:"created_at"`
 	CreatedByID   *int64     `db:"created_by_id"`
 	CreatedByName *string    `db:"created_by_name"`
@@ -49,6 +50,7 @@ func mapEmbeddingModel(record *embeddingModelRecord) *model.EmbeddingModel {
 		Name:         record.Name,
 		Provider:     record.Provider,
 		IsSelfHosted: record.IsSelfHosted,
+		MinScore:     record.MinScore,
 		CreatedAt:    record.CreatedAt,
 	}
 
@@ -173,12 +175,12 @@ func (s *embeddingModelStore) Create(
 		Insert(embeddingModelTable).
 		Columns(
 			"domain_id", "type", "name", "provider", "is_self_hosted",
-			"model_ref", "dimensions", "endpoint", "config", "created_by",
+			"model_ref", "dimensions", "endpoint", "min_score", "config", "created_by",
 		).
 		Values(
 			session.GetDomainID(), in.Type, in.Name, in.Provider, in.IsSelfHosted,
 			nullIfEmpty(in.ModelRef), nullIfZero(in.Dimensions), nullIfEmpty(in.Endpoint),
-			config, nullIfZero(session.GetUserID()),
+			in.MinScore, config, nullIfZero(session.GetUserID()),
 		).
 		Suffix("RETURNING *").
 		ToSql()
@@ -200,7 +202,8 @@ func (s *embeddingModelStore) Update(
 		Set("is_self_hosted", in.IsSelfHosted).
 		Set("model_ref", nullIfEmpty(in.ModelRef)).
 		Set("dimensions", nullIfZero(in.Dimensions)).
-		Set("endpoint", nullIfEmpty(in.Endpoint))
+		Set("endpoint", nullIfEmpty(in.Endpoint)).
+		Set("min_score", in.MinScore)
 
 	switch validation {
 	case store.ValidationReset:

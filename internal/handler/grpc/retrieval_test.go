@@ -370,12 +370,12 @@ func TestSemanticSearchFullPath(t *testing.T) {
 	server, fake := retrievalServerWithFake()
 	fake.hits = []*model.ChunkHit{
 		{ID: 1, ArticleID: 10, VersionID: 4, ChunkIndex: 2, Subject: "VPN", Content: "how to connect", Score: 0.8, Measured: true},
-		{ID: 2, ArticleID: 20, VersionID: 5, Subject: "Reset", Content: "far away", Score: 0.3, Measured: true},
+		{ID: 2, ArticleID: 20, VersionID: 5, Subject: "Reset", Content: "no vector"},
 	}
 
 	resp, err := server.SemanticSearch(retrievalContext(), &kb.SemanticSearchRequest{
 		Query: "vpn", SpaceIds: []int64{3}, TopK: 5, IncludeCitations: true, Tags: []string{"net"}, TagMatch: kb.TagMatch_TAG_MATCH_ALL,
-		MinScore: 0.5, Rerank: true,
+		Rerank: true,
 	})
 	if err != nil {
 		t.Fatalf("SemanticSearch: %v", err)
@@ -385,17 +385,23 @@ func TestSemanticSearchFullPath(t *testing.T) {
 		Term:    "vpn",
 		Filter:  model.SearchFilter{SpaceIDs: []int64{3}, Tags: []string{"net"}, TagsMatchAll: true},
 		Vectors: []model.ModelVector{},
-		TopK:    5,
+		// A rerank widens the pool the answer is cut from.
+		TopK: 10,
 	}
 	if !reflect.DeepEqual(fake.hybrid, want) {
 		t.Fatalf("hybrid = %+v, want %+v", fake.hybrid, want)
 	}
 
 	chunks := resp.GetChunks()
-	if len(chunks) != 1 || chunks[0].GetArticleId() != 10 || chunks[0].GetVersionId() != 4 || chunks[0].GetChunkIndex() != 2 ||
+	if len(chunks) != 2 || chunks[0].GetArticleId() != 10 || chunks[0].GetVersionId() != 4 || chunks[0].GetChunkIndex() != 2 ||
 		chunks[0].GetContent() != "how to connect" || chunks[0].GetScore() != 0.8 ||
 		chunks[0].GetId() != 1 || chunks[0].GetSubject() != "VPN" {
 		t.Fatalf("chunks = %+v", chunks)
+	}
+
+	// A chunk without a vector has no relevance measure.
+	if chunks[1].Score != nil {
+		t.Fatalf("unmeasured chunk score = %v, want unset", chunks[1].GetScore())
 	}
 
 	// No space of the fake reranks, so the fusion stands.
@@ -404,7 +410,7 @@ func TestSemanticSearchFullPath(t *testing.T) {
 	}
 
 	citations := resp.GetCitations()
-	if len(citations) != 1 || citations[0].GetArticleId() != 10 || citations[0].GetTitle() != "VPN" ||
+	if len(citations) != 2 || citations[0].GetArticleId() != 10 || citations[0].GetTitle() != "VPN" ||
 		citations[0].GetSnippet() != "how to connect" || citations[0].GetUrl() != "" {
 		t.Fatalf("citations = %+v", citations)
 	}

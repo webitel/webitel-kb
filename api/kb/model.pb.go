@@ -47,6 +47,9 @@ type EmbeddingModel struct {
 	Endpoint string `protobuf:"bytes,9,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	// Timestamp of the last successful validation (epoch ms); 0 if never validated.
 	ValidatedAt int64 `protobuf:"varint,10,opt,name=validated_at,json=validatedAt,proto3" json:"validated_at,omitempty"`
+	// Minimum relevance in [0, 1] for the chunks this model scores; unset means
+	// no threshold.
+	MinScore *float64 `protobuf:"fixed64,11,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
 	// CreatedAt timestamp (epoch ms).
 	CreatedAt int64 `protobuf:"varint,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// User who created the model.
@@ -155,6 +158,13 @@ func (x *EmbeddingModel) GetValidatedAt() int64 {
 	return 0
 }
 
+func (x *EmbeddingModel) GetMinScore() float64 {
+	if x != nil && x.MinScore != nil {
+		return *x.MinScore
+	}
+	return 0
+}
+
 func (x *EmbeddingModel) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -187,7 +197,10 @@ type InputEmbeddingModel struct {
 	// Self-hosted / Azure / BYOM endpoint url.
 	Endpoint string `protobuf:"bytes,7,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	// Write-only provider credential; encrypted at rest, never read back.
-	ApiKey        string `protobuf:"bytes,8,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	ApiKey string `protobuf:"bytes,8,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	// Minimum relevance in [0, 1] for the chunks this model scores; unset means
+	// no threshold.
+	MinScore      *float64 `protobuf:"fixed64,9,opt,name=min_score,json=minScore,proto3,oneof" json:"min_score,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -276,6 +289,13 @@ func (x *InputEmbeddingModel) GetApiKey() string {
 		return x.ApiKey
 	}
 	return ""
+}
+
+func (x *InputEmbeddingModel) GetMinScore() float64 {
+	if x != nil && x.MinScore != nil {
+		return *x.MinScore
+	}
+	return 0
 }
 
 // ListModelsRequest parameters.
@@ -677,7 +697,7 @@ var File_model_proto protoreflect.FileDescriptor
 const file_model_proto_rawDesc = "" +
 	"\n" +
 	"\vmodel.proto\x12\n" +
-	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xf2\x02\n" +
+	"webitel.kb\x1a\x1bbuf/validate/validate.proto\x1a\rgeneral.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1aproto/webitel/option.proto\"\xa2\x03\n" +
 	"\x0eEmbeddingModel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\x03R\bdomainId\x12\x12\n" +
@@ -691,11 +711,14 @@ const file_model_proto_rawDesc = "" +
 	"dimensions\x12\x1a\n" +
 	"\bendpoint\x18\t \x01(\tR\bendpoint\x12!\n" +
 	"\fvalidated_at\x18\n" +
-	" \x01(\x03R\vvalidatedAt\x12\x1d\n" +
+	" \x01(\x03R\vvalidatedAt\x12 \n" +
+	"\tmin_score\x18\v \x01(\x01H\x00R\bminScore\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\x03R\tcreatedAt\x12.\n" +
 	"\n" +
-	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedBy\"\x90\x02\n" +
+	"created_by\x18\x16 \x01(\v2\x0f.general.LookupR\tcreatedByB\f\n" +
+	"\n" +
+	"_min_score\"\xd9\x02\n" +
 	"\x13InputEmbeddingModel\x121\n" +
 	"\x04type\x18\x01 \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x15R\tembeddingR\brerankerR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -706,7 +729,10 @@ const file_model_proto_rawDesc = "" +
 	"dimensions\x18\x06 \x01(\x05R\n" +
 	"dimensions\x12\x1a\n" +
 	"\bendpoint\x18\a \x01(\tR\bendpoint\x12\x17\n" +
-	"\aapi_key\x18\b \x01(\tR\x06apiKey\"\x89\x01\n" +
+	"\aapi_key\x18\b \x01(\tR\x06apiKey\x129\n" +
+	"\tmin_score\x18\t \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00H\x00R\bminScore\x88\x01\x01B\f\n" +
+	"\n" +
+	"_min_score\"\x89\x01\n" +
 	"\x11ListModelsRequest\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x05R\x04size\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\f\n" +
@@ -798,6 +824,8 @@ func file_model_proto_init() {
 		return
 	}
 	file_general_proto_init()
+	file_model_proto_msgTypes[0].OneofWrappers = []any{}
+	file_model_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -1,11 +1,13 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -26,6 +28,12 @@ type queryEmbedder struct {
 	reranks   []embedding.RerankRequest
 	scores    []float64
 	rerankErr error
+	// failing makes the reranker at an endpoint fail; hanging makes it wait out
+	// its deadline.
+	failing map[string]bool
+	hanging map[string]bool
+	// timeouts records how long each rerank call was given.
+	timeouts []time.Duration
 }
 
 func (p *queryEmbedder) Embed(_ context.Context, req embedding.EmbedRequest) (embedding.EmbedResult, error) {
@@ -38,11 +46,21 @@ func (p *queryEmbedder) Embed(_ context.Context, req embedding.EmbedRequest) (em
 	return embedding.EmbedResult{Vectors: [][]float32{p.vectors[req.ModelRef]}}, nil
 }
 
-func (p *queryEmbedder) Rerank(_ context.Context, req embedding.RerankRequest) (embedding.RerankResult, error) {
+func (p *queryEmbedder) Rerank(ctx context.Context, req embedding.RerankRequest) (embedding.RerankResult, error) {
 	p.reranks = append(p.reranks, req)
 
-	if p.rerankErr != nil {
-		return embedding.RerankResult{}, p.rerankErr
+	if deadline, ok := ctx.Deadline(); ok {
+		p.timeouts = append(p.timeouts, time.Until(deadline))
+	}
+
+	if p.hanging[req.Endpoint] {
+		<-ctx.Done()
+
+		return embedding.RerankResult{}, ctx.Err()
+	}
+
+	if p.rerankErr != nil || p.failing[req.Endpoint] {
+		return embedding.RerankResult{}, cmp.Or(p.rerankErr, errors.Unavailable("down"))
 	}
 
 	return embedding.RerankResult{Scores: p.scores}, nil
@@ -282,13 +300,18 @@ func TestSemanticSearchCitations(t *testing.T) {
 }
 
 func TestSemanticSearchRerankAndMinScore(t *testing.T) {
-	enabled := []*model.SpaceReranker{{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank"}}
+	reranker := func(minScore *float64) []*model.SpaceReranker {
+		return []*model.SpaceReranker{{
+			SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank",
+			MinScore: minScore,
+		}}
+	}
 	disabled := []*model.SpaceReranker{{SpaceID: 1}}
 
 	tests := []struct {
 		name      string
 		rerank    bool
-		minScore  float64
+		embedMin  *float64
 		rerankers []*model.SpaceReranker
 		scores    []float64
 		rerankErr error
@@ -299,34 +322,39 @@ func TestSemanticSearchRerankAndMinScore(t *testing.T) {
 		wantCalls    int
 	}{
 		{
-			name: "fusion order and similarity", rerankers: enabled,
+			name: "fusion order and similarity", rerankers: reranker(nil),
 			wantOrder: []int64{1, 2, 3}, want: map[int64]float64{1: 0.8, 2: 0.45, 3: 0},
 		},
 		{
-			name: "the minimum keeps the chunks without a measure", minScore: 0.5, rerankers: enabled,
+			name: "the embedding minimum keeps the chunks without a measure", embedMin: ptrTo(0.5), rerankers: reranker(nil),
 			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0},
 		},
 		{
-			name: "a minimum above every score", minScore: 0.9, rerankers: enabled,
+			name: "an embedding minimum above every score", embedMin: ptrTo(0.9), rerankers: reranker(nil),
 			wantOrder: []int64{3}, want: map[int64]float64{3: 0},
 		},
 		{
-			name: "the reranker orders and scores every chunk", rerank: true, minScore: 0.5, rerankers: enabled,
-			scores:    []float64{0.27, 0.88, 0.73},
+			name: "the reranker minimum applies to the reranked chunks", rerank: true, embedMin: ptrTo(0.9),
+			rerankers: reranker(ptrTo(0.5)), scores: []float64{0.27, 0.88, 0.73},
 			wantOrder: []int64{2, 3}, want: map[int64]float64{2: 0.88, 3: 0.73}, wantReranked: true, wantCalls: 1,
 		},
 		{
-			name: "no space reranks", rerank: true, rerankers: disabled,
-			wantOrder: []int64{1, 2, 3}, want: map[int64]float64{1: 0.8, 2: 0.45, 3: 0},
+			name: "a reranker without a minimum ignores the embedding one", rerank: true, embedMin: ptrTo(0.9),
+			rerankers: reranker(nil), scores: []float64{0.27, 0.88, 0.73},
+			wantOrder: []int64{2, 3, 1}, want: map[int64]float64{1: 0.27, 2: 0.88, 3: 0.73}, wantReranked: true, wantCalls: 1,
 		},
 		{
-			name: "a failed reranker keeps the fusion", rerank: true, minScore: 0.5, rerankers: enabled,
-			rerankErr: errors.Unavailable("down"),
+			name: "no space reranks", rerank: true, embedMin: ptrTo(0.5), rerankers: disabled,
+			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0},
+		},
+		{
+			name: "a failed reranker falls back to the embedding minimum", rerank: true, embedMin: ptrTo(0.5),
+			rerankers: reranker(ptrTo(0.95)), rerankErr: errors.Unavailable("down"),
 			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0}, wantCalls: 1,
 		},
 		{
-			name: "a reranker answering in logits keeps the fusion", rerank: true, minScore: 0.5, rerankers: enabled,
-			scores:    []float64{-1, 2, 1},
+			name: "a reranker answering in logits keeps the fusion", rerank: true, embedMin: ptrTo(0.5),
+			rerankers: reranker(ptrTo(0.95)), scores: []float64{-1, 2, 1},
 			wantOrder: []int64{1, 3}, want: map[int64]float64{1: 0.8, 3: 0}, wantCalls: 1,
 		},
 	}
@@ -334,17 +362,17 @@ func TestSemanticSearchRerankAndMinScore(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, uow, provider := semanticServiceWithFakes()
-			uow.spaces.resolvedMany = []*model.SpaceEmbedding{{SpaceID: 1}}
+			uow.spaces.resolvedMany = []*model.SpaceEmbedding{{SpaceID: 1, VectorSearchEnabled: true, MinScore: tt.embedMin}}
 			uow.spaces.rerankers = tt.rerankers
 			uow.retrieval.hits = []*model.ChunkHit{
-				{ID: 1, ArticleID: 10, Subject: "VPN", Content: "connect", Score: 0.8, Measured: true},
-				{ID: 2, ArticleID: 20, Subject: "Reset", Content: "password", Score: 0.45, Measured: true},
-				{ID: 3, ArticleID: 30, Subject: "Billing", Content: "invoice"},
+				{ID: 1, SpaceID: 1, ArticleID: 10, Subject: "VPN", Content: "connect", Score: 0.8, Measured: true},
+				{ID: 2, SpaceID: 1, ArticleID: 20, Subject: "Reset", Content: "password", Score: 0.45, Measured: true},
+				{ID: 3, SpaceID: 1, ArticleID: 30, Subject: "Billing", Content: "invoice"},
 			}
 			provider.scores, provider.rerankErr = tt.scores, tt.rerankErr
 
 			answer, err := svc.SemanticSearch(context.Background(), semanticOpts(), model.SemanticQuery{
-				Query: "vpn", SpaceIDs: []int64{1}, Rerank: tt.rerank, MinScore: tt.minScore, IncludeCitations: true,
+				Query: "vpn", SpaceIDs: []int64{1}, Rerank: tt.rerank, IncludeCitations: true,
 			})
 			if err != nil {
 				t.Fatalf("SemanticSearch: %v", err)
@@ -472,3 +500,5 @@ func TestLongQueriesReachTheModelsClipped(t *testing.T) {
 		})
 	}
 }
+
+func ptrTo[T any](v T) *T { return &v }

@@ -953,6 +953,14 @@ func TestUpdateRevalidation(t *testing.T) {
 			mask: []string{"name"}, want: store.ValidationKeep,
 		},
 		{
+			name: "used model changes its min score without a probe", inUse: true, in: &model.EmbeddingModel{MinScore: new(0.6)},
+			mask: []string{"min_score"}, want: store.ValidationKeep,
+		},
+		{
+			name: "used model clears its min score", inUse: true, in: &model.EmbeddingModel{},
+			mask: []string{"min_score"}, want: store.ValidationKeep,
+		},
+		{
 			name: "used model takes a new key after the probe", inUse: true, in: &model.EmbeddingModel{},
 			apiKey: "next", mask: []string{"api_key"}, want: store.ValidationStamp, wantProbe: true, wantKey: "next",
 		},

@@ -124,6 +124,7 @@ func (s *retrievalStore) Search(
 // chunkRecord is the scan target of a fused hit.
 type chunkRecord struct {
 	ID         int64    `db:"id"`
+	SpaceID    int64    `db:"space_id"`
 	ArticleID  int64    `db:"article_id"`
 	VersionID  int64    `db:"version_id"`
 	ChunkIndex int32    `db:"chunk_index"`
@@ -135,6 +136,7 @@ type chunkRecord struct {
 func mapChunk(record *chunkRecord) *model.ChunkHit {
 	hit := &model.ChunkHit{
 		ID:         record.ID,
+		SpaceID:    record.SpaceID,
 		ArticleID:  record.ArticleID,
 		VersionID:  record.VersionID,
 		ChunkIndex: record.ChunkIndex,

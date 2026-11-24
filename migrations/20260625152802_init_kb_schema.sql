@@ -14,6 +14,8 @@ CREATE TABLE kb.embedding_model (
     model_ref      text NULL,            -- HF id or provider model name
     dimensions     int NULL,             -- embedding dim; null for reranker
     endpoint       text NULL,            -- self-hosted / Azure / BYOM url
+    min_score      double precision NULL -- relevance threshold of the scored chunks; null = none
+                       CHECK (min_score BETWEEN 0 AND 1),
     config         bytea NULL,           -- encrypted API key; null for self-hosted
     validated_at   timestamptz NULL,     -- set after a successful test call
     created_at     timestamptz NOT NULL DEFAULT now(),

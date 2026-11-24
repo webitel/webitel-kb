@@ -154,7 +154,7 @@ func (h *HybridHits) ToSQL() (string, []any, error) {
 
 	// The fusion orders the hits; the similarity is what a hit is worth.
 	return h.withSimilarity(squirrel.Select(
-		"c.id AS id", "m.id AS article_id", "c.version_id AS version_id", "c.chunk_index AS chunk_index",
+		"c.id AS id", "m.space_id AS space_id", "m.id AS article_id", "c.version_id AS version_id", "c.chunk_index AS chunk_index",
 		"m.subject AS subject", "c.content AS content",
 	).
 		From("h JOIN kb.chunk c ON c.id = h.id JOIN kb.article m ON m.published_version_id = c.version_id")).

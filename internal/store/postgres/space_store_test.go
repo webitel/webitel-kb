@@ -631,7 +631,7 @@ func TestMapSpaceBranches(t *testing.T) {
 
 func TestSpaceResolveEmbedding(t *testing.T) {
 	f := &fakeQuerier{row: fakeRow{vals: []any{
-		int64(7), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc:key"), true,
+		int64(7), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc:key"), true, ptrTo(0.6),
 	}}}
 	s := &spaceStore{db: f}
 
@@ -640,7 +640,8 @@ func TestSpaceResolveEmbedding(t *testing.T) {
 		t.Fatalf("resolve: %v", err)
 	}
 
-	if found.ModelID != 9 || found.Provider != "gemini" || found.Dimensions != 768 || !found.Validated {
+	if found.ModelID != 9 || found.Provider != "gemini" || found.Dimensions != 768 || !found.Validated ||
+		found.MinScore == nil || *found.MinScore != 0.6 {
 		t.Fatalf("resolved = %+v", found)
 	}
 
@@ -679,10 +680,10 @@ func TestSpaceResolveEmbeddingMissingSpace(t *testing.T) {
 
 func TestSpaceResolveEmbeddingsReadsTheDomainSpaces(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{
-		cols: []string{"space_id", "vector_search_enabled", "model_id", "provider", "model_ref", "dimensions", "endpoint", "config", "validated"},
+		cols: []string{"space_id", "vector_search_enabled", "model_id", "provider", "model_ref", "dimensions", "endpoint", "config", "validated", "min_score"},
 		vals: [][]any{
-			{int64(1), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc"), true},
-			{int64(2), false, int64(0), "", "", int32(0), "", nil, false},
+			{int64(1), true, int64(9), "gemini", "gemini-embedding-001", int32(768), "", []byte("enc"), true, ptrTo(0.5)},
+			{int64(2), false, int64(0), "", "", int32(0), "", nil, false, (*float64)(nil)},
 		},
 	}}
 	s := &spaceStore{db: f}
@@ -735,10 +736,10 @@ func TestSpaceResolveEmbeddingsWithoutIDsReadsTheWholeDomain(t *testing.T) {
 
 func TestSpaceResolveRerankersReadsTheDomainSpaces(t *testing.T) {
 	f := &fakeQuerier{rows: &fakeRows{
-		cols: []string{"space_id", "enabled", "model_id", "provider", "model_ref", "endpoint", "config"},
+		cols: []string{"space_id", "enabled", "model_id", "provider", "model_ref", "endpoint", "config", "min_score"},
 		vals: [][]any{
-			{int64(1), true, int64(30), "bge-reranker", "bge", "http://rerank", nil},
-			{int64(2), false, int64(0), "", "", "", nil},
+			{int64(1), true, int64(30), "bge-reranker", "bge", "http://rerank", nil, ptrTo(0.7)},
+			{int64(2), false, int64(0), "", "", "", nil, (*float64)(nil)},
 		},
 	}}
 	s := &spaceStore{db: f}
@@ -766,7 +767,7 @@ func TestSpaceResolveRerankersReadsTheDomainSpaces(t *testing.T) {
 	}
 
 	want := []*model.SpaceReranker{
-		{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank"},
+		{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker", ModelRef: "bge", Endpoint: "http://rerank", MinScore: ptrTo(0.7)},
 		{SpaceID: 2},
 	}
 	if !reflect.DeepEqual(got, want) {

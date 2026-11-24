@@ -151,7 +151,7 @@ func TestSuggestRunsTheCandidatePool(t *testing.T) {
 		t.Fatalf("Suggest: %v", err)
 	}
 
-	want := model.HybridQuery{Term: "vpn", Filter: model.SearchFilter{SpaceIDs: []int64{1, 2}}, Vectors: []model.ModelVector{}, TopK: suggestCandidates}
+	want := model.HybridQuery{Term: "vpn", Filter: model.SearchFilter{SpaceIDs: []int64{1, 2}}, Vectors: []model.ModelVector{}, TopK: rerankCandidates}
 	if !reflect.DeepEqual(uow.retrieval.hybrid, want) || uow.txCalls != 1 {
 		t.Fatalf("hybrid = %+v, transactions = %d", uow.retrieval.hybrid, uow.txCalls)
 	}
@@ -226,11 +226,12 @@ func TestSuggestKeepsAnsweringWhenTheRerankFails(t *testing.T) {
 		scores    []float64
 	}{
 		{
-			name: "spaces with different rerankers",
+			name: "the picked one of two rerankers fails",
 			rerankers: []*model.SpaceReranker{
 				{SpaceID: 1, Enabled: true, ModelID: 30, Provider: "bge-reranker"},
 				{SpaceID: 2, Enabled: true, ModelID: 31, Provider: "bge-reranker"},
 			},
+			rerankErr: &embedding.APIError{StatusCode: 502},
 		},
 		{
 			name:      "the reranker config cannot be read",
@@ -356,32 +357,48 @@ func TestSuggestEmptyPaths(t *testing.T) {
 }
 
 func TestPickReranker(t *testing.T) {
+	threshold := func(v float64) *float64 { return &v }
+
 	tests := []struct {
-		name    string
-		spaces  []*model.SpaceReranker
-		wantID  int64
-		wantErr bool
+		name   string
+		spaces []*model.SpaceReranker
+		want   int64
 	}{
 		{name: "none", spaces: []*model.SpaceReranker{{SpaceID: 1}, {SpaceID: 2, ModelID: 30}}},
-		{name: "one", spaces: []*model.SpaceReranker{{SpaceID: 1}, {SpaceID: 2, Enabled: true, ModelID: 30}}, wantID: 30},
-		{name: "shared", spaces: []*model.SpaceReranker{{SpaceID: 1, Enabled: true, ModelID: 30}, {SpaceID: 2, Enabled: true, ModelID: 30}}, wantID: 30},
-		{name: "conflict", spaces: []*model.SpaceReranker{{SpaceID: 1, Enabled: true, ModelID: 30}, {SpaceID: 2, Enabled: true, ModelID: 31}}, wantErr: true},
+		{name: "one", spaces: []*model.SpaceReranker{{SpaceID: 1}, {SpaceID: 2, Enabled: true, ModelID: 30}}, want: 30},
+		{
+			name:   "the earliest registered",
+			spaces: []*model.SpaceReranker{{SpaceID: 1, Enabled: true, ModelID: 31}, {SpaceID: 2, Enabled: true, ModelID: 30}},
+			want:   30,
+		},
+		{
+			name: "a threshold goes before the registration order",
+			spaces: []*model.SpaceReranker{
+				{SpaceID: 1, Enabled: true, ModelID: 30},
+				{SpaceID: 2, Enabled: true, ModelID: 32, MinScore: threshold(0.4)},
+				{SpaceID: 3, Enabled: true, ModelID: 31, MinScore: threshold(0.7)},
+			},
+			want: 31,
+		},
+		{
+			name: "a disabled space does not lend its reranker",
+			spaces: []*model.SpaceReranker{
+				{SpaceID: 1, ModelID: 29, MinScore: threshold(0.4)},
+				{SpaceID: 2, Enabled: true, ModelID: 30},
+			},
+			want: 30,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pickReranker(tt.spaces)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("error = %v, want one = %v", err, tt.wantErr)
+			var got int64
+			if picked := pickReranker(tt.spaces); picked != nil {
+				got = picked.ModelID
 			}
 
-			var gotID int64
-			if got != nil {
-				gotID = got.ModelID
-			}
-
-			if gotID != tt.wantID {
-				t.Fatalf("picked = %d, want %d", gotID, tt.wantID)
+			if got != tt.want {
+				t.Fatalf("picked = %d, want %d", got, tt.want)
 			}
 		})
 	}

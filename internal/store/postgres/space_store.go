@@ -437,7 +437,8 @@ const resolveEmbeddingSelect = `SELECT
 	coalesce(m.dimensions, 0)                                    AS dimensions,
 	coalesce(m.endpoint, '')                                     AS endpoint,
 	m.config,
-	m.validated_at IS NOT NULL                                   AS validated
+	m.validated_at IS NOT NULL                                   AS validated,
+	m.min_score
 	FROM kb.space s
 	LEFT JOIN kb.embedding_model m ON m.id = s.embedding_model_id`
 
@@ -464,7 +465,8 @@ const resolveRerankersSQL = `SELECT
 	coalesce(m.provider, '')                             AS provider,
 	coalesce(m.model_ref, '')                            AS model_ref,
 	coalesce(m.endpoint, '')                             AS endpoint,
-	m.config
+	m.config,
+	m.min_score
 	FROM kb.space s
 	LEFT JOIN kb.embedding_model m ON m.id = s.reranker_model_id
 	WHERE s.domain_id = $1 AND s.id = ANY($2) AND s.deleted_at IS NULL
@@ -492,6 +494,7 @@ func (s *spaceStore) ResolveEmbedding(ctx context.Context, spaceID int64) (*mode
 		&found.Endpoint,
 		&found.Config,
 		&found.Validated,
+		&found.MinScore,
 	)
 	if err != nil {
 		return nil, ParseError(err)
@@ -535,6 +538,7 @@ func (s *spaceStore) ResolveEmbeddings(
 			&item.Endpoint,
 			&item.Config,
 			&item.Validated,
+			&item.MinScore,
 		); err != nil {
 			return nil, ParseError(err)
 		}
@@ -551,13 +555,14 @@ func (s *spaceStore) ResolveEmbeddings(
 
 // rerankerRecord is the scan target of a space reranker.
 type rerankerRecord struct {
-	SpaceID  int64  `db:"space_id"`
-	Enabled  bool   `db:"enabled"`
-	ModelID  int64  `db:"model_id"`
-	Provider string `db:"provider"`
-	ModelRef string `db:"model_ref"`
-	Endpoint string `db:"endpoint"`
-	Config   []byte `db:"config"`
+	SpaceID  int64    `db:"space_id"`
+	Enabled  bool     `db:"enabled"`
+	ModelID  int64    `db:"model_id"`
+	Provider string   `db:"provider"`
+	ModelRef string   `db:"model_ref"`
+	Endpoint string   `db:"endpoint"`
+	Config   []byte   `db:"config"`
+	MinScore *float64 `db:"min_score"`
 }
 
 func mapReranker(record *rerankerRecord) *model.SpaceReranker {
@@ -569,6 +574,7 @@ func mapReranker(record *rerankerRecord) *model.SpaceReranker {
 		ModelRef: record.ModelRef,
 		Endpoint: record.Endpoint,
 		Config:   record.Config,
+		MinScore: record.MinScore,
 	}
 }
 

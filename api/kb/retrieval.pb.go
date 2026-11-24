@@ -360,10 +360,7 @@ type SemanticSearchRequest struct {
 	TagMatch TagMatch `protobuf:"varint,6,opt,name=tag_match,json=tagMatch,proto3,enum=webitel.kb.TagMatch" json:"tag_match,omitempty"`
 	// Whether to rerank the chunks with the reranker of the spaces; applies
 	// only to spaces with reranking enabled.
-	Rerank bool `protobuf:"varint,7,opt,name=rerank,proto3" json:"rerank,omitempty"`
-	// Minimum chunk score in [0, 1]; chunks without a relevance measure (a
-	// space without vector search, not reranked) are kept.
-	MinScore      float64 `protobuf:"fixed64,8,opt,name=min_score,json=minScore,proto3" json:"min_score,omitempty"`
+	Rerank        bool `protobuf:"varint,7,opt,name=rerank,proto3" json:"rerank,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -445,13 +442,6 @@ func (x *SemanticSearchRequest) GetRerank() bool {
 		return x.Rerank
 	}
 	return false
-}
-
-func (x *SemanticSearchRequest) GetMinScore() float64 {
-	if x != nil {
-		return x.MinScore
-	}
-	return 0
 }
 
 // SemanticSearchResponse returns ranked chunks and optional citations.
@@ -796,7 +786,7 @@ const file_retrieval_proto_rawDesc = "" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12 \n" +
 	"\ateam_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x06teamId\"C\n" +
 	"\x0fResolveResponse\x120\n" +
-	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xa4\x03\n" +
+	"\x05items\x18\x01 \x03(\v2\x1a.webitel.kb.ArticleSummaryR\x05items\"\xee\x02\n" +
 	"\x15SemanticSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tspace_ids\x18\x02 \x03(\x03R\bspaceIds\x12\x13\n" +
@@ -804,8 +794,7 @@ const file_retrieval_proto_rawDesc = "" +
 	"\x11include_citations\x18\x04 \x01(\bR\x10includeCitations\x12\x12\n" +
 	"\x04tags\x18\x05 \x03(\tR\x04tags\x12;\n" +
 	"\ttag_match\x18\x06 \x01(\x0e2\x14.webitel.kb.TagMatchB\b\xbaH\x05\x82\x01\x02\x10\x01R\btagMatch\x12\x16\n" +
-	"\x06rerank\x18\a \x01(\bR\x06rerank\x124\n" +
-	"\tmin_score\x18\b \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00R\bminScore:w\xbaHt\x1ar\n" +
+	"\x06rerank\x18\a \x01(\bR\x06rerank:w\xbaHt\x1ar\n" +
 	"\x1bkb.retrieval.space_required\x12\x1eat least one space is required\x1a3this.query.trim() == '' || size(this.space_ids) > 0\"\x93\x01\n" +
 	"\x16SemanticSearchResponse\x12)\n" +
 	"\x06chunks\x18\x01 \x03(\v2\x11.webitel.kb.ChunkR\x06chunks\x122\n" +

@@ -25,7 +25,7 @@ func NewEmbeddingModelQuery(from string) *EmbeddingModelQuery {
 func (q *EmbeddingModelQuery) DefaultFields() []string {
 	return []string{
 		"id", "domain_id", "type", "name", "provider", "is_self_hosted",
-		"model_ref", "dimensions", "endpoint", "validated_at", "created_at", "created_by",
+		"model_ref", "dimensions", "endpoint", "validated_at", "min_score", "created_at", "created_by",
 	}
 }
 
@@ -45,6 +45,7 @@ func (q *EmbeddingModelQuery) FieldsMetadata() map[string]fieldMetadata {
 			"dimensions":     {sqlExpr: "m.dimensions", aliasedExpr: "m.dimensions AS dimensions", sortable: true},
 			"endpoint":       {sqlExpr: "m.endpoint", aliasedExpr: "m.endpoint AS endpoint"},
 			"validated_at":   {sqlExpr: "m.validated_at", aliasedExpr: "m.validated_at AS validated_at", sortable: true},
+			"min_score":      {sqlExpr: "m.min_score", aliasedExpr: "m.min_score AS min_score", sortable: true},
 			"created_at":     {sqlExpr: "m.created_at", aliasedExpr: "m.created_at AS created_at", sortable: true},
 			"created_by": {
 				sqlExpr:      "COALESCE(cb.name, cb.username)",

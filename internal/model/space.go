@@ -74,6 +74,8 @@ type SpaceEmbedding struct {
 	APIKey string
 	// Validated reports the registration test call; not enforced.
 	Validated bool
+	// MinScore is the relevance threshold of the model; nil means none.
+	MinScore *float64
 }
 
 // SpaceReranker is the cross-encoder a space reranks with.
@@ -87,6 +89,8 @@ type SpaceReranker struct {
 	Endpoint string
 	// Config is the stored credential, encrypted; empty for self-hosted providers.
 	Config []byte
+	// MinScore is the relevance threshold of the model; nil means none.
+	MinScore *float64
 }
 
 // spaceInputFields are the input fields an update writes; team_ids travel

@@ -89,7 +89,6 @@ func (s *RetrievalServer) SemanticSearch(ctx context.Context, req *kb.SemanticSe
 		TopK:             int(req.GetTopK()),
 		IncludeCitations: req.GetIncludeCitations(),
 		Rerank:           req.GetRerank(),
-		MinScore:         req.GetMinScore(),
 	})
 	if err != nil {
 		return nil, err
@@ -129,15 +128,20 @@ func (s *RetrievalServer) Suggest(ctx context.Context, req *kb.SuggestRequest) (
 func chunksToProto(items []*model.ChunkHit) []*kb.Chunk {
 	out := make([]*kb.Chunk, 0, len(items))
 	for _, item := range items {
-		out = append(out, &kb.Chunk{
+		chunk := &kb.Chunk{
 			ArticleId:  item.ArticleID,
 			VersionId:  item.VersionID,
 			ChunkIndex: item.ChunkIndex,
 			Content:    item.Content,
-			Score:      item.Score,
 			Id:         item.ID,
 			Subject:    item.Subject,
-		})
+		}
+
+		if item.Measured {
+			chunk.Score = &item.Score
+		}
+
+		out = append(out, chunk)
 	}
 
 	return out

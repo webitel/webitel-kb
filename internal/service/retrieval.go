@@ -158,16 +158,25 @@ func (s *RetrievalService) SemanticSearch(
 	filter := model.SearchFilter{SpaceIDs: q.SpaceIDs, Tags: q.Tags, TagsMatchAll: q.TagsMatchAll}
 	query := clipQuery(q.Query)
 
-	hits, err := s.fuse(ctx, opts, query, spaces, filter, topK(q.TopK))
+	size := topK(q.TopK)
+
+	pool := size
+	if q.Rerank {
+		pool = max(size, rerankCandidates)
+	}
+
+	hits, err := s.fuse(ctx, opts, query, spaces, filter, pool)
 	if err != nil {
 		return nil, err
 	}
 
+	var reranker *model.SpaceReranker
 	if q.Rerank && len(hits) > 0 {
-		hits, answer.Reranked = s.rerankHits(ctx, domainID, spaceIDsOf(spaces), query, hits)
+		hits, reranker = s.rerankHits(ctx, domainID, spaceIDsOf(spaces), query, hits)
 	}
 
-	answer.Chunks = aboveMinScore(hits, q.MinScore)
+	hits = aboveMinScore(hits, reranker, spaces)
+	answer.Chunks, answer.Reranked = hits[:min(len(hits), size)], reranker != nil
 
 	if q.IncludeCitations {
 		answer.Citations = citationsOf(answer.Chunks)
@@ -176,17 +185,32 @@ func (s *RetrievalService) SemanticSearch(
 	return answer, nil
 }
 
-// aboveMinScore drops the measured hits scored below the minimum; a hit with no
-// relevance measure stays.
-func aboveMinScore(hits []*model.ChunkHit, minScore float64) []*model.ChunkHit {
-	if minScore <= 0 {
-		return hits
+// aboveMinScore drops the hits scored below the threshold of the model that
+// scored them: the reranker when it ran, otherwise the embedding model of the
+// hit's space. A hit with no relevance measure stays.
+func aboveMinScore(
+	hits []*model.ChunkHit, reranker *model.SpaceReranker, spaces []*model.SpaceEmbedding,
+) []*model.ChunkHit {
+	thresholds := make(map[int64]float64)
+
+	for _, space := range spaces {
+		if space.VectorSearchEnabled && space.MinScore != nil {
+			thresholds[space.SpaceID] = *space.MinScore
+		}
 	}
 
 	kept := make([]*model.ChunkHit, 0, len(hits))
 
 	for _, hit := range hits {
-		if !hit.Measured || hit.Score >= minScore {
+		minScore, ok := thresholds[hit.SpaceID]
+		if reranker != nil {
+			ok = reranker.MinScore != nil
+			if ok {
+				minScore = *reranker.MinScore
+			}
+		}
+
+		if !ok || !hit.Measured || hit.Score >= minScore {
 			kept = append(kept, hit)
 		}
 	}

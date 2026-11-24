@@ -115,7 +115,7 @@ func (s *EmbeddingModelService) Create(
 
 // modelMergeFields is what the locked read must carry for the merge.
 var modelMergeFields = []string{
-	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint",
+	"id", "type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint", "min_score",
 }
 
 // errGlobalReadOnly refuses a write to a model seeded for every domain.

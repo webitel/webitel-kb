@@ -42,8 +42,6 @@ type SemanticQuery struct {
 	IncludeCitations bool
 	// Rerank asks the reranker of the spaces to order and score the chunks.
 	Rerank bool
-	// MinScore drops the measured chunks scored below it.
-	MinScore float64
 }
 
 // ModelVector is the query embedded under one model, with the spaces that model serves.
@@ -65,6 +63,7 @@ type HybridQuery struct {
 // ChunkHit is one fused result.
 type ChunkHit struct {
 	ID         int64
+	SpaceID    int64
 	ArticleID  int64
 	VersionID  int64
 	ChunkIndex int32

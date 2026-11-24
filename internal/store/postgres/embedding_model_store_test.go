@@ -369,7 +369,7 @@ func TestEmbeddingModelFullDefaultSelectionScans(t *testing.T) {
 		"id": int64(7), "domain_id": ptrTo(int64(5)), "type": "embedding",
 		"name": "gem", "provider": "gemini", "is_self_hosted": true,
 		"model_ref": ptrTo("gemini-embedding-001"), "dimensions": ptrTo(int32(768)),
-		"endpoint": ptrTo("http://e"), "validated_at": ptrTo(now), "created_at": now,
+		"endpoint": ptrTo("http://e"), "validated_at": ptrTo(now), "min_score": ptrTo(0.4), "created_at": now,
 		"created_by_id": ptrTo(int64(3)), "created_by_name": ptrTo("admin"),
 	}
 
@@ -413,7 +413,11 @@ func TestEmbeddingModelFullDefaultSelectionScans(t *testing.T) {
 		t.Fatalf("created_by = %+v, want %+v", got.CreatedBy, want.CreatedBy)
 	}
 
-	got.CreatedBy, want.CreatedBy = nil, nil
+	if got.MinScore == nil || *got.MinScore != 0.4 {
+		t.Fatalf("min_score = %v, want 0.4", got.MinScore)
+	}
+
+	got.CreatedBy, want.CreatedBy, got.MinScore = nil, nil, nil
 	if got != want {
 		t.Fatalf("model = %+v, want %+v", got, want)
 	}
@@ -450,21 +454,25 @@ func TestEmbeddingModelCreateRendersCTE(t *testing.T) {
 	}
 
 	// Column order: domain_id, type, name, provider, is_self_hosted, model_ref,
-	// dimensions, endpoint, config, created_by.
+	// dimensions, endpoint, min_score, config, created_by.
 	if f.gotArgs[0] != int64(5) {
 		t.Errorf("args[0] = %v, want the domain id", f.gotArgs[0])
 	}
 
-	if got, ok := f.gotArgs[8].([]byte); !ok || string(got) != "enc" {
-		t.Errorf("args[8] = %v, want the credential bytes", f.gotArgs[8])
+	if got, ok := f.gotArgs[8].(*float64); !ok || got != nil {
+		t.Errorf("args[8] = %v, want NULL for no threshold", f.gotArgs[8])
+	}
+
+	if got, ok := f.gotArgs[9].([]byte); !ok || string(got) != "enc" {
+		t.Errorf("args[9] = %v, want the credential bytes", f.gotArgs[9])
 	}
 
 	if got, ok := f.gotArgs[7].(*string); !ok || got != nil {
 		t.Errorf("args[7] = %v, want NULL for the empty endpoint", f.gotArgs[7])
 	}
 
-	if got, ok := f.gotArgs[9].(*int64); !ok || got == nil || *got != 9 {
-		t.Errorf("args[9] = %v, want created_by 9", f.gotArgs[9])
+	if got, ok := f.gotArgs[10].(*int64); !ok || got == nil || *got != 9 {
+		t.Errorf("args[10] = %v, want created_by 9", f.gotArgs[10])
 	}
 }
 
@@ -496,7 +504,7 @@ func TestEmbeddingModelUpdateConfigColumn(t *testing.T) {
 				t.Errorf("SQL %q: config touched = %v, want %v", f.gotSQL, got, tt.wantConfig)
 			}
 
-			if !strings.Contains(f.gotSQL, "validated_at = $7") {
+			if !strings.Contains(f.gotSQL, "validated_at = $8") {
 				t.Errorf("SQL %q does not reset validated_at", f.gotSQL)
 			}
 
@@ -518,7 +526,7 @@ func TestEmbeddingModelUpdateValidation(t *testing.T) {
 		want       string
 	}{
 		{name: "keep", validation: store.ValidationKeep},
-		{name: "reset", validation: store.ValidationReset, want: "validated_at = $7"},
+		{name: "reset", validation: store.ValidationReset, want: "validated_at = $8"},
 		{name: "stamp", validation: store.ValidationStamp, want: "validated_at = now()"},
 	}
 
@@ -578,7 +586,7 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 	opts := &fakeWriteOpts{auth: fakeAuther{domainID: 5}, id: 1, fields: []string{"id"}}
 	in := &model.EmbeddingModel{
 		Type: "reranker", Name: "n1", Provider: "p1", IsSelfHosted: true,
-		ModelRef: "mr1", Dimensions: 42, Endpoint: "ep1",
+		ModelRef: "mr1", Dimensions: 42, Endpoint: "ep1", MinScore: ptrTo(0.6),
 	}
 
 	if _, err := s.Update(context.Background(), opts, in, []byte("cfg"), false, store.ValidationReset); err != nil {
@@ -586,7 +594,7 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 	}
 
 	// SET order: name, provider, is_self_hosted, model_ref, dimensions,
-	// endpoint, validated_at(NULL), config; WHERE: id, domain_id. type is
+	// endpoint, min_score, validated_at(NULL), config; WHERE: id, domain_id. type is
 	// immutable and must never appear in the statement.
 	assertArg := func(i int, want any) {
 		t.Helper()
@@ -604,6 +612,11 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 			if !ok || g == nil || *g != *w {
 				t.Errorf("args[%d] = %v, want %v", i, got, *w)
 			}
+		case *float64:
+			g, ok := got.(*float64)
+			if !ok || g == nil || *g != *w {
+				t.Errorf("args[%d] = %v, want %v", i, got, *w)
+			}
 		case []byte:
 			g, ok := got.([]byte)
 			if !ok || string(g) != string(w) {
@@ -616,8 +629,8 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 		}
 	}
 
-	if len(f.gotArgs) != 10 {
-		t.Fatalf("args = %d, want 10: %v", len(f.gotArgs), f.gotArgs)
+	if len(f.gotArgs) != 11 {
+		t.Fatalf("args = %d, want 11: %v", len(f.gotArgs), f.gotArgs)
 	}
 
 	if strings.Contains(f.gotSQL, "type") {
@@ -630,10 +643,11 @@ func TestEmbeddingModelUpdateBindsValuesInOrder(t *testing.T) {
 	assertArg(3, ptrTo("mr1"))
 	assertArg(4, ptrTo(int32(42)))
 	assertArg(5, ptrTo("ep1"))
-	assertArg(6, nil)
-	assertArg(7, []byte("cfg"))
-	assertArg(8, int64(1))
-	assertArg(9, int64(5))
+	assertArg(6, ptrTo(0.6))
+	assertArg(7, nil)
+	assertArg(8, []byte("cfg"))
+	assertArg(9, int64(1))
+	assertArg(10, int64(5))
 }
 
 func TestEmbeddingModelDeleteRendersScopedCTE(t *testing.T) {

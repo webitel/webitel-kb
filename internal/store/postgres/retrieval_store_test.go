@@ -239,6 +239,7 @@ func TestRetrievalSemanticSearchRendersTheFusedQuery(t *testing.T) {
 		"m.state = $",
 		"e.model_id = $",
 		"LIMIT 10)",
+		"m.space_id AS space_id",
 		"ORDER BY h.score DESC, c.id",
 	} {
 		if !strings.Contains(f.gotSQL, want) {

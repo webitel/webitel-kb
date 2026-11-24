@@ -133,6 +133,7 @@ func modelFromInput(in *kb.InputEmbeddingModel) *model.EmbeddingModel {
 		ModelRef:     in.GetModelRef(),
 		Dimensions:   in.GetDimensions(),
 		Endpoint:     in.GetEndpoint(),
+		MinScore:     in.MinScore,
 	}
 }
 
@@ -148,6 +149,7 @@ func modelToProto(m *model.EmbeddingModel) *kb.EmbeddingModel {
 		Dimensions:   m.Dimensions,
 		Endpoint:     m.Endpoint,
 		ValidatedAt:  unixMilli(m.ValidatedAt),
+		MinScore:     m.MinScore,
 		CreatedAt:    unixMilli(m.CreatedAt),
 		CreatedBy:    lookupToProto(m.CreatedBy),
 	}

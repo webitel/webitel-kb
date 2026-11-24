@@ -50,7 +50,10 @@ type EmbeddingModel struct {
 	// ValidatedAt is the time of the last successful test call; zero when the
 	// model was never validated.
 	ValidatedAt time.Time
-	CreatedAt   time.Time
+	// MinScore is the lowest relevance in [0, 1] a chunk scored by the model
+	// keeps; nil means no threshold.
+	MinScore  *float64
+	CreatedAt time.Time
 	// CreatedBy is nil when the creator is unknown or no longer exists.
 	CreatedBy *Lookup
 }
@@ -58,7 +61,7 @@ type EmbeddingModel struct {
 // modelInputFields are the input fields an update writes; the api key travels
 // separately.
 var modelInputFields = []string{
-	"type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint",
+	"type", "name", "provider", "is_self_hosted", "model_ref", "dimensions", "endpoint", "min_score",
 }
 
 // Merge overlays the fields of in named by mask over a copy of the model.
@@ -81,6 +84,8 @@ func (m EmbeddingModel) Merge(in *EmbeddingModel, mask []string) *EmbeddingModel
 			merged.Dimensions = in.Dimensions
 		case "endpoint":
 			merged.Endpoint = in.Endpoint
+		case "min_score":
+			merged.MinScore = in.MinScore
 		}
 	}
 

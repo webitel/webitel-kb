@@ -1,6 +1,7 @@
 package model
 
 import (
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -84,7 +85,7 @@ func TestEmbeddingDimensionsMatchTheSchema(t *testing.T) {
 func TestEmbeddingModelMerge(t *testing.T) {
 	stored := EmbeddingModel{
 		ID: 1, Type: ModelTypeEmbedding, Name: "gemini", Provider: "gemini",
-		ModelRef: "gemini-embedding-001", Dimensions: 768, Endpoint: "https://x",
+		ModelRef: "gemini-embedding-001", Dimensions: 768, Endpoint: "https://x", MinScore: new(0.5),
 	}
 
 	renamed := stored
@@ -95,6 +96,12 @@ func TestEmbeddingModelMerge(t *testing.T) {
 
 	resized := stored
 	resized.Dimensions = 1024
+
+	stricter := stored
+	stricter.MinScore = new(0.8)
+
+	unbounded := stored
+	unbounded.MinScore = nil
 
 	tests := []struct {
 		name string
@@ -126,6 +133,18 @@ func TestEmbeddingModelMerge(t *testing.T) {
 			want: resized,
 		},
 		{
+			name: "masked min score is merged",
+			in:   &EmbeddingModel{MinScore: new(0.8)},
+			mask: []string{"min_score"},
+			want: stricter,
+		},
+		{
+			name: "masked missing min score clears",
+			in:   &EmbeddingModel{},
+			mask: []string{"min_score"},
+			want: unbounded,
+		},
+		{
 			name: "api key is not merged",
 			in:   &EmbeddingModel{},
 			mask: []string{"api_key"},
@@ -135,7 +154,7 @@ func TestEmbeddingModelMerge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := stored.Merge(tt.in, tt.mask); *got != tt.want {
+			if got := stored.Merge(tt.in, tt.mask); !reflect.DeepEqual(*got, tt.want) {
 				t.Fatalf("merged = %+v, want %+v", *got, tt.want)
 			}
 		})
